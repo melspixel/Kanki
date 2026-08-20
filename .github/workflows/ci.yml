@@ -30,10 +30,17 @@ jobs:
           test "$(git -C third_party/ranki-reference rev-parse HEAD)" = d671ee657f0c411474d2afff3bf9cbb49be2fb44
           test "$(git -C third_party/kindle-sdk rev-parse HEAD)" = b4a6c99d718a7cf74935f36105c62491b4336a61
           test "$(git -C third_party/audiobook-koplugin rev-parse HEAD)" = 62edf76feb1b7f4af2f01754957e8d57eb3e7d67
-      - name: Format, lint and policy
+      - name: Rustfmt gate
         run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets -- -D warnings
+          cargo fmt --all
+          if ! git diff --exit-code; then
+            git diff > rustfmt.patch
+            exit 1
+          fi
+      - name: Clippy gate
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Renderer/source policy
+        run: |
           python3 tools/check_policy.py
           node --check assets/reviewer/reviewer.js
           node --check assets/device/decks.js
@@ -52,12 +59,15 @@ jobs:
           git archive --format=tar.gz -o out/kanki-rewrite-source.tar.gz HEAD
           sha256sum out/kanki-rewrite-source.tar.gz > out/kanki-rewrite-source.tar.gz.sha256
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: rewrite-host-evidence
           path: |
+            rustfmt.patch
             self-test.json
             renderer-contract.txt
             out/
+          if-no-files-found: warn
 
   arm-skeleton:
     runs-on: ubuntu-24.04
