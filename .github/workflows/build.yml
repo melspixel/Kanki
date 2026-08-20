@@ -26,12 +26,13 @@ jobs:
           curl -fL --retry 3 -o src/miniaudio.h \
             https://raw.githubusercontent.com/mackron/miniaudio/0.11.21/miniaudio.h
 
-      - name: Build audio helpers
+      - name: Build decoder-only audio helpers
         run: |
-          arm-linux-gnueabihf-gcc -O2 -static -s -Isrc \
-            src/kanki_audio_server.c -o kanki-audio-armhf -lm -lpthread
-          arm-linux-gnueabi-gcc -O2 -static -s -Isrc \
-            src/kanki_audio_server.c -o kanki-audio-armel -lm -lpthread
+          COMMON='-DMA_NO_RUNTIME_LINKING -DMA_NO_THREADING -DMA_NO_NODE_GRAPH -DMA_NO_ENGINE -DMA_NO_RESOURCE_MANAGER'
+          arm-linux-gnueabihf-gcc -O2 -static -s -Isrc $COMMON \
+            src/kanki_audio_server.c -o kanki-audio-armhf -lm -latomic
+          arm-linux-gnueabi-gcc -O2 -static -s -Isrc $COMMON \
+            src/kanki_audio_server.c -o kanki-audio-armel -lm -latomic
 
       - name: Build libc-version-independent WebKit preload shims
         run: |
