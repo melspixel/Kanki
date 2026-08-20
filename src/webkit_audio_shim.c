@@ -1,8 +1,14 @@
 #define _GNU_SOURCE
-#include <dlfcn.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
+typedef unsigned int size_t;
+extern void *malloc(size_t);
+extern void free(void *);
+extern void *dlsym(void *, const char *);
+#define RTLD_NEXT ((void *)-1L)
+#define NULL ((void*)0)
+
+static size_t k_strlen(const char *s){size_t n=0; while(s && s[n]) n++; return n;}
+static void k_memcpy(char *d,const char *s,size_t n){while(n--) *d++=*s++;}
+static const char *k_strstr(const char *h,const char *n){size_t nl=k_strlen(n); if(!nl) return h; for(;h&&*h;h++){size_t i=0; while(i<nl&&h[i]==n[i]) i++; if(i==nl) return h;} return (const char*)0;}
 
 typedef void (*load_html_fn)(void *web_view, const char *content, const char *base_uri);
 
@@ -29,23 +35,23 @@ static char *inject_shim(const char *content)
     char *out;
 
     if (!content) return NULL;
-    if (strstr(content, "127.0.0.1:17392/") != NULL) return NULL;
+    if (k_strstr(content, "127.0.0.1:17392/") != NULL) return NULL;
 
-    content_len = strlen(content);
+    content_len = k_strlen(content);
     shim_len = sizeof(kanki_audio_shim) - 1;
-    head = strstr(content, "</head>");
+    head = k_strstr(content, "</head>");
     prefix_len = head ? (size_t)(head - content) : 0;
 
     out = (char *)malloc(content_len + shim_len + 1);
     if (!out) return NULL;
 
     if (head) {
-        memcpy(out, content, prefix_len);
-        memcpy(out + prefix_len, kanki_audio_shim, shim_len);
-        memcpy(out + prefix_len + shim_len, head, content_len - prefix_len + 1);
+        k_memcpy(out, content, prefix_len);
+        k_memcpy(out + prefix_len, kanki_audio_shim, shim_len);
+        k_memcpy(out + prefix_len + shim_len, head, content_len - prefix_len + 1);
     } else {
-        memcpy(out, kanki_audio_shim, shim_len);
-        memcpy(out + shim_len, content, content_len + 1);
+        k_memcpy(out, kanki_audio_shim, shim_len);
+        k_memcpy(out + shim_len, content, content_len + 1);
     }
     return out;
 }
