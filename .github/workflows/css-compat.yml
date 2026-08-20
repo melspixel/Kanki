@@ -1,0 +1,50 @@
+name: Legacy WebKit CSS compatibility
+
+on:
+  push:
+    branches: [rewrite-v1]
+    paths:
+      - 'assets/reviewer/css_compat.js'
+      - 'assets/reviewer/css_runtime.js'
+      - 'assets/device/reviewer-shell.html'
+      - 'tests/css_compat.test.cjs'
+      - '.github/workflows/css-compat.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/reviewer/css_compat.js'
+      - 'assets/reviewer/css_runtime.js'
+      - 'assets/device/reviewer-shell.html'
+      - 'tests/css_compat.test.cjs'
+      - '.github/workflows/css-compat.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Parse ES5-compatible sources
+        run: |
+          node --check assets/reviewer/css_compat.js
+          node --check assets/reviewer/css_runtime.js
+          node --check tests/css_compat.test.cjs
+      - name: Run generic compatibility contract
+        run: |
+          npm install --no-save --ignore-scripts jsdom@24.1.3
+          node tests/css_compat.test.cjs | tee css-compat-contract.txt
+          grep -q 'css compatibility contract: pass' css-compat-contract.txt
+      - name: Policy audit
+        run: |
+          ! grep -R -E 'COCA-English|dictionary-logo-link|\.pos-badge|\.word[[:space:]]*\{' assets/reviewer/css_compat.js assets/reviewer/css_runtime.js
+          ! grep -R -E '9999px|LOGICAL_VIEWPORT_PX|mediaQueriesRewritten' assets/reviewer/css_compat.js assets/reviewer/css_runtime.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: css-compat-evidence
+          path: css-compat-contract.txt
