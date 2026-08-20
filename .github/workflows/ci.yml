@@ -47,11 +47,26 @@ jobs:
           node --check tests/renderer_contract.test.cjs
       - name: Host tests, renderer contract and self-test
         run: |
-          cargo test --workspace
-          npm install --no-save --ignore-scripts jsdom@24.1.3
-          node tests/renderer_contract.test.cjs | tee renderer-contract.txt
+          set +e
+          cargo test --workspace >cargo-test.log 2>&1
+          CARGO_STATUS=$?
+          npm install --no-save --ignore-scripts jsdom@24.1.3 >npm-install.log 2>&1
+          NPM_STATUS=$?
+          node tests/renderer_contract.test.cjs >renderer-contract.txt 2>&1
+          RENDER_STATUS=$?
+          cargo run -p kanki-app -- --self-test >self-test.json 2>self-test.stderr
+          SELF_STATUS=$?
+          set -e
+          cat cargo-test.log
+          cat npm-install.log
+          cat renderer-contract.txt
+          cat self-test.stderr
+          cat self-test.json
+          test "$CARGO_STATUS" -eq 0
+          test "$NPM_STATUS" -eq 0
+          test "$RENDER_STATUS" -eq 0
           grep -q 'renderer contract: pass' renderer-contract.txt
-          cargo run -p kanki-app -- --self-test | tee self-test.json
+          test "$SELF_STATUS" -eq 0
           grep -q '"result": "pass"' self-test.json
       - name: Source handoff artifact
         run: |
@@ -64,7 +79,10 @@ jobs:
           name: rewrite-host-evidence
           path: |
             rustfmt.patch
+            cargo-test.log
+            npm-install.log
             self-test.json
+            self-test.stderr
             renderer-contract.txt
             out/
           if-no-files-found: warn
