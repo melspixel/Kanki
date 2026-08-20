@@ -32,6 +32,17 @@ case "$COLLECTION_DIR" in
 esac
 export KANKI_MEDIA_DIR="$COLLECTION_DIR/collection.media"
 export KANKI_GST_PLAYER="$RANKI_DIR/kanki-gst-play-$ARCH"
+if [ "$ARCH" = armhf ]; then
+    export KANKI_GST_LOADER=/lib/ld-linux-armhf.so.3
+else
+    export KANKI_GST_LOADER=/lib/ld-linux.so.3
+fi
+
+# MTP clients may drop Unix executable bits on files copied to /mnt/us.  The
+# native player can still be launched through the system ELF loader as long as
+# it is readable, but chmod is harmless and helps on filesystems that preserve it.
+chmod 755 "$KANKI_GST_PLAYER" 2>/dev/null || true
+chmod 755 "$AUDIO_SERVER" "$BIN" 2>/dev/null || true
 
 {
     echo ""
@@ -39,11 +50,18 @@ export KANKI_GST_PLAYER="$RANKI_DIR/kanki-gst-play-$ARCH"
     echo "arch=$ARCH"
     echo "media=$KANKI_MEDIA_DIR"
     echo "native_player=$KANKI_GST_PLAYER"
-    if [ -x "$KANKI_GST_PLAYER" ]; then
+    echo "native_loader=$KANKI_GST_LOADER"
+    ls -l "$KANKI_GST_PLAYER" 2>&1 | sed 's/^/player-file: /'
+    if [ -r "$KANKI_GST_PLAYER" ] && [ -x "$KANKI_GST_LOADER" ]; then
+        "$KANKI_GST_LOADER" "$KANKI_GST_PLAYER" --probe 2>&1 | sed 's/^/gst-probe: /'
+    elif [ -x "$KANKI_GST_PLAYER" ]; then
         "$KANKI_GST_PLAYER" --probe 2>&1 | sed 's/^/gst-probe: /'
     else
-        echo "gst-probe: native player missing"
+        echo "gst-probe: native player missing/unreadable"
     fi
+    for D in /usr/bin/curl /usr/bin/wget /bin/busybox; do
+        [ -x "$D" ] && echo "downloader=$D"
+    done
 } >>"$LOG"
 
 if [ -f "$RANKI_DIR/kanki-audio.pid" ]; then
