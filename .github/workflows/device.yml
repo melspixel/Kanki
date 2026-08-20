@@ -7,8 +7,9 @@ on:
       - 'device/**'
       - 'assets/device/**'
       - 'assets/reviewer/**'
-      - 'bridge/kanki_bridge.h'
+      - 'bridge/*.h'
       - 'scripts/kanki-launch.sh'
+      - 'scripts/kanki-sync.sh'
       - '.github/workflows/device.yml'
   pull_request:
     branches: [main]
@@ -16,8 +17,9 @@ on:
       - 'device/**'
       - 'assets/device/**'
       - 'assets/reviewer/**'
-      - 'bridge/kanki_bridge.h'
+      - 'bridge/*.h'
       - 'scripts/kanki-launch.sh'
+      - 'scripts/kanki-sync.sh'
       - '.github/workflows/device.yml'
   workflow_dispatch:
 
@@ -32,14 +34,17 @@ jobs:
       - name: Strict host syntax and ES5 parsing
         run: |
           gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_device.c -Ibridge
+          gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_sync_cli.c -Ibridge
           node --check assets/device/decks.js
           node --check assets/reviewer/reviewer.js
           sh -n scripts/kanki-launch.sh
+          sh -n scripts/kanki-sync.sh
       - name: Architectural prohibitions
         run: |
-          ! grep -R -E 'LD_PRELOAD|420px|LOGICAL_VIEWPORT_PX|service[_ -]?index|method[_ -]?index' device assets/device scripts/kanki-launch.sh
+          ! grep -R -E 'LD_PRELOAD|420px|LOGICAL_VIEWPORT_PX|service[_ -]?index|method[_ -]?index' device assets/device scripts/kanki-launch.sh scripts/kanki-sync.sh
           ! grep -R -E 'COCA-English|dictionary-logo-link|\.pos-badge|\.word[[:space:]]*\{' assets/reviewer device
           ! grep -R -E '^[[:space:]]*svg[[:space:]]*\{' assets/reviewer/*.css
+          ! grep -R -E 'printf.*hkey|fprintf.*hkey' device scripts
 
   armhf-shell:
     runs-on: ubuntu-24.04
@@ -50,22 +55,32 @@ jobs:
           wget -q https://github.com/KindleModding/koxtoolchain/releases/latest/download/kindlehf.tar.gz -O /tmp/kindlehf.tar.gz
           tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
           echo "$HOME/x-tools/arm-kindlehf-linux-gnueabihf/bin" >> "$GITHUB_PATH"
-      - name: Build dynamic Kindle UI shell
+      - name: Build dynamic Kindle UI and sync clients
         run: |
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             -DKANKI_BUILD_COMMIT=\"$GITHUB_SHA\" \
             -DKANKI_ANKI_COMMIT=\"e5a6fbe27fdd4d57d5f712191b4a753032e57853\" \
             device/kanki_device.c -ldl -o kanki-device
-          file kanki-device
+          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
+            device/kanki_sync_cli.c -ldl -o kanki-sync
+          file kanki-device kanki-sync
           arm-kindlehf-linux-gnueabihf-readelf -h kanki-device | tee device-elf.txt
+          arm-kindlehf-linux-gnueabihf-readelf -h kanki-sync | tee sync-elf.txt
           arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-device \
             | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee device-glibc.txt || true
+          arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-sync \
+            | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee sync-glibc.txt || true
           arm-kindlehf-linux-gnueabihf-nm -D kanki-device | grep -E ' U (dlopen|dlsym|dlclose)' | tee device-dynamic-imports.txt
+          arm-kindlehf-linux-gnueabihf-nm -D kanki-sync | grep -E ' U (dlopen|dlsym|dlclose)' | tee sync-dynamic-imports.txt
       - uses: actions/upload-artifact@v4
         with:
           name: kindle-device-shell
           path: |
             kanki-device
+            kanki-sync
             device-elf.txt
+            sync-elf.txt
             device-glibc.txt
+            sync-glibc.txt
             device-dynamic-imports.txt
+            sync-dynamic-imports.txt
