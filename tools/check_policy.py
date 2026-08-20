@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-from pathlib import Path
+import re
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 renderer_files = [
@@ -10,10 +11,17 @@ renderer_files = [
 ]
 text = "\n".join(path.read_text(encoding="utf-8") for path in renderer_files).lower()
 forbidden = ["coca-english", "dictionary-logo", ".pos-badge", ".word {"]
-errors = [f"deck-specific token in generic renderer: {item}" for item in forbidden if item in text]
-if "svg {" in (ROOT / "assets/reviewer/reviewer.css").read_text(encoding="utf-8"):
+errors = [
+    f"deck-specific token in generic renderer: {item}"
+    for item in forbidden
+    if item in text
+]
+css = (ROOT / "assets/reviewer/reviewer.css").read_text(encoding="utf-8")
+if re.search(r"(?m)^\s*svg\s*\{", css):
     errors.append("generic SVG sizing rule is forbidden")
-if "id=\"qa\"" not in (ROOT / "assets/reviewer/reviewer.html").read_text(encoding="utf-8"):
+if "id=\"qa\"" not in (
+    ROOT / "assets/reviewer/reviewer.html"
+).read_text(encoding="utf-8"):
     errors.append("persistent #qa root is missing")
 if errors:
     print("\n".join(errors), file=sys.stderr)
