@@ -113,6 +113,28 @@ static void test_density_one(void)
     expect(last_zoom == 1.0f, "density 1 should apply zoom 1");
 }
 
+static void test_missing_full_content_zoom_fallback(void)
+{
+    KankiWebKitApi api = full_api();
+    KankiScaleResult result;
+    reset();
+    fake_density = 3.125f;
+    api.set_full_content_zoom = NULL;
+    expect(kanki_webkit_apply_native_scale((void *)1, &api, &result) ==
+               KANKI_SCALE_FALLBACK_MISSING_API,
+           "density scaling without full-content zoom must fall back");
+    expect(strcmp(calls, "WDZ") == 0,
+           "missing full-content zoom must not apply the panel density");
+    expect(last_zoom == 1.0f,
+           "missing full-content zoom fallback must remain at zoom 1");
+    expect(result.reported_density == 3.125f,
+           "raw density must remain available for diagnostics");
+    expect(result.applied_zoom == 1.0f,
+           "applied zoom must record the safe fallback");
+    expect(result.enabled_full_content_zoom == 0,
+           "full-content zoom must not be reported as enabled");
+}
+
 static void test_invalid_density_fallback(void)
 {
     KankiWebKitApi api = full_api();
@@ -175,6 +197,7 @@ int main(void)
 {
     test_mesquite_sequence();
     test_density_one();
+    test_missing_full_content_zoom_fallback();
     test_invalid_density_fallback();
     test_missing_api_fallback();
     test_no_zoom_is_fatal();

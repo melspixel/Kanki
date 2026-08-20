@@ -97,14 +97,23 @@ KankiScaleStatus kanki_webkit_apply_native_scale(
         enabled_w3c = 1;
         reported_density = api->get_pixel_density();
         if (density_is_valid(reported_density)) {
-            applied_zoom = reported_density;
             if (absolute_float(reported_density - 1.0f) > KANKI_DENSITY_EPSILON &&
-                api->set_full_content_zoom != NULL) {
-                api->set_full_content_zoom(web_view, 1);
-                enabled_full_zoom = 1;
+                api->set_full_content_zoom == NULL) {
+                /* Applying the panel density without full-content zoom would
+                 * recreate RAnki's text-only scaling bug. Keep the document at
+                 * 1:1 and report the missing native capability instead. */
+                applied_zoom = 1.0f;
+                api->set_zoom_level(web_view, applied_zoom);
+                status = KANKI_SCALE_FALLBACK_MISSING_API;
+            } else {
+                applied_zoom = reported_density;
+                if (absolute_float(reported_density - 1.0f) > KANKI_DENSITY_EPSILON) {
+                    api->set_full_content_zoom(web_view, 1);
+                    enabled_full_zoom = 1;
+                }
+                api->set_zoom_level(web_view, applied_zoom);
+                status = KANKI_SCALE_NATIVE;
             }
-            api->set_zoom_level(web_view, applied_zoom);
-            status = KANKI_SCALE_NATIVE;
         } else {
             applied_zoom = 1.0f;
             if (api->set_full_content_zoom != NULL) {
