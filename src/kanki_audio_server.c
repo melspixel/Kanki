@@ -83,6 +83,7 @@ static int resolve_media_path(const char *src, char *out, size_t out_cap)
     const char *media = getenv("KANKI_MEDIA_DIR");
     const char *p = src;
     size_t media_len;
+    FILE *probe;
 
     if (!media || !*media || !src || !*src) return 0;
     media_len = strlen(media);
@@ -108,7 +109,14 @@ static int resolve_media_path(const char *src, char *out, size_t out_cap)
         char *q = strchr(out, '?'); if (q) *q = '\0';
         q = strchr(out, '#'); if (q) *q = '\0';
     }
-    return access(out, R_OK) == 0;
+
+    /* Do not use access(2) here.  The statically-linked helper may run on a
+     * Kindle kernel older than the glibc it was built with, while stdio open
+     * still works correctly. */
+    probe = fopen(out, "rb");
+    if (!probe) return 0;
+    fclose(probe);
+    return 1;
 }
 
 static void put16le(unsigned char *p, uint16_t v)
@@ -200,18 +208,17 @@ static int launch_native_player(const char *wav_path)
     pid_t pid;
     int status = 0;
 
-    if (!player || access(player, R_OK) != 0) {
-        fprintf(stderr, "kanki-audio: native player missing/unreadable: %s (%s)\n",
-            player ? player : "(unset)", strerror(errno));
+    if (!player || !*player) {
+        fprintf(stderr, "kanki-audio: native player path unset\n");
         return 10;
     }
 
     pid = fork();
     if (pid == 0) {
-        /* Files copied over MTP can lose the executable bit.  Running the ELF
-         * through Kindle's system dynamic loader only requires the binary to be
-         * readable and also keeps it on the device's native glibc ABI. */
-        if (loader && access(loader, X_OK) == 0) {
+        /* Avoid access(2) preflight checks: the launcher already proved the
+         * player and system loader work.  Just attempt exec and let the loader
+         * report a real error if one exists. */
+        if (loader && *loader) {
             execl(loader, loader, player, wav_path, (char *)NULL);
             fprintf(stderr, "kanki-audio: loader exec failed: %s\n", strerror(errno));
         }
@@ -243,37 +250,31 @@ static int decode_and_play(const char *path)
 
 static int download_remote(const char *url, const char *out)
 {
-    const char *tool = NULL;
-    int kind = 0;
     pid_t pid;
     int status = 0;
+    FILE *probe;
 
-    if (access("/usr/bin/curl", X_OK) == 0) { tool = "/usr/bin/curl"; kind = 1; }
-    else if (access("/usr/bin/wget", X_OK) == 0) { tool = "/usr/bin/wget"; kind = 2; }
-    else if (access("/bin/busybox", X_OK) == 0) { tool = "/bin/busybox"; kind = 3; }
-    else {
-        fprintf(stderr, "kanki-audio: no curl/wget/busybox downloader for remote audio\n");
-        return 20;
-    }
-
-    fprintf(stderr, "kanki-audio: downloading %s via %s\n", url, tool);
+    fprintf(stderr, "kanki-audio: downloading remote audio %s\n", url);
     pid = fork();
     if (pid == 0) {
-        if (kind == 1)
-            execl(tool, tool, "-L", "--fail", "--silent", "--show-error", "-o", out, url, (char *)NULL);
-        else if (kind == 2)
-            execl(tool, tool, "-q", "-O", out, url, (char *)NULL);
-        else
-            execl(tool, tool, "wget", "-q", "-O", out, url, (char *)NULL);
+        /* Try known Kindle/userland downloaders in sequence without access()
+         * preflight checks, for the same old-kernel compatibility reason. */
+        execl("/usr/bin/curl", "/usr/bin/curl", "-L", "--fail", "--silent", "--show-error", "-o", out, url, (char *)NULL);
+        execl("/usr/bin/wget", "/usr/bin/wget", "-q", "-O", out, url, (char *)NULL);
+        execl("/bin/busybox", "/bin/busybox", "wget", "-q", "-O", out, url, (char *)NULL);
         _exit(127);
     }
     if (pid < 0) return 21;
     waitpid(pid, &status, 0);
-    if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0) || access(out, R_OK) != 0) {
+
+    probe = fopen(out, "rb");
+    if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0) || !probe) {
+        if (probe) fclose(probe);
         fprintf(stderr, "kanki-audio: remote download failed status=%d\n", status);
         unlink(out);
         return 22;
     }
+    fclose(probe);
     return 0;
 }
 
