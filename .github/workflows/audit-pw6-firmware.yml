@@ -1,0 +1,80 @@
+name: Audit PW6 Kindle system
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [renderer-adaptive-v2]
+    paths:
+      - 'tools/audit_kindlerootfs.sh'
+      - '.github/workflows/audit-pw6-firmware.yml'
+
+jobs:
+  firmware-oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # Amazon's stable redirect used by KindleModding for Paperwhite 12th Gen
+      # (PW6). It resolves to the current official firmware package.
+      FIRMWARE_URL: https://www.amazon.com/update_KindlePaperwhite_12th_Gen_2024
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install extraction/audit dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake git wget file binutils \
+            zlib1g-dev libarchive-dev nettle-dev libssl-dev \
+            squashfs-tools e2fsprogs
+
+      - name: Build KindleTool
+        run: |
+          git clone --depth 1 --recurse-submodules https://github.com/KindleModding/kindle-sdk.git /tmp/kindle-sdk
+          make -C /tmp/kindle-sdk/KindleTool
+          KINDLETOOL=/tmp/kindle-sdk/KindleTool/KindleTool/Release/kindletool
+          test -x "$KINDLETOOL"
+          "$KINDLETOOL" version || true
+
+      - name: Download official PW6 firmware
+        run: |
+          wget -q --show-progress "$FIRMWARE_URL" -O /tmp/update-kindle-pw6.bin
+          test -s /tmp/update-kindle-pw6.bin
+          file /tmp/update-kindle-pw6.bin
+          sha256sum /tmp/update-kindle-pw6.bin | tee firmware-package.sha256
+          /tmp/kindle-sdk/KindleTool/KindleTool/Release/kindletool convert -i /tmp/update-kindle-pw6.bin \
+            > firmware-package-info.txt 2>&1 || true
+          sed -n '1,160p' firmware-package-info.txt
+
+      - name: Extract and mount rootfs read-only
+        run: |
+          KINDLETOOL=/tmp/kindle-sdk/KindleTool/KindleTool/Release/kindletool
+          rm -rf /tmp/pw6-fw /tmp/pw6-root
+          mkdir -p /tmp/pw6-fw /tmp/pw6-root firmware-audit
+          "$KINDLETOOL" extract /tmp/update-kindle-pw6.bin /tmp/pw6-fw
+          ROOT_GZ=$(find /tmp/pw6-fw -type f -name '*rootfs*.img.gz' | head -1)
+          test -n "$ROOT_GZ"
+          echo "rootfs_archive=$ROOT_GZ" | tee firmware-audit/extraction-meta.txt
+          gzip -dc "$ROOT_GZ" > /tmp/pw6-rootfs.img
+          sha256sum /tmp/pw6-rootfs.img | tee firmware-audit/rootfs-image.sha256
+          sudo mount -o loop,ro /tmp/pw6-rootfs.img /tmp/pw6-root
+          mount | grep '/tmp/pw6-root'
+
+      - name: Audit actual Kindle userspace
+        run: |
+          bash tools/audit_kindlerootfs.sh /tmp/pw6-root firmware-audit
+          cp firmware-package.sha256 firmware-package-info.txt firmware-audit/
+          echo '--- audit meta ---'
+          cat firmware-audit/audit-meta.txt
+          echo '--- version hints ---'
+          sed -n '1,120p' firmware-audit/rootfs-runtime-audit.txt
+
+      - name: Unmount rootfs
+        if: always()
+        run: sudo umount /tmp/pw6-root 2>/dev/null || true
+
+      # Do not publish Amazon firmware or rootfs bytes. Only derived text
+      # manifests/hashes are retained as CI artifacts.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pw6-firmware-system-oracle
+          path: firmware-audit/
