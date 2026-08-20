@@ -1,0 +1,26 @@
+format = 1
+
+[ranki]
+repository = "https://github.com/crazy-electron/ranki"
+commit = "d671ee657f0c411474d2afff3bf9cbb49be2fb44"
+release_version_observed = "v0.2"
+release_asset = "https://github.com/crazy-electron/ranki/releases/latest/download/ranki.zip"
+armhf_binary_sha256 = "6019520b17da8f228f332ec2afc84f1e3a41889b694921e274ff2c7a8b362aed"
+armel_binary_sha256 = "f8e5a2815fb5914939fb62f741b4c07670922ac967e7679d1d5e0052ffe7c4a3"
+
+[kindle_pw6_firmware]
+model = "Kindle Paperwhite 6 / Paperwhite 12th Generation (2024)"
+platform = "Bellatrix4"
+firmware_version_observed = "5.19.6"
+target_ota = "4832160042"
+firmware_sha256 = "72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c"
+rootfs_sha256 = "b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa"
+
+[kindle_pw6_source]
+source_bundle_sha256 = "2472b13f189496784c8cb8331bda6a12fa486db1a88ff2823abbc75e8fb586d1"
+webkit_source_archive = "webkit-1.0_1.4.2.tar.gz"
+gtk_source_archive = "gtk+-2.0_2.20.1.tar.gz"
+
+[anki_backend]
+version_target = "26.08"
+rust_toolchain = "1.92.0"

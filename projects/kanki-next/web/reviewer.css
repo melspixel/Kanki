@@ -1,0 +1,110 @@
+html,
+body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 18px;
+    line-height: 1.42;
+}
+
+#qa {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 100%;
+    padding: 18px 20px 28px;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+#qa img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#qa table {
+    max-width: 100%;
+    border-collapse: collapse;
+}
+
+#qa pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.kanki-probe-panel {
+    border: 1px solid #222;
+    margin: 0 0 16px;
+    padding: 12px;
+}
+
+.kanki-probe-title {
+    margin: 0 0 8px;
+    font-size: 32px;
+    line-height: 1.1;
+}
+
+.kanki-probe-word {
+    margin: 8px 0 2px;
+    text-align: center;
+    font-size: 48px;
+    line-height: 1.05;
+    font-weight: bold;
+}
+
+.kanki-probe-phonetic {
+    margin: 0 0 12px;
+    text-align: center;
+    font-size: 26px;
+}
+
+.kanki-probe-definition {
+    font-size: 24px;
+    line-height: 1.35;
+}
+
+.kanki-probe-example {
+    font-size: 21px;
+    line-height: 1.4;
+}
+
+.kanki-probe-image {
+    width: 80%;
+    max-width: 360px;
+    margin-top: 14px;
+    margin-bottom: 14px;
+    border: 1px solid #444;
+}
+
+.kanki-probe-button {
+    display: block;
+    width: 100%;
+    min-height: 58px;
+    margin: 16px 0 0;
+    font-size: 23px;
+}
+
+.kanki-size-16 { font-size: 16px; }
+.kanki-size-24 { font-size: 24px; }
+.kanki-size-32 { font-size: 32px; }
+.kanki-size-48 { font-size: 48px; }
+
+#kanki-breakpoint-small,
+#kanki-breakpoint-wide {
+    display: none;
+}
+
+@media (max-width: 420px) {
+    #kanki-breakpoint-small { display: inline; }
+}
+
+@media (min-width: 800px) {
+    #kanki-breakpoint-wide { display: inline; }
+}

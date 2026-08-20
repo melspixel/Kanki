@@ -1,0 +1,49 @@
+<!doctype html>
+<html class="linux kindle">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kanki Next renderer probe</title>
+<style>
+@@REVIEWER_CSS@@
+</style>
+<script>
+var KANKI_PROBE_IMAGE = "@@PROBE_IMAGE@@";
+var KANKI_PROBE_FRONT = '' +
+    '<div class="kanki-probe-panel">' +
+    '<h1 class="kanki-probe-title">Kanki Next native renderer probe</h1>' +
+    '<div id="kanki-metrics">collecting geometry...</div>' +
+    '<div>Breakpoint: <span id="kanki-breakpoint-small">small (&le;420)</span>' +
+    '<span id="kanki-breakpoint-wide">wide (&ge;800)</span></div>' +
+    '</div>' +
+    '<div class="kanki-probe-panel">' +
+    '<div class="kanki-size-16">16 px reference text</div>' +
+    '<div class="kanki-size-24">24 px reference text</div>' +
+    '<div class="kanki-size-32">32 px reference text</div>' +
+    '<div class="kanki-size-48">48 px reference text</div>' +
+    '</div>' +
+    '<div class="kanki-probe-panel">' +
+    '<div class="kanki-probe-word">adventure</div>' +
+    '<div class="kanki-probe-phonetic">/ədˈventʃər/</div>' +
+    '<img class="kanki-probe-image" src="' + KANKI_PROBE_IMAGE + '" alt="probe illustration">' +
+    '<div class="kanki-probe-definition">An adventure is a fun or exciting thing that you do.</div>' +
+    '<button class="kanki-probe-button" onclick="KankiReviewer.showAnswer({cardOrdinal:0, html:KANKI_PROBE_BACK});">Show answer</button>' +
+    '</div>';
+var KANKI_PROBE_BACK = '' +
+    '<div class="kanki-probe-panel">' +
+    '<div id="answer"></div>' +
+    '<div class="kanki-probe-word">adventure</div>' +
+    '<img class="kanki-probe-image" src="' + KANKI_PROBE_IMAGE + '" alt="probe illustration">' +
+    '<div class="kanki-probe-definition"><b>Meaning:</b> an unusual, exciting, or risky experience.</div>' +
+    '<p class="kanki-probe-example"><b>Example:</b> Riding through the mountains became the best adventure of the trip.</p>' +
+    '<button class="kanki-probe-button" onclick="KankiReviewer.showQuestion({cardOrdinal:0, html:KANKI_PROBE_FRONT});">Back to question</button>' +
+    '</div>';
+</script>
+<script>
+@@REVIEWER_JS@@
+</script>
+</head>
+<body class="card card1 isLin">
+<div id="qa" dir="auto"></div>
+</body>
+</html>

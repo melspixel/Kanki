@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "release_version_observed": "v0.2",
+  "armhf_sha256": "6019520b17da8f228f332ec2afc84f1e3a41889b694921e274ff2c7a8b362aed",
+  "armel_sha256": "f8e5a2815fb5914939fb62f741b4c07670922ac967e7679d1d5e0052ffe7c4a3",
+  "general_scale": 1.5,
+  "pw6_physical_width": 1264,
+  "ranki_screen_scale": 2.1066666666666665,
+  "ranki_requested_webview_zoom": 3.1599999999999997,
+  "note": "Package identities and config were verified locally; CI re-audits source and package against upstream.lock."
+}

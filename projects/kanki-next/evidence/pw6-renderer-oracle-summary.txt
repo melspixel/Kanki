@@ -1,0 +1,14 @@
+KANKI_NEXT_PW6_RENDERER_ORACLE_V1
+platform=Bellatrix4
+firmware_version_observed=5.19.6
+target_ota=4832160042
+architecture=ARMv7 hard-float
+webkit_runtime=libwebkitgtk-1.0.so.0.7.2
+webkit_source_baseline=1.4.2
+gtk_source_baseline=2.20.1
+glibc_max_export_observed=GLIBC_2.35
+lab126_scale_sequence=set_useW3CStd_cssPixelsPerInch(1) -> get_pixel_density() -> set_full_content_zoom(view,1) -> set_zoom_level(view,density)
+firmware_sha256=72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c
+rootfs_sha256=b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa
+source_bundle_sha256=2472b13f189496784c8cb8331bda6a12fa486db1a88ff2823abbc75e8fb586d1
+note=Derived metadata only; no Amazon firmware/source bytes are stored here.

@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "name": "Kanki Next renderer probe",
+      "priority": 10,
+      "action": "./launch-probe.sh"
+    },
+    {
+      "name": "Collect Kanki Next report",
+      "priority": 20,
+      "action": "./collect-device-report.sh"
+    }
+  ]
+}

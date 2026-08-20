@@ -1,0 +1,178 @@
+name: Kanki Next
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'projects/kanki-next/**'
+      - '.github/workflows/kanki-next.yml'
+  pull_request:
+    paths:
+      - 'projects/kanki-next/**'
+      - '.github/workflows/kanki-next.yml'
+
+concurrency:
+  group: kanki-next-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3-pil nodejs make
+
+      - name: Run host and contract tests
+        working-directory: projects/kanki-next
+        run: make clean test
+
+  upstream-provenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RANKI_COMMIT: d671ee657f0c411474d2afff3bf9cbb49be2fb44
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install audit dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git curl unzip python3
+
+      - name: Fetch pinned RAnki source and release package
+        run: |
+          git init /tmp/ranki
+          git -C /tmp/ranki remote add origin https://github.com/crazy-electron/ranki.git
+          git -C /tmp/ranki fetch --depth 1 origin "$RANKI_COMMIT"
+          git -C /tmp/ranki checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/ranki rev-parse HEAD)" = "$RANKI_COMMIT"
+          curl -fL --retry 3 \
+            https://github.com/crazy-electron/ranki/releases/latest/download/ranki.zip \
+            -o /tmp/ranki.zip
+
+      - name: Audit renderer assumptions and package identities
+        run: |
+          mkdir -p projects/kanki-next/build
+          python3 projects/kanki-next/tools/audit_ranki.py \
+            --source /tmp/ranki \
+            --package /tmp/ranki.zip \
+            --lock projects/kanki-next/upstream.lock \
+            --output projects/kanki-next/build/ranki-audit.json
+          cat projects/kanki-next/build/ranki-audit.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanki-next-upstream-audit
+          path: projects/kanki-next/build/ranki-audit.json
+
+  build-armhf-probe:
+    needs: [host-tests, upstream-provenance]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      KOX_TAG: '2025.05'
+      KHF_TRIPLE: arm-kindlehf-linux-gnueabihf
+      PW6_MAX_GLIBC: '2.35'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl file binutils zip unzip make python3-pil
+
+      - name: Fetch pinned KindleHF toolchain
+        run: |
+          curl -fL --retry 3 \
+            "https://github.com/koreader/koxtoolchain/releases/download/${KOX_TAG}/kindlehf.tar.gz" \
+            -o /tmp/kindlehf.tar.gz
+          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
+          CC="$HOME/x-tools/$KHF_TRIPLE/bin/$KHF_TRIPLE-gcc"
+          test -x "$CC"
+          echo "KINDLE_CC=$CC" >> "$GITHUB_ENV"
+          "$CC" --version | head -1
+          "$CC" --print-sysroot
+
+      - name: Cross-build renderer probe
+        working-directory: projects/kanki-next
+        run: |
+          make clean
+          make armhf-probe KINDLE_CC="$KINDLE_CC"
+
+      - name: Audit ARMHF output and Kindle ABI
+        working-directory: projects/kanki-next
+        run: |
+          BIN=build/kanki-next-render-probe-armhf
+          file "$BIN" | tee build/probe-file.txt
+          readelf -h "$BIN" | tee build/probe-elf-header.txt
+          readelf -d "$BIN" | tee build/probe-dynamic.txt
+          readelf --version-info "$BIN" 2>/dev/null \
+            | grep -oE 'GLIBC_[0-9.]+' \
+            | sort -Vu \
+            | tee build/probe-glibc.txt || true
+          nm -D "$BIN" | tee build/probe-dynamic-symbols.txt
+
+          MAX=$(sed 's/GLIBC_//' build/probe-glibc.txt | tail -1)
+          if [ -z "$MAX" ]; then MAX=0; fi
+          python3 - "$MAX" "$PW6_MAX_GLIBC" <<'PY'
+          import sys
+          def version(text):
+              return tuple(int(part) for part in text.split('.'))
+          required, allowed = sys.argv[1], sys.argv[2]
+          print(f"required_glibc={required}")
+          print(f"oracle_max_glibc={allowed}")
+          if version(required) > version(allowed):
+              raise SystemExit(
+                  f"probe requires GLIBC_{required}, newer than PW6 oracle GLIBC_{allowed}"
+              )
+          PY
+
+          if nm -D "$BIN" | grep -q 'webkit_web_view_set_useW3CStd_cssPixelsPerInch'; then
+            echo 'Lab126 symbols must be resolved with dlsym, not linked directly.' >&2
+            exit 1
+          fi
+
+          {
+            echo 'KANKI_NEXT_PROBE_BUILD_REPORT_V1'
+            echo "commit=$GITHUB_SHA"
+            echo "toolchain=$KHF_TRIPLE"
+            echo "koxtoolchain_tag=$KOX_TAG"
+            echo "pw6_oracle_max_glibc=$PW6_MAX_GLIBC"
+            echo "required_glibc=$MAX"
+            echo '--- file ---'
+            cat build/probe-file.txt
+            echo '--- needed ---'
+            grep NEEDED build/probe-dynamic.txt || true
+            echo '--- glibc ---'
+            cat build/probe-glibc.txt
+          } | tee build/probe-build-report.txt
+
+      - name: Package KUAL extension
+        working-directory: projects/kanki-next
+        env:
+          KANKI_NEXT_COMMIT: ${{ github.sha }}
+          KANKI_NEXT_TOOLCHAIN: arm-kindlehf-linux-gnueabihf/koxtoolchain-2025.05
+        run: |
+          export KANKI_NEXT_BUILT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          scripts/package-probe.sh \
+            build/kanki-next-render-probe-armhf \
+            build/dist
+          unzip -l build/dist/kanki-next-render-probe.zip
+          sha256sum -c build/dist/kanki-next-render-probe.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanki-next-render-probe-armhf
+          path: |
+            projects/kanki-next/build/dist/kanki-next-render-probe.zip
+            projects/kanki-next/build/dist/kanki-next-render-probe.zip.sha256
+            projects/kanki-next/build/probe-build-report.txt
+            projects/kanki-next/build/probe-elf-header.txt
+            projects/kanki-next/build/probe-dynamic.txt
+            projects/kanki-next/build/probe-glibc.txt
+          if-no-files-found: error

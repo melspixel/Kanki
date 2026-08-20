@@ -1,0 +1,20 @@
+KANKI_NEXT_MESQUITE_SCALE_CALL_SEQUENCE_V1
+
+Observed ARM call-site shape from the official PW6 firmware oracle:
+
+mov r0, #1
+bl  webkit_web_view_set_useW3CStd_cssPixelsPerInch
+bl  webkit_web_view_get_pixel_density
+... compare returned float with 1.0 ...
+ldr r0, [web_view]
+mov r1, #1
+bl  webkit_web_view_set_full_content_zoom
+... move returned density to VFP argument ...
+ldr r0, [web_view]
+bl  webkit_web_view_set_zoom_level
+
+Interpretation:
+- W3C CSS-pixel setter is a global boolean setter.
+- pixel-density getter has no ordinary argument and returns float in s0.
+- full-content zoom and normal zoom receive the WebView.
+- fixed-layout APIs are separate and not part of the normal responsive path.
