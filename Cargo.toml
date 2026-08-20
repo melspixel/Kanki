@@ -4,6 +4,7 @@ members = [
   "crates/kanki-domain",
   "crates/kanki-backend",
   "crates/kanki-renderer",
+  "crates/kanki-platform",
   "crates/kanki-app",
 ]
 
