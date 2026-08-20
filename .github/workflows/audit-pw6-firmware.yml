@@ -7,6 +7,11 @@ on:
     paths:
       - 'tools/audit_kindlerootfs.sh'
       - '.github/workflows/audit-pw6-firmware.yml'
+  pull_request:
+    branches: [anki-26.08-backend]
+    paths:
+      - 'tools/audit_kindlerootfs.sh'
+      - '.github/workflows/audit-pw6-firmware.yml'
 
 jobs:
   firmware-oracle:
