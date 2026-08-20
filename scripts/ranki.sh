@@ -7,6 +7,9 @@ SHIM="$RANKI_DIR/libkanki-webkit-$ARCH.so"
 AUDIO_SERVER="$RANKI_DIR/kanki-audio-$ARCH"
 LOG="$RANKI_DIR/ranki.log"
 LOCK_DIR="$RANKI_DIR/.kanki.lock"
+BACKEND_SHIM="$RANKI_DIR/libkanki-backend-redirect-$ARCH.so"
+ANKI26_BACKEND="$RANKI_DIR/libanki-26.08-$ARCH.so"
+DISABLE_ANKI26="$RANKI_DIR/disable-anki26"
 
 acquire_lock() {
     if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -38,6 +41,19 @@ else
     export KANKI_GST_LOADER=/lib/ld-linux.so.3
 fi
 
+# Anki 26.08 is currently provided only for hard-float Kindles.  Keeping a
+# sentinel file named "disable-anki26" beside this script forces the original
+# embedded RAnki backend, which makes rollback possible without reinstalling.
+BACKEND_REQUEST="embedded-25.09"
+PRELOAD="$SHIM"
+unset KANKI_ANKI_BACKEND
+if [ "$ARCH" = armhf ] && [ ! -e "$DISABLE_ANKI26" ] \
+        && [ -r "$ANKI26_BACKEND" ] && [ -r "$BACKEND_SHIM" ]; then
+    export KANKI_ANKI_BACKEND="$ANKI26_BACKEND"
+    PRELOAD="$BACKEND_SHIM:$PRELOAD"
+    BACKEND_REQUEST="external-26.08"
+fi
+
 # MTP clients may drop Unix executable bits on files copied to /mnt/us.  The
 # native player can still be launched through the system ELF loader as long as
 # it is readable, but chmod is harmless and helps on filesystems that preserve it.
@@ -49,6 +65,13 @@ chmod 755 "$AUDIO_SERVER" "$BIN" 2>/dev/null || true
     echo "===== Kanki start $(date '+%Y-%m-%d %H:%M:%S') ====="
     echo "arch=$ARCH"
     echo "media=$KANKI_MEDIA_DIR"
+    echo "backend_request=$BACKEND_REQUEST"
+    if [ "$BACKEND_REQUEST" = "external-26.08" ]; then
+        echo "backend_file=$ANKI26_BACKEND"
+        echo "backend_disable_sentinel=$DISABLE_ANKI26"
+    elif [ -e "$DISABLE_ANKI26" ]; then
+        echo "backend_note=Anki26 disabled by sentinel"
+    fi
     echo "native_player=$KANKI_GST_PLAYER"
     echo "native_loader=$KANKI_GST_LOADER"
     ls -l "$KANKI_GST_PLAYER" 2>&1 | sed 's/^/player-file: /'
@@ -82,7 +105,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-export LD_PRELOAD="$SHIM${LD_PRELOAD:+:$LD_PRELOAD}"
+export LD_PRELOAD="$PRELOAD${LD_PRELOAD:+:$LD_PRELOAD}"
 "$BIN" "$@" >>"$LOG" 2>&1 &
 RANKI_PID=$!
 echo "$RANKI_PID" > "$LOCK_DIR/ranki.pid"
