@@ -37,7 +37,7 @@ jobs:
             -o device/audio/miniaudio.h
       - name: Build source-owned audio service and native mixersink player
         run: |
-          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -O2 -Wall -Wextra -Werror \
+          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -D_XOPEN_SOURCE=700 -O2 -Wall -Wextra -Werror \
             -Idevice/audio device/audio/kanki_audio_server.c -o kanki-audio -lm -latomic
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -O2 -Wall -Wextra -Werror \
             -DKGP_NATIVE_GLIBC third_party/audiobook-koplugin/kindle/gst-play.c \
