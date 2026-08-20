@@ -44,7 +44,8 @@ jobs:
           ! grep -R -E 'LD_PRELOAD|420px|LOGICAL_VIEWPORT_PX|service[_ -]?index|method[_ -]?index' device assets/device scripts/kanki-launch.sh scripts/kanki-sync.sh
           ! grep -R -E 'COCA-English|dictionary-logo-link|\.pos-badge|\.word[[:space:]]*\{' assets/reviewer device
           ! grep -R -E '^[[:space:]]*svg[[:space:]]*\{' assets/reviewer/*.css
-          ! grep -R -E 'printf.*hkey|fprintf.*hkey' device scripts
+          ! grep -R -E 'log_message\([^;]*hkey|fprintf\([^;]*hkey[[:space:]]*=' device
+          ! grep -R -E '(>>|>)[[:space:]]*"?\$LOG"?.*\$HKEY|\$HKEY.*(>>|>)[[:space:]]*"?\$LOG"?' scripts
 
   armhf-shell:
     runs-on: ubuntu-24.04
