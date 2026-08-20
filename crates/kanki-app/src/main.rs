@@ -36,7 +36,11 @@ fn demo_card() -> ReviewCard {
         css: ".front { font-size: 2em; }".into(),
         question_audio: vec![],
         answer_audio: vec![],
-        counts: Counts { new: 1, learning: 0, review: 2 },
+        counts: Counts {
+            new: 1,
+            learning: 0,
+            review: 2,
+        },
         intervals: ["1m".into(), "6m".into(), "1d".into(), "4d".into()],
     }
 }
@@ -45,8 +49,20 @@ fn self_test() -> Result<()> {
     let shell = kanki_renderer::bootstrap_document();
     let persistent_qa = shell.matches("id=\"qa\"").count() == 1;
     let mut session = ReviewSession::default();
-    let question = matches!(session.load(Some(demo_card())), SessionEffect::Render { side: Side::Question, .. });
-    let answer = matches!(session.show_answer()?, SessionEffect::Render { side: Side::Answer, .. });
+    let question = matches!(
+        session.load(Some(demo_card())),
+        SessionEffect::Render {
+            side: Side::Question,
+            ..
+        }
+    );
+    let answer = matches!(
+        session.show_answer()?,
+        SessionEffect::Render {
+            side: Side::Answer,
+            ..
+        }
+    );
     let state_machine = question && answer;
     let report = SelfTestReport {
         build_version: env!("CARGO_PKG_VERSION"),
@@ -54,7 +70,11 @@ fn self_test() -> Result<()> {
         reviewer_sha256: kanki_renderer::runtime_sha256(),
         persistent_qa,
         state_machine,
-        result: if persistent_qa && state_machine { "pass" } else { "fail" },
+        result: if persistent_qa && state_machine {
+            "pass"
+        } else {
+            "fail"
+        },
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
     anyhow::ensure!(report.result == "pass", "self-test failed");
@@ -69,6 +89,8 @@ fn main() -> Result<()> {
     if cli.self_test {
         return self_test();
     }
-    println!("Kanki rewrite scaffold: device runtime is gated behind the rewrite acceptance matrix.");
+    println!(
+        "Kanki rewrite scaffold: device runtime is gated behind the rewrite acceptance matrix."
+    );
     Ok(())
 }
