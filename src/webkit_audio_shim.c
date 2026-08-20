@@ -11,19 +11,24 @@ static void k_memcpy(char *d,const char *s,size_t n){while(n--) *d++=*s++;}
 static const char *k_strstr(const char *h,const char *n){size_t nl=k_strlen(n); if(!nl) return h; for(;h&&*h;h++){size_t i=0; while(i<nl&&h[i]==n[i]) i++; if(i==nl) return h;} return (const char*)0;}
 
 typedef void (*load_html_fn)(void *web_view, const char *content, const char *base_uri);
+typedef void (*set_zoom_fn)(void *web_view, float zoom_level);
 
 /*
- * Ranki currently renders template HTML directly into Kindle's old WebKit.
- * Two audio forms need compatibility handling:
- *
- *   1) modern card JS that calls new Audio(...).play()
- *   2) ordinary Anki [sound:file.mp3] tags, which Ranki currently leaves as
- *      literal text instead of running Anki's AV-tag extraction step.
- *
- * This shim supports both without modifying the upstream Ranki binary.
+ * Kindle's WebKit is old and Ranki multiplies its card zoom by screen-width
+ * scaling.  On modern 1200px-class Paperwhites that can push the effective
+ * zoom above 3x.  This shim both supplies missing Anki audio behavior and
+ * applies conservative Kindle-specific presentation fixes.
  */
 static const char kanki_audio_shim[] =
 "<script>(function(){"
+"function addStyle(){try{var h=document.getElementsByTagName('head')[0]||document.documentElement;"
+"var s=document.createElement('style');s.type='text/css';"
+"var css='html{-webkit-text-size-adjust:100%;}body{overflow-x:hidden;}' +"
+"'.kanki-audio-link{font-size:20px!important;line-height:24px!important;display:inline-block!important;vertical-align:middle!important;text-decoration:none!important;padding:1px 5px!important;margin:0 2px!important;width:auto!important;height:auto!important;}' +"
+"'.kindle .replay-button,.kindle .soundLink,.kindle .audio-button{font-size:20px!important;line-height:24px!important;max-width:40px!important;max-height:40px!important;width:auto!important;height:auto!important;}' +"
+"'.kindle .replay-button svg,.kindle .soundLink svg,.kindle .audio-button svg,.kindle button svg{width:28px!important;height:28px!important;max-width:28px!important;max-height:28px!important;}' +"
+"'.kindle img{max-width:100%!important;height:auto;}';"
+"if(s.styleSheet)s.styleSheet.cssText=css;else s.appendChild(document.createTextNode(css));h.appendChild(s);}catch(e){}}"
 "function ping(path,src){try{var i=new Image();i.style.display='none';"
 "i.src='http://127.0.0.1:17392/'+path+'?src='+encodeURIComponent(src||'')+'&t='+(new Date().getTime());"
 "(document.body||document.documentElement).appendChild(i);"
@@ -45,8 +50,8 @@ static const char kanki_audio_shim[] =
 "if(!frag)frag=document.createDocumentFragment();"
 "if(m.index>last)frag.appendChild(document.createTextNode(text.substring(last,m.index)));"
 "var src=m[1],a=document.createElement('a');sounds.push(src);"
-"a.href='#';a.className='kanki-audio-link';a.setAttribute('data-src',src);"
-"a.style.textDecoration='none';a.style.padding='0 0.3em';a.appendChild(document.createTextNode('\\u25B6'));"
+"a.href='#';a.className='kanki-audio-link';a.setAttribute('data-src',src);a.setAttribute('title','Play audio');"
+"a.appendChild(document.createTextNode('\\u25B6'));"
 "a.onclick=function(){ping('play',this.getAttribute('data-src'));return false;};frag.appendChild(a);"
 "last=re.lastIndex;"
 "}"
@@ -59,7 +64,7 @@ static const char kanki_audio_shim[] =
 "var tag=(node.tagName||'').toLowerCase();if(tag==='script'||tag==='style'||tag==='textarea')return;"
 "var c=node.firstChild;while(c){var n=c.nextSibling;walk(c,sounds);c=n;}"
 "}"
-"function scan(){try{if(!document.body)return;var sounds=[];walk(document.body,sounds);"
+"function scan(){try{addStyle();if(!document.body)return;var sounds=[];walk(document.body,sounds);"
 "if(sounds.length){setTimeout(function(){ping('play',sounds[0]);},120);}}catch(e){}}"
 "if(document.addEventListener)document.addEventListener('DOMContentLoaded',scan,false);"
 "else if(window.attachEvent)window.attachEvent('onload',scan);else window.onload=scan;"
@@ -110,4 +115,19 @@ void webkit_web_view_load_html_string(void *web_view, const char *content, const
     } else {
         real_fn(web_view, content, base_uri);
     }
+}
+
+void webkit_web_view_set_zoom_level(void *web_view, float zoom_level)
+{
+    static set_zoom_fn real_fn = NULL;
+    if (!real_fn) {
+        real_fn = (set_zoom_fn)dlsym(RTLD_NEXT, "webkit_web_view_set_zoom_level");
+        if (!real_fn) return;
+    }
+
+    /* Ranki's default scale=1.5 is multiplied by width/600.  PW6-class screens
+     * therefore exceed 3x.  Cap only oversized values, preserving smaller
+     * custom zoom levels chosen by users. */
+    if (zoom_level > 1.25f) zoom_level = 1.25f;
+    real_fn(web_view, zoom_level);
 }
