@@ -1,4 +1,5 @@
 #include "kanki_bridge.h"
+#include "kanki_sync_bridge.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,5 +37,17 @@ int main(int argc, char **argv) {
     ok &= require_ok("health", kanki_health_json(core));
     ok &= require_ok("close", kanki_close_collection_json(core));
     kanki_core_free(core);
-    return ok ? 0 : 3;
+
+    KankiSyncCore *sync_core = kanki_sync_core_new(&error);
+    if (!sync_core) {
+        fprintf(stderr, "sync core init failed: %s\n", error ? error : "unknown");
+        if (error) kanki_string_free(error);
+        return 3;
+    }
+    ok &= require_ok(
+        "sync_open",
+        kanki_sync_open_collection_json(sync_core, argv[1], argv[2], argv[3]));
+    ok &= require_ok("sync_close", kanki_sync_close_collection_json(sync_core));
+    kanki_sync_core_free(sync_core);
+    return ok ? 0 : 4;
 }
