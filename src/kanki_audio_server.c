@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -67,6 +68,11 @@ static void url_decode(char *dst, size_t cap, const char *src)
     dst[di] = '\0';
 }
 
+static int is_remote_url(const char *s)
+{
+    return s && (!strncmp(s, "http://", 7) || !strncmp(s, "https://", 8));
+}
+
 static int has_parent_ref(const char *s)
 {
     return strstr(s, "../") || strstr(s, "/..") || strcmp(s, "..") == 0;
@@ -83,9 +89,7 @@ static int resolve_media_path(const char *src, char *out, size_t out_cap)
 
     if (!strncmp(p, "file://", 7)) p += 7;
     if (!strncmp(p, "localhost/", 10)) p += 10;
-
-    /* Remote URLs are intentionally not fetched in this helper yet. */
-    if (!strncmp(p, "http://", 7) || !strncmp(p, "https://", 8)) return 0;
+    if (is_remote_url(p)) return 0;
 
     if (p[0] == '/') {
         if (strncmp(p, media, media_len) != 0 || (p[media_len] != '/' && p[media_len] != '\0')) return 0;
@@ -189,41 +193,102 @@ static int decode_to_wav(const char *input, const char *output)
     return 0;
 }
 
-static int decode_and_play(const char *path)
+static int launch_native_player(const char *wav_path)
 {
     const char *player = getenv("KANKI_GST_PLAYER");
-    char tmp[128];
+    const char *loader = getenv("KANKI_GST_LOADER");
     pid_t pid;
     int status = 0;
 
-    if (!player || access(player, X_OK) != 0) {
-        fprintf(stderr, "kanki-audio: native player missing/not executable: %s\n", player ? player : "(unset)");
+    if (!player || access(player, R_OK) != 0) {
+        fprintf(stderr, "kanki-audio: native player missing/unreadable: %s (%s)\n",
+            player ? player : "(unset)", strerror(errno));
         return 10;
     }
 
-    snprintf(tmp, sizeof(tmp), "/tmp/kanki-audio-%ld.wav", (long)getpid());
-    fprintf(stderr, "kanki-audio: decode %s -> %s\n", path, tmp);
-    if (decode_to_wav(path, tmp) != 0) return 11;
-
     pid = fork();
     if (pid == 0) {
-        execl(player, player, tmp, (char *)NULL);
-        fprintf(stderr, "kanki-audio: exec %s failed: %s\n", player, strerror(errno));
+        /* Files copied over MTP can lose the executable bit.  Running the ELF
+         * through Kindle's system dynamic loader only requires the binary to be
+         * readable and also keeps it on the device's native glibc ABI. */
+        if (loader && access(loader, X_OK) == 0) {
+            execl(loader, loader, player, wav_path, (char *)NULL);
+            fprintf(stderr, "kanki-audio: loader exec failed: %s\n", strerror(errno));
+        }
+        execl(player, player, wav_path, (char *)NULL);
+        fprintf(stderr, "kanki-audio: direct exec failed: %s\n", strerror(errno));
         _exit(127);
     }
-    if (pid < 0) {
-        unlink(tmp);
-        return 12;
-    }
+    if (pid < 0) return 12;
 
     waitpid(pid, &status, 0);
-    unlink(tmp);
     fprintf(stderr, "kanki-audio: native player status=%d\n", status);
     fflush(stderr);
     return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : 13;
 }
 
-static void start_player(const char *path)
+static int decode_and_play(const char *path)
+{
+    char tmp[128];
+    int rc;
+
+    snprintf(tmp, sizeof(tmp), "/tmp/kanki-audio-%ld.wav", (long)getpid());
+    fprintf(stderr, "kanki-audio: decode %s -> %s\n", path, tmp);
+    rc = decode_to_wav(path, tmp);
+    if (rc != 0) return 11;
+    rc = launch_native_player(tmp);
+    unlink(tmp);
+    return rc;
+}
+
+static int download_remote(const char *url, const char *out)
+{
+    const char *tool = NULL;
+    int kind = 0;
+    pid_t pid;
+    int status = 0;
+
+    if (access("/usr/bin/curl", X_OK) == 0) { tool = "/usr/bin/curl"; kind = 1; }
+    else if (access("/usr/bin/wget", X_OK) == 0) { tool = "/usr/bin/wget"; kind = 2; }
+    else if (access("/bin/busybox", X_OK) == 0) { tool = "/bin/busybox"; kind = 3; }
+    else {
+        fprintf(stderr, "kanki-audio: no curl/wget/busybox downloader for remote audio\n");
+        return 20;
+    }
+
+    fprintf(stderr, "kanki-audio: downloading %s via %s\n", url, tool);
+    pid = fork();
+    if (pid == 0) {
+        if (kind == 1)
+            execl(tool, tool, "-L", "--fail", "--silent", "--show-error", "-o", out, url, (char *)NULL);
+        else if (kind == 2)
+            execl(tool, tool, "-q", "-O", out, url, (char *)NULL);
+        else
+            execl(tool, tool, "wget", "-q", "-O", out, url, (char *)NULL);
+        _exit(127);
+    }
+    if (pid < 0) return 21;
+    waitpid(pid, &status, 0);
+    if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0) || access(out, R_OK) != 0) {
+        fprintf(stderr, "kanki-audio: remote download failed status=%d\n", status);
+        unlink(out);
+        return 22;
+    }
+    return 0;
+}
+
+static int remote_and_play(const char *url)
+{
+    char tmp[128];
+    int rc;
+    snprintf(tmp, sizeof(tmp), "/tmp/kanki-remote-%ld.mp3", (long)getpid());
+    rc = download_remote(url, tmp);
+    if (rc == 0) rc = decode_and_play(tmp);
+    unlink(tmp);
+    return rc;
+}
+
+static void start_source(const char *src, int remote)
 {
     pid_t pid;
     stop_player();
@@ -231,7 +296,7 @@ static void start_player(const char *path)
     if (pid == 0) {
         setpgid(0, 0);
         signal(SIGTERM, SIG_DFL);
-        _exit(decode_and_play(path));
+        _exit(remote ? remote_and_play(src) : decode_and_play(src));
     }
     if (pid > 0) {
         setpgid(pid, pid);
@@ -287,12 +352,19 @@ static void handle_client(int fd)
         }
         url_decode(decoded, sizeof(decoded), src_arg);
         fprintf(stderr, "kanki-audio: request src=%s\n", decoded);
+
+        if (is_remote_url(decoded)) {
+            start_source(decoded, 1);
+            http_reply(fd, 200, "remote playing");
+            return;
+        }
+
         if (!resolve_media_path(decoded, path, sizeof(path))) {
-            fprintf(stderr, "kanki-audio: media unavailable (local-only): %s\n", decoded);
+            fprintf(stderr, "kanki-audio: local media unavailable: %s\n", decoded);
             http_reply(fd, 404, "media not found");
             return;
         }
-        start_player(path);
+        start_source(path, 0);
         http_reply(fd, 200, "playing");
         return;
     }
@@ -309,9 +381,10 @@ int main(void)
     signal(SIGTERM, on_signal);
     signal(SIGPIPE, SIG_IGN);
 
-    fprintf(stderr, "kanki-audio: starting, media=%s player=%s\n",
+    fprintf(stderr, "kanki-audio: starting, media=%s player=%s loader=%s\n",
         getenv("KANKI_MEDIA_DIR") ? getenv("KANKI_MEDIA_DIR") : "(unset)",
-        getenv("KANKI_GST_PLAYER") ? getenv("KANKI_GST_PLAYER") : "(unset)");
+        getenv("KANKI_GST_PLAYER") ? getenv("KANKI_GST_PLAYER") : "(unset)",
+        getenv("KANKI_GST_LOADER") ? getenv("KANKI_GST_LOADER") : "(unset)");
     fflush(stderr);
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
