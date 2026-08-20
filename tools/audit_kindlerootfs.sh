@@ -29,7 +29,7 @@ report_one() {
 }
 
 {
-    echo "KANKI_KINDLE_ROOTFS_AUDIT_V1"
+    echo "KANKI_KINDLE_ROOTFS_AUDIT_V2"
     echo "generated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     section "VERSION FILES"
     for f in "$ROOT/etc/prettyversion.txt" "$ROOT/etc/version.txt" "$ROOT/etc/os-release" "$ROOT/etc/issue"; do
@@ -37,6 +37,16 @@ report_one() {
             echo "--- ${f#$ROOT} ---"
             sed -n '1,100p' "$f" || true
         fi
+    done
+
+    section "PACKAGE METADATA HINTS"
+    for f in "$ROOT/var/lib/opkg/status" "$ROOT/usr/lib/opkg/status" "$ROOT/usr/lib/ipkg/status"; do
+        [ -r "$f" ] || continue
+        echo "--- ${f#$ROOT} ---"
+        awk 'BEGIN{RS="";FS="\n"} /Package:.*(webkit|gtk|glib|pango|harfbuzz|gstreamer|fontconfig|freetype|libsoup)/ {print $0"\n"}' "$f" | sed -n '1,500p' || true
+    done
+    for d in "$ROOT/var/lib/rpm" "$ROOT/usr/lib/rpm"; do
+        [ -d "$d" ] && echo "rpm_db=${d#$ROOT}"
     done
 
     section "ABI BASELINE"
@@ -56,6 +66,22 @@ report_one() {
         -name 'libgtk*' -o -name 'libgdk*' -o -name 'libsoup*' \) \
         -print 2>/dev/null | sort | while IFS= read -r f; do report_one "$f"; done
 
+    section "WEBKIT EXPORTED/CUSTOM APIS"
+    WEBKIT_REAL=$(find "$ROOT/usr/lib" -maxdepth 1 -type f -name 'libwebkitgtk-1.0.so.*' 2>/dev/null | sort | tail -1)
+    if [ -n "$WEBKIT_REAL" ]; then
+        echo "library=${WEBKIT_REAL#$ROOT}"
+        nm -D --defined-only "$WEBKIT_REAL" 2>/dev/null | grep -E 'webkit_(web_view|web_frame|set_|get_|viewport)|cssPixels|fixed_layout|render_partial|full_content_zoom' | sort | sed -n '1,500p' || true
+    fi
+
+    section "MESQUITE WEBKIT HINTS"
+    if [ -f "$ROOT/usr/bin/mesquite" ]; then
+        strings "$ROOT/usr/bin/mesquite" 2>/dev/null | grep -Ei 'cssPixels|fixed[_ -]?layout|viewport|zoom|dpi|device.?scale|user.?agent|render_partial|WebKit/[0-9]|Safari/[0-9]' | sort -u | sed -n '1,400p' || true
+    fi
+    if [ -r "$ROOT/usr/bin/browser" ]; then
+        echo "--- /usr/bin/browser ---"
+        sed -n '1,260p' "$ROOT/usr/bin/browser" || true
+    fi
+
     section "TEXT AND FONT STACK"
     find "$ROOT/usr/lib" "$ROOT/lib" -maxdepth 1 \( \
         -name 'libglib-2.0*' -o -name 'libgobject-2.0*' -o \
@@ -73,11 +99,15 @@ report_one() {
     done
 
     section "FONTS"
-    for d in "$ROOT/usr/share/fonts" "$ROOT/usr/java/lib/fonts"; do
-        [ -d "$d" ] || continue
-        echo "DIRECTORY ${d#$ROOT}"
-        find "$d" -type f \( -name '*.ttf' -o -name '*.otf' -o -name '*.ttc' \) -printf '%P\n' 2>/dev/null | sort
+    find "$ROOT" -xdev -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print 2>/dev/null | sed "s#^$ROOT##" | sort | sed -n '1,800p'
+
+    section "FONTCONFIG HINTS"
+    for f in "$ROOT/etc/fonts/fonts.conf" "$ROOT/etc/fonts/local.conf"; do
+        [ -r "$f" ] || continue
+        echo "--- ${f#$ROOT} ---"
+        sed -n '1,260p' "$f" || true
     done
+    find "$ROOT/etc/fonts" -type f -maxdepth 3 -print 2>/dev/null | sed "s#^$ROOT##" | sort | sed -n '1,300p' || true
 
     section "BROWSER/RENDERER EXECUTABLES"
     find "$ROOT/usr/bin" "$ROOT/usr/sbin" -maxdepth 1 -type f \( \
@@ -93,11 +123,18 @@ find "$ROOT/usr/lib" "$ROOT/lib" -maxdepth 1 \( \
     -name 'libharfbuzz*' -o -name 'libsoup*' -o -name 'libgst*' \) \
     -type f -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum > "$OUT/runtime-library-sha256.txt"
 
-for d in "$ROOT/usr/share/fonts" "$ROOT/usr/java/lib/fonts"; do
-    [ -d "$d" ] || continue
-    find "$d" -type f \( -name '*.ttf' -o -name '*.otf' -o -name '*.ttc' \) -print
- done | sed "s#^$ROOT##" | sort > "$OUT/font-inventory.txt"
+find "$ROOT" -xdev -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print 2>/dev/null \
+    | sed "s#^$ROOT##" | sort > "$OUT/font-inventory.txt"
+
+if [ -n "${WEBKIT_REAL:-}" ] && [ -f "$WEBKIT_REAL" ]; then
+    nm -D --defined-only "$WEBKIT_REAL" 2>/dev/null | sort > "$OUT/webkit-exported-symbols.txt" || true
+fi
+if [ -f "$ROOT/usr/bin/mesquite" ]; then
+    strings "$ROOT/usr/bin/mesquite" 2>/dev/null | grep -Ei 'cssPixels|fixed[_ -]?layout|viewport|zoom|dpi|device.?scale|user.?agent|render_partial|webkit_' | sort -u \
+        > "$OUT/mesquite-render-hints.txt" || true
+fi
 
 printf 'audit_root=%s\n' "$ROOT" > "$OUT/audit-meta.txt"
 printf 'runtime_library_count=%s\n' "$(wc -l < "$OUT/runtime-library-sha256.txt")" >> "$OUT/audit-meta.txt"
 printf 'font_count=%s\n' "$(wc -l < "$OUT/font-inventory.txt")" >> "$OUT/audit-meta.txt"
+printf 'webkit_export_count=%s\n' "$(wc -l < "$OUT/webkit-exported-symbols.txt" 2>/dev/null || echo 0)" >> "$OUT/audit-meta.txt"
