@@ -349,10 +349,7 @@ fn path_cstring(path: &Path) -> Result<CString, BackendError> {
     CString::new(text).map_err(|_| BackendError::EmbeddedNul(text.to_owned()))
 }
 
-unsafe fn take_raw_string(
-    ptr: *mut c_char,
-    free: StringFreeFn,
-) -> Result<String, BackendError> {
+unsafe fn take_raw_string(ptr: *mut c_char, free: StringFreeFn) -> Result<String, BackendError> {
     if ptr.is_null() {
         return Err(BackendError::NullResponse);
     }
@@ -436,6 +433,8 @@ mod tests {
             r#"{"ok":false,"data":null,"error":"collection already open"}"#,
         )
         .unwrap_err();
-        assert!(matches!(error, BackendError::Operation(message) if message == "collection already open"));
+        assert!(
+            matches!(error, BackendError::Operation(message) if message == "collection already open")
+        );
     }
 }
