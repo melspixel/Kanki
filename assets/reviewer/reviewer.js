@@ -3,6 +3,61 @@
 
   var qa = document.getElementById('qa');
   var deckStyle = document.getElementById('kanki-deck-style');
+  var currentCard = null;
+  var shownAt = 0;
+
+  function command(name, values) {
+    var parts = [];
+    var key;
+    values = values || {};
+    values.nonce = String(new Date().getTime()) + String(Math.random());
+    for (key in values) {
+      if (Object.prototype.hasOwnProperty.call(values, key)) {
+        parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(values[key])));
+      }
+    }
+    window.location.href = 'kanki://' + name + '?' + parts.join('&');
+  }
+
+  function audioPing(path, values) {
+    var query = [];
+    var key;
+    var image = new Image();
+    values = values || {};
+    values.nonce = String(new Date().getTime()) + String(Math.random());
+    for (key in values) {
+      if (Object.prototype.hasOwnProperty.call(values, key)) {
+        query.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(values[key])));
+      }
+    }
+    image.style.display = 'none';
+    image.src = 'http://127.0.0.1:17392/' + path + '?' + query.join('&');
+    (document.body || document.documentElement).appendChild(image);
+    window.setTimeout(function () {
+      if (image.parentNode) image.parentNode.removeChild(image);
+    }, 1500);
+  }
+
+  window.kankiBridge = {
+    playAudio: function (source) {
+      audioPing('play', {src: source || ''});
+    },
+    playTts: function (text, lang, voices, speed) {
+      audioPing('tts', {
+        text: text || '',
+        lang: lang || '',
+        voices: voices && voices.length ? voices.join(',') : '',
+        speed: typeof speed === 'number' ? speed : 1.0
+      });
+    },
+    stopAudio: function () {
+      audioPing('stop', {});
+    },
+    renderComplete: function () {},
+    renderFailed: function (message) {
+      command('ui/render-failed', {message: message || 'unknown render failure'});
+    }
+  };
 
   function clearNode(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
@@ -67,22 +122,22 @@
   function replaceAvMarkers(node, packet) {
     if (!node) return;
     if (node.nodeType === 3) {
-      var text = node.nodeValue || '';
-      var re = /\[anki:play:[qa]:(\d+)\]/g;
+      var value = node.nodeValue || '';
+      var expression = /\[anki:play:[qa]:(\d+)\]/g;
       var match;
       var last = 0;
       var fragment = null;
-      while ((match = re.exec(text)) !== null) {
+      while ((match = expression.exec(value)) !== null) {
         if (!fragment) fragment = document.createDocumentFragment();
         if (match.index > last) {
-          fragment.appendChild(document.createTextNode(text.substring(last, match.index)));
+          fragment.appendChild(document.createTextNode(value.substring(last, match.index)));
         }
         fragment.appendChild(makeReplayButton(parseInt(match[1], 10), packet));
-        last = re.lastIndex;
+        last = expression.lastIndex;
       }
       if (fragment) {
-        if (last < text.length) {
-          fragment.appendChild(document.createTextNode(text.substring(last)));
+        if (last < value.length) {
+          fragment.appendChild(document.createTextNode(value.substring(last)));
         }
         node.parentNode.replaceChild(fragment, node);
       }
@@ -104,11 +159,19 @@
     if (packet.audio && packet.audio.length) playTag(packet.audio[0]);
   }
 
-  function showError(err) {
+  function showError(error) {
     clearNode(qa);
     var box = document.createElement('div');
     box.className = 'kanki-render-error';
-    box.appendChild(document.createTextNode('Card rendering failed: ' + String(err)));
+    box.appendChild(document.createTextNode('Card rendering failed: ' + String(error)));
+    qa.appendChild(box);
+  }
+
+  function showMessage(message) {
+    clearNode(qa);
+    var box = document.createElement('div');
+    box.className = 'kanki-review-message';
+    box.appendChild(document.createTextNode(message));
     qa.appendChild(box);
   }
 
@@ -129,11 +192,66 @@
       if (window.kankiBridge && window.kankiBridge.renderComplete) {
         window.kankiBridge.renderComplete(packet.side, qa.scrollWidth, qa.scrollHeight);
       }
-    } catch (err) {
-      showError(err);
+    } catch (error) {
+      showError(error);
       if (window.kankiBridge && window.kankiBridge.renderFailed) {
-        window.kankiBridge.renderFailed(String(err));
+        window.kankiBridge.renderFailed(String(error));
       }
+    }
+  }
+
+  function packet(card, side) {
+    return {
+      side: side,
+      body_class: 'card card' + (Number(card.template_ordinal || 0) + 1) + ' isLin kindle',
+      html: side === 'answer' ? card.answer_html : card.question_html,
+      css: card.css || '',
+      audio: side === 'answer' ? (card.answer_audio || []) : (card.question_audio || [])
+    };
+  }
+
+  function showQuestion(card) {
+    currentCard = card;
+    shownAt = new Date().getTime();
+    showCard(packet(card, 'question'));
+    command('ui/state', {mode: 'question'});
+  }
+
+  function showAnswer() {
+    if (!currentCard) return;
+    showCard(packet(currentCard, 'answer'));
+    command('ui/state', {
+      mode: 'answer',
+      again: currentCard.intervals && currentCard.intervals[0] || '',
+      hard: currentCard.intervals && currentCard.intervals[1] || '',
+      good: currentCard.intervals && currentCard.intervals[2] || '',
+      easy: currentCard.intervals && currentCard.intervals[3] || '',
+      ms: Math.max(0, new Date().getTime() - shownAt)
+    });
+  }
+
+  function nativeResponse(name, jsonText) {
+    var envelope;
+    try {
+      envelope = JSON.parse(jsonText);
+      if (!envelope.ok) {
+        showError(envelope.error || 'Backend operation failed');
+        command('ui/state', {mode: 'none'});
+        return;
+      }
+      if (name === 'next_card') {
+        if (!envelope.data || envelope.data.finished) {
+          currentCard = null;
+          window.kankiBridge.stopAudio();
+          showMessage('Review complete');
+          command('ui/state', {mode: 'finished'});
+        } else {
+          showQuestion(envelope.data);
+        }
+      }
+    } catch (error) {
+      showError(error);
+      command('ui/state', {mode: 'none'});
     }
   }
 
@@ -141,4 +259,13 @@
     showCard: showCard,
     protocolVersion: 1
   };
+  window.kankiDevice = {
+    nativeResponse: nativeResponse,
+    showAnswer: showAnswer,
+    currentElapsedMilliseconds: function () {
+      return Math.max(0, new Date().getTime() - shownAt);
+    }
+  };
+
+  command('ready', {view: 'reviewer'});
 }());
