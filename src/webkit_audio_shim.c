@@ -12,20 +12,57 @@ static const char *k_strstr(const char *h,const char *n){size_t nl=k_strlen(n); 
 
 typedef void (*load_html_fn)(void *web_view, const char *content, const char *base_uri);
 
+/*
+ * Ranki currently renders template HTML directly into Kindle's old WebKit.
+ * Two audio forms need compatibility handling:
+ *
+ *   1) modern card JS that calls new Audio(...).play()
+ *   2) ordinary Anki [sound:file.mp3] tags, which Ranki currently leaves as
+ *      literal text instead of running Anki's AV-tag extraction step.
+ *
+ * This shim supports both without modifying the upstream Ranki binary.
+ */
 static const char kanki_audio_shim[] =
 "<script>(function(){"
-"if(typeof window.Audio!=='undefined')return;"
-"function P(){this.then=function(){return this;};this.catch=function(){return this;};}"
 "function ping(path,src){try{var i=new Image();i.style.display='none';"
 "i.src='http://127.0.0.1:17392/'+path+'?src='+encodeURIComponent(src||'')+'&t='+(new Date().getTime());"
 "(document.body||document.documentElement).appendChild(i);"
 "setTimeout(function(){try{i.parentNode&&i.parentNode.removeChild(i);}catch(e){}},1500);}catch(e){}}"
+"window.__kankiAudioPing=ping;"
+"if(typeof window.Audio==='undefined'){"
+"function P(){this.then=function(){return this;};this.catch=function(){return this;};}"
 "function A(src){this.src=src||'';this.currentSrc=this.src;this.currentTime=0;this.duration=0;"
 "this.paused=true;this.ended=false;this.autoplay=false;this.loop=false;this.muted=false;this.volume=1;this.preload='auto';}"
 "A.prototype.play=function(){this.paused=false;this.ended=false;ping('play',this.src);return new P();};"
 "A.prototype.pause=function(){this.paused=true;ping('stop','');};"
 "A.prototype.load=function(){};A.prototype.addEventListener=function(){};A.prototype.removeEventListener=function(){};"
 "window.Audio=A;"
+"}"
+"function replaceSoundText(node,sounds){"
+"if(!node||!node.nodeValue)return;"
+"var text=node.nodeValue,re=/\\[sound:([^\\]]+)\\]/g,m,last=0,frag=null;"
+"while((m=re.exec(text))!==null){"
+"if(!frag)frag=document.createDocumentFragment();"
+"if(m.index>last)frag.appendChild(document.createTextNode(text.substring(last,m.index)));"
+"var src=m[1],a=document.createElement('a');sounds.push(src);"
+"a.href='#';a.className='kanki-audio-link';a.setAttribute('data-src',src);"
+"a.style.textDecoration='none';a.style.padding='0 0.3em';a.appendChild(document.createTextNode('\\u25B6'));"
+"a.onclick=function(){ping('play',this.getAttribute('data-src'));return false;};frag.appendChild(a);"
+"last=re.lastIndex;"
+"}"
+"if(frag){if(last<text.length)frag.appendChild(document.createTextNode(text.substring(last)));node.parentNode.replaceChild(frag,node);}"
+"}"
+"function walk(node,sounds){"
+"if(!node)return;"
+"if(node.nodeType===3){replaceSoundText(node,sounds);return;}"
+"if(node.nodeType!==1)return;"
+"var tag=(node.tagName||'').toLowerCase();if(tag==='script'||tag==='style'||tag==='textarea')return;"
+"var c=node.firstChild;while(c){var n=c.nextSibling;walk(c,sounds);c=n;}"
+"}"
+"function scan(){try{if(!document.body)return;var sounds=[];walk(document.body,sounds);"
+"if(sounds.length){setTimeout(function(){ping('play',sounds[0]);},120);}}catch(e){}}"
+"if(document.addEventListener)document.addEventListener('DOMContentLoaded',scan,false);"
+"else if(window.attachEvent)window.attachEvent('onload',scan);else window.onload=scan;"
 "})();</script>";
 
 static char *inject_shim(const char *content)
@@ -35,7 +72,7 @@ static char *inject_shim(const char *content)
     char *out;
 
     if (!content) return NULL;
-    if (k_strstr(content, "127.0.0.1:17392/") != NULL) return NULL;
+    if (k_strstr(content, "__kankiAudioPing") != NULL) return NULL;
 
     content_len = k_strlen(content);
     shim_len = sizeof(kanki_audio_shim) - 1;
