@@ -13,6 +13,8 @@ DISABLE_ANKI26="$RANKI_DIR/disable-anki26"
 DISABLE_RENDER_DEBUG="$RANKI_DIR/disable-render-debug"
 RENDER_DEBUG_DIR="$RANKI_DIR/render-debug"
 RENDER_DEBUG_PREVIOUS="$RANKI_DIR/render-debug.previous"
+SYSTEM_FINGERPRINT_SCRIPT="$RANKI_DIR/kindle-system-fingerprint.sh"
+SYSTEM_FINGERPRINT="$RANKI_DIR/system-fingerprint.txt"
 
 acquire_lock() {
     if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -71,6 +73,18 @@ if [ ! -e "$DISABLE_RENDER_DEBUG" ]; then
     mkdir -p "$RENDER_DEBUG_DIR" 2>/dev/null || true
 fi
 
+# Fingerprint the actual Kindle userspace used for this run. The fingerprint
+# contains only system/runtime information, and is copied next to the HTML
+# captures so it can be matched against an extracted Amazon firmware rootfs.
+SYSTEM_FINGERPRINT_STATUS="missing"
+if [ -r "$SYSTEM_FINGERPRINT_SCRIPT" ]; then
+    sh "$SYSTEM_FINGERPRINT_SCRIPT" "$SYSTEM_FINGERPRINT" >/dev/null 2>&1 || true
+    if [ -r "$SYSTEM_FINGERPRINT" ]; then
+        SYSTEM_FINGERPRINT_STATUS="captured"
+        [ "$RENDER_DEBUG" = "enabled" ] && cp "$SYSTEM_FINGERPRINT" "$RENDER_DEBUG_DIR/00-system-fingerprint.txt" 2>/dev/null || true
+    fi
+fi
+
 # MTP clients may drop Unix executable bits on files copied to /mnt/us. The
 # native player can still be launched through the system ELF loader as long as
 # it is readable, but chmod is harmless and helps on filesystems that preserve it.
@@ -84,6 +98,8 @@ chmod 755 "$AUDIO_SERVER" "$BIN" 2>/dev/null || true
     echo "media=$KANKI_MEDIA_DIR"
     echo "backend_request=$BACKEND_REQUEST"
     echo "render_debug=$RENDER_DEBUG"
+    echo "system_fingerprint=$SYSTEM_FINGERPRINT_STATUS"
+    [ "$SYSTEM_FINGERPRINT_STATUS" = "captured" ] && echo "system_fingerprint_file=$SYSTEM_FINGERPRINT"
     if [ "$RENDER_DEBUG" = "enabled" ]; then
         echo "render_debug_dir=$RENDER_DEBUG_DIR"
         echo "render_debug_previous=$RENDER_DEBUG_PREVIOUS"
