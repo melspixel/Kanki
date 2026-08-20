@@ -9,7 +9,7 @@ on:
       - 'tools/**'
       - '.github/workflows/build.yml'
   pull_request:
-    branches: [main]
+    branches: [main, anki-26.08-backend]
 
 jobs:
   build:
