@@ -25,21 +25,83 @@
     }
   }
 
-  function installAudioLinks(packet) {
-    var links = qa.querySelectorAll ? qa.querySelectorAll('[data-kanki-audio]') : [];
-    var i;
-    for (i = 0; i < links.length; i += 1) {
-      links[i].onclick = function () {
-        var source = this.getAttribute('data-kanki-audio') || '';
-        if (window.kankiBridge && window.kankiBridge.playAudio) {
-          window.kankiBridge.playAudio(source);
+  function replaySvg() {
+    return '<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '<circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="2"></circle>' +
+      '<path d="M11 16v8h6l8 7V9l-8 7h-6zm17.2-1.9v11.8c2.4-1.1 4-3.3 4-5.9s-1.6-4.8-4-5.9z" fill="currentColor"></path>' +
+      '</svg>';
+  }
+
+  function playTag(tag) {
+    if (!tag || !window.kankiBridge) return;
+    if (tag.kind === 'sound' && window.kankiBridge.playAudio) {
+      window.kankiBridge.playAudio(tag.source || '');
+    } else if (tag.kind === 'tts' && window.kankiBridge.playTts) {
+      window.kankiBridge.playTts(
+        tag.text || '',
+        tag.lang || '',
+        tag.voices || [],
+        typeof tag.speed === 'number' ? tag.speed : 1.0
+      );
+    }
+  }
+
+  function makeReplayButton(index, packet) {
+    var link = document.createElement('a');
+    link.href = '#';
+    link.className = 'replay-button';
+    link.setAttribute('role', 'button');
+    link.setAttribute('aria-label', 'Replay audio');
+    link.setAttribute('data-kanki-av-index', String(index));
+    link.innerHTML = replaySvg();
+    link.onclick = function () {
+      var value = parseInt(this.getAttribute('data-kanki-av-index'), 10);
+      if (!isNaN(value) && packet.audio && value < packet.audio.length) {
+        playTag(packet.audio[value]);
+      }
+      return false;
+    };
+    return link;
+  }
+
+  function replaceAvMarkers(node, packet) {
+    if (!node) return;
+    if (node.nodeType === 3) {
+      var text = node.nodeValue || '';
+      var re = /\[anki:play:[qa]:(\d+)\]/g;
+      var match;
+      var last = 0;
+      var fragment = null;
+      while ((match = re.exec(text)) !== null) {
+        if (!fragment) fragment = document.createDocumentFragment();
+        if (match.index > last) {
+          fragment.appendChild(document.createTextNode(text.substring(last, match.index)));
         }
-        return false;
-      };
+        fragment.appendChild(makeReplayButton(parseInt(match[1], 10), packet));
+        last = re.lastIndex;
+      }
+      if (fragment) {
+        if (last < text.length) {
+          fragment.appendChild(document.createTextNode(text.substring(last)));
+        }
+        node.parentNode.replaceChild(fragment, node);
+      }
+      return;
     }
-    if (packet.audio && packet.audio.length && window.kankiBridge && window.kankiBridge.playAudio) {
-      window.kankiBridge.playAudio(packet.audio[0].source);
+    if (node.nodeType !== 1) return;
+    var tagName = String(node.tagName || '').toLowerCase();
+    if (tagName === 'script' || tagName === 'style' || tagName === 'textarea') return;
+    var child = node.firstChild;
+    while (child) {
+      var next = child.nextSibling;
+      replaceAvMarkers(child, packet);
+      child = next;
     }
+  }
+
+  function installSemanticAudio(packet) {
+    replaceAvMarkers(qa, packet);
+    if (packet.audio && packet.audio.length) playTag(packet.audio[0]);
   }
 
   function showError(err) {
@@ -56,7 +118,7 @@
       deckStyle.textContent = packet.css || '';
       qa.innerHTML = packet.html || '';
       executeScripts(qa);
-      installAudioLinks(packet);
+      installSemanticAudio(packet);
       if (packet.side === 'answer') {
         var answer = document.getElementById('answer');
         if (answer && answer.scrollIntoView) answer.scrollIntoView(true);
