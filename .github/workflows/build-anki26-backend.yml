@@ -7,6 +7,11 @@ on:
     paths:
       - 'vendor/anki26/**'
       - '.github/workflows/build-anki26-backend.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'vendor/anki26/**'
+      - '.github/workflows/build-anki26-backend.yml'
 
 jobs:
   backend-armhf:
