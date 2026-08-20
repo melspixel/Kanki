@@ -1,0 +1,7 @@
+/target/
+/out/
+*.log
+*.zip
+.DS_Store
+.idea/
+.vscode/
