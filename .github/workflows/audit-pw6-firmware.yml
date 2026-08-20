@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential cmake git wget file binutils \
+            build-essential cmake git wget file binutils binutils-arm-linux-gnueabihf \
             zlib1g-dev libarchive-dev nettle-dev libssl-dev \
             squashfs-tools e2fsprogs
 
@@ -64,22 +64,71 @@ jobs:
           sudo mount -o loop,ro /tmp/pw6-rootfs.img /tmp/pw6-root
           mount | grep '/tmp/pw6-root'
 
+      - name: Trace Lab126 WebKit layout APIs from Mesquite
+        run: |
+          MESQUITE=/tmp/pw6-root/usr/bin/mesquite
+          WEBKIT=$(find /tmp/pw6-root/usr/lib -maxdepth 1 -type f -name 'libwebkitgtk-1.0.so.*' | sort | tail -1)
+          test -f "$MESQUITE"
+          test -n "$WEBKIT"
+
+          arm-linux-gnueabihf-readelf -Ws "$MESQUITE" \
+            | grep -E 'webkit_web_view_(set_useW3CStd_cssPixelsPerInch|set_fixed_layout|resize_view_to_content|render_partial|set_full_content_zoom|set_viewport_width|update_viewport)' \
+            | tee firmware-audit/mesquite-webkit-imports.txt || true
+          arm-linux-gnueabihf-readelf -Ws "$WEBKIT" \
+            | grep -E 'webkit_web_view_(set_useW3CStd_cssPixelsPerInch|set_fixed_layout|resize_view_to_content|render_partial|set_full_content_zoom|set_viewport_width|update_viewport)' \
+            | tee firmware-audit/webkit-kindle-exports.txt || true
+
+          arm-linux-gnueabihf-objdump -dr --no-show-raw-insn "$MESQUITE" > /tmp/mesquite.dis
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          lines = Path('/tmp/mesquite.dis').read_text(errors='replace').splitlines()
+          targets = [
+              'webkit_web_view_set_useW3CStd_cssPixelsPerInch',
+              'webkit_web_view_set_fixed_layout',
+              'webkit_web_view_resize_view_to_content',
+              'webkit_web_view_render_partial',
+              'webkit_web_view_set_full_content_zoom',
+              'webkit_web_view_set_viewport_width',
+              'webkit_web_view_update_viewport',
+          ]
+          out = ['KANKI_MESQUITE_WEBKIT_CALLS_V1']
+          for target in targets:
+              hits = [i for i, line in enumerate(lines) if target in line]
+              out.append('\n===== %s hits=%d =====' % (target, len(hits)))
+              for hit in hits[:30]:
+                  lo = max(0, hit - 18)
+                  hi = min(len(lines), hit + 8)
+                  out.append('\n--- call-context line %d ---' % (hit + 1))
+                  out.extend(lines[lo:hi])
+          Path('firmware-audit/mesquite-webkit-call-sites.txt').write_text('\n'.join(out) + '\n')
+          PY
+          sed -n '1,600p' firmware-audit/mesquite-webkit-call-sites.txt
+
       - name: Audit actual Kindle userspace
+        continue-on-error: true
         run: |
           bash tools/audit_kindlerootfs.sh /tmp/pw6-root firmware-audit
           cp firmware-package.sha256 firmware-package-info.txt firmware-audit/
           echo '--- audit meta ---'
-          cat firmware-audit/audit-meta.txt
+          cat firmware-audit/audit-meta.txt 2>/dev/null || true
           echo '--- version hints ---'
-          sed -n '1,120p' firmware-audit/rootfs-runtime-audit.txt
+          sed -n '1,120p' firmware-audit/rootfs-runtime-audit.txt 2>/dev/null || true
+
+      - name: Ensure package metadata is retained
+        if: always()
+        run: |
+          cp firmware-package.sha256 firmware-package-info.txt firmware-audit/ 2>/dev/null || true
 
       - name: Unmount rootfs
         if: always()
         run: sudo umount /tmp/pw6-root 2>/dev/null || true
 
       # Do not publish Amazon firmware or rootfs bytes. Only derived text
-      # manifests/hashes are retained as CI artifacts.
+      # manifests/hashes/disassembly contexts are retained as CI artifacts.
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: pw6-firmware-system-oracle
           path: firmware-audit/
