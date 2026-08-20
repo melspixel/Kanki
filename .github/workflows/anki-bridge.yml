@@ -37,16 +37,21 @@ jobs:
           mkdir -p third_party/anki/out/rslib/proto
           mkdir -p third_party/anki/out/extracted/protoc/bin
           ln -sf /usr/bin/protoc third_party/anki/out/extracted/protoc/bin/protoc
-      - name: Embed semantic Kanki bridge in pinned Anki
+      - name: Embed semantic Kanki bridges in pinned Anki
         run: |
           cp bridge/anki_bridge.rs third_party/anki/rslib/src/kanki_bridge.rs
+          cp bridge/sync_bridge.rs third_party/anki/rslib/src/kanki_sync_bridge.rs
           python3 - <<'PY'
           from pathlib import Path
           lib = Path('third_party/anki/rslib/src/lib.rs')
           text = lib.read_text()
           needle = 'pub mod version;'
           assert needle in text
-          lib.write_text(text.replace(needle, needle + '\npub mod kanki_bridge;', 1))
+          lib.write_text(text.replace(
+              needle,
+              needle + '\npub mod kanki_bridge;\npub mod kanki_sync_bridge;',
+              1,
+          ))
 
           cargo = Path('third_party/anki/rslib/Cargo.toml')
           text = cargo.read_text()
@@ -70,10 +75,12 @@ jobs:
           grep -q 'open={"ok":true' bridge-smoke.txt
           grep -q 'decks={"ok":true' bridge-smoke.txt
           grep -q 'close={"ok":true' bridge-smoke.txt
+          grep -q 'sync_open={"ok":true' bridge-smoke.txt
+          grep -q 'sync_close={"ok":true' bridge-smoke.txt
       - name: Audit ABI and semantic exports
         run: |
           LIB=third_party/anki/target/release/libanki.so
-          nm -D "$LIB" | grep -E ' kanki_(build_info_json|core_new|open_collection_json|deck_tree_json|next_card_json|answer_json|bury_current_json)$' | tee bridge-exports.txt
+          nm -D "$LIB" | grep -E ' kanki_(build_info_json|core_new|open_collection_json|deck_tree_json|next_card_json|answer_json|bury_current_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee bridge-exports.txt
           readelf -d "$LIB" > bridge-dynamic.txt
           sha256sum "$LIB" > bridge-library.sha256
       - uses: actions/upload-artifact@v4
