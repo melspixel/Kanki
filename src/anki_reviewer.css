@@ -10,6 +10,22 @@ body {
     overflow-wrap: break-word;
     word-wrap: break-word;
 }
+
+/* If a template provides its own inner .card container, do not apply the same
+ * deck-level card box to the reviewer body a second time. The adaptive script
+ * adds this class only after detecting a genuine nested card element. */
+body.kanki-has-inner-card {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
 hr {
     margin: 1em 0;
     border: none;
