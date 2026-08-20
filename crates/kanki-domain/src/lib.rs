@@ -96,14 +96,8 @@ pub enum SessionError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionEffect {
-    Render {
-        card: Box<ReviewCard>,
-        side: Side,
-    },
-    CommitRating {
-        card_id: CardId,
-        rating: Rating,
-    },
+    Render { card: Box<ReviewCard>, side: Side },
+    CommitRating { card_id: CardId, rating: Rating },
     None,
 }
 
