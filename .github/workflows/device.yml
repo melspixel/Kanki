@@ -1,0 +1,71 @@
+name: Kindle device shell
+
+on:
+  push:
+    branches: [rewrite-v1]
+    paths:
+      - 'device/**'
+      - 'assets/device/**'
+      - 'assets/reviewer/**'
+      - 'bridge/kanki_bridge.h'
+      - 'scripts/kanki-launch.sh'
+      - '.github/workflows/device.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'device/**'
+      - 'assets/device/**'
+      - 'assets/reviewer/**'
+      - 'bridge/kanki_bridge.h'
+      - 'scripts/kanki-launch.sh'
+      - '.github/workflows/device.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Strict host syntax and ES5 parsing
+        run: |
+          gcc -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -fsyntax-only device/kanki_device.c -Ibridge
+          node --check assets/device/decks.js
+          node --check assets/reviewer/reviewer.js
+          sh -n scripts/kanki-launch.sh
+      - name: Architectural prohibitions
+        run: |
+          ! grep -R -E 'LD_PRELOAD|420px|LOGICAL_VIEWPORT_PX|service[_ -]?index|method[_ -]?index' device assets/device scripts/kanki-launch.sh
+          ! grep -R -E 'COCA-English|dictionary-logo-link|\.pos-badge|\.word[[:space:]]*\{' assets/reviewer device
+          ! grep -R -E '^[[:space:]]*svg[[:space:]]*\{' assets/reviewer/*.css
+
+  armhf-shell:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install KindleHF toolchain
+        run: |
+          wget -q https://github.com/KindleModding/koxtoolchain/releases/latest/download/kindlehf.tar.gz -O /tmp/kindlehf.tar.gz
+          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
+          echo "$HOME/x-tools/arm-kindlehf-linux-gnueabihf/bin" >> "$GITHUB_PATH"
+      - name: Build dynamic Kindle UI shell
+        run: |
+          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -Wall -Wextra -Werror -Ibridge \
+            -DKANKI_BUILD_COMMIT=\"$GITHUB_SHA\" \
+            -DKANKI_ANKI_COMMIT=\"e5a6fbe27fdd4d57d5f712191b4a753032e57853\" \
+            device/kanki_device.c -ldl -o kanki-device
+          file kanki-device
+          arm-kindlehf-linux-gnueabihf-readelf -h kanki-device | tee device-elf.txt
+          arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-device \
+            | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee device-glibc.txt || true
+          arm-kindlehf-linux-gnueabihf-nm -D kanki-device | grep -E ' U (dlopen|dlsym|dlclose)' | tee device-dynamic-imports.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kindle-device-shell
+          path: |
+            kanki-device
+            device-elf.txt
+            device-glibc.txt
+            device-dynamic-imports.txt
