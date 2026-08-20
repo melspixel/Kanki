@@ -6,11 +6,13 @@ on:
     branches: [anki-26.08-backend]
     paths:
       - 'vendor/anki26/**'
+      - 'src/backend_redirect_shim.c'
       - '.github/workflows/build-anki26-backend.yml'
   pull_request:
     branches: [main]
     paths:
       - 'vendor/anki26/**'
+      - 'src/backend_redirect_shim.c'
       - '.github/workflows/build-anki26-backend.yml'
 
 jobs:
@@ -42,10 +44,13 @@ jobs:
           cargo --version
           "$PROTOC" --version
 
-      - name: Fetch Anki 26.08
+      - name: Fetch Anki 26.08 and required translations
         run: |
           git clone --depth 1 --branch "$ANKI_REF" https://github.com/ankitects/anki.git /tmp/anki
+          git -C /tmp/anki submodule update --init --depth 1 ftl/core-repo ftl/qt-repo
           git -C /tmp/anki rev-parse HEAD | tee anki26.commit
+          test -d /tmp/anki/ftl/core-repo/core
+          test -d /tmp/anki/ftl/qt-repo/desktop
           mkdir -p /tmp/anki/out/rslib/proto
 
       - name: Add Kanki C FFI and shared-library crate type
@@ -88,12 +93,21 @@ jobs:
           tail -1 backend.glibc.txt >> backend.report.txt
           cat backend.exports.txt >> backend.report.txt
           find /tmp/anki/target/$TARGET/release/build -path '*/out/backend.rs' -print -exec cp {} generated-backend.rs \; -quit
+          test -f generated-backend.rs
+
+      - name: Build backend redirect shim
+        run: |
+          clang --target=arm-linux-gnueabihf -fuse-ld=lld -O2 -fPIC -fno-builtin \
+            -shared -nostdlib src/backend_redirect_shim.c -o libkanki-backend-redirect-armhf.so
+          file libkanki-backend-redirect-armhf.so
+          readelf -d libkanki-backend-redirect-armhf.so | grep NEEDED && exit 1 || true
 
       - uses: actions/upload-artifact@v4
         with:
           name: anki-26.08-backend-armhf
           path: |
             libanki-26.08-armhf.so
+            libkanki-backend-redirect-armhf.so
             anki26.commit
             backend.dynamic.txt
             backend.exports.txt
