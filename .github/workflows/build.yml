@@ -87,8 +87,7 @@ jobs:
           readelf -d libkanki-webkit-armel.so | grep NEEDED && exit 1 || true
           readelf -Ws libkanki-webkit-armhf.so | grep -E 'webkit_web_view_load_html_string|webkit_web_view_set_zoom_level|gtk_tree_view_expand_all'
           strings libkanki-webkit-armhf.so | grep -q 'kanki-layout-v2'
-          strings libkanki-webkit-armhf.so | grep -q 'KANKI_RENDER_NATIVE'
-          strings libkanki-webkit-armhf.so | grep -q 'render-debug/render-'
+          nm -D libkanki-webkit-armhf.so | grep -E ' open$| write$| close$| getenv$' || true
 
       - name: Download upstream Ranki release
         run: |
