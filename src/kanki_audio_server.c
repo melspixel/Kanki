@@ -1,6 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
@@ -27,7 +29,10 @@ static pid_t player_pid = -1;
 static void stop_player(void)
 {
     if (player_pid > 0) {
-        kill(player_pid, SIGTERM);
+        /* The decoder spawns /bin/sh -> gst-launch. Put the playback tree in
+         * its own process group so stop/new-card cannot leave an orphaned
+         * mixersink pipeline playing behind the next pronunciation. */
+        kill(-player_pid, SIGTERM);
         waitpid(player_pid, NULL, 0);
         player_pid = -1;
     }
@@ -37,7 +42,7 @@ static void on_signal(int sig)
 {
     (void)sig;
     running = 0;
-    if (player_pid > 0) kill(player_pid, SIGTERM);
+    if (player_pid > 0) kill(-player_pid, SIGTERM);
 }
 
 static int hexval(char c)
@@ -142,10 +147,15 @@ static void start_player(const char *path)
     stop_player();
     pid = fork();
     if (pid == 0) {
+        setpgid(0, 0);
         signal(SIGTERM, SIG_DFL);
         _exit(decode_to_gst(path));
     }
-    if (pid > 0) player_pid = pid;
+    if (pid > 0) {
+        /* Close the fork/setpgid race from the parent side as well. */
+        setpgid(pid, pid);
+        player_pid = pid;
+    }
 }
 
 static void reap_player(void)
