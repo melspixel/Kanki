@@ -20,8 +20,20 @@ def c_string(text: str) -> str:
 if len(sys.argv) != 3:
     raise SystemExit('usage: embed_assets.py CSS JS')
 
-css = Path(sys.argv[1]).read_text(encoding='utf-8')
-js = Path(sys.argv[2]).read_text(encoding='utf-8')
+css_path = Path(sys.argv[1])
+js_path = Path(sys.argv[2])
+css = css_path.read_text(encoding='utf-8')
+
+# Keep the mature audio/Anki API compatibility layer in anki_compat.js, and
+# prepend the independently testable adaptive layout preprocessor when present.
+# It must run first: it removes obsolete deck-level Kanki patches and rewrites
+# high-DPI media queries before the legacy WebKit CSS-variable pass executes.
+js_parts = []
+adaptive_path = js_path.with_name('anki_adaptive_v2.js')
+if adaptive_path.exists():
+    js_parts.append(adaptive_path.read_text(encoding='utf-8'))
+js_parts.append(js_path.read_text(encoding='utf-8'))
+js = '\n\n'.join(js_parts)
 
 print('#ifndef KANKI_EMBEDDED_ASSETS_H')
 print('#define KANKI_EMBEDDED_ASSETS_H')
