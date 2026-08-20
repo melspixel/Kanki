@@ -41,12 +41,30 @@ pub enum Rating {
     Easy,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AudioTag {
-    pub source: String,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AudioTag {
+    Sound {
+        source: String,
+    },
+    Tts {
+        text: String,
+        lang: String,
+        voices: Vec<String>,
+        speed: f32,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+impl AudioTag {
+    pub fn sound_source(&self) -> Option<&str> {
+        match self {
+            Self::Sound { source } => Some(source),
+            Self::Tts { .. } => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReviewCard {
     pub id: CardId,
     /// Anki template ordinal, zero based. The renderer exposes this as cardN.
@@ -60,7 +78,7 @@ pub struct ReviewCard {
     pub intervals: [String; 4],
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SessionState {
     Empty,
     Question(ReviewCard),
@@ -76,7 +94,7 @@ pub enum SessionError {
     RatingWithoutAnswer,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SessionEffect {
     Render {
         card: Box<ReviewCard>,
@@ -89,7 +107,7 @@ pub enum SessionEffect {
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReviewSession {
     state: SessionState,
 }
@@ -202,5 +220,20 @@ mod tests {
         let mut session = ReviewSession::default();
         assert_eq!(session.load(None), SessionEffect::None);
         assert_eq!(session.state(), &SessionState::Finished);
+    }
+
+    #[test]
+    fn only_sound_tags_expose_a_media_source() {
+        let sound = AudioTag::Sound {
+            source: "word.mp3".into(),
+        };
+        let tts = AudioTag::Tts {
+            text: "hello".into(),
+            lang: "en_US".into(),
+            voices: vec![],
+            speed: 1.0,
+        };
+        assert_eq!(sound.sound_source(), Some("word.mp3"));
+        assert_eq!(tts.sound_source(), None);
     }
 }
