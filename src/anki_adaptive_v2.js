@@ -68,7 +68,7 @@
         text = text.replace(/(\(\s*max-(?:device-)?width\s*:\s*)([0-9]+(?:\.[0-9]+)?)(px\s*\))/gi,
             function (all, before, number, after) {
                 var n = parseFloat(number);
-                if (n >= LOGICAL_VIEWPORT_PX) {
+                if (n >= LOGICAL_VIEWPORT_PX && n < 9000) {
                     stats.mediaQueriesRewritten++;
                     return before + '9999' + after;
                 }
@@ -78,7 +78,7 @@
         text = text.replace(/(\(\s*min-(?:device-)?width\s*:\s*)([0-9]+(?:\.[0-9]+)?)(px\s*\))/gi,
             function (all, before, number, after) {
                 var n = parseFloat(number);
-                if (n > LOGICAL_VIEWPORT_PX) {
+                if (n > LOGICAL_VIEWPORT_PX && n < 9000) {
                     stats.mediaQueriesRewritten++;
                     return before + '9999' + after;
                 }
@@ -127,11 +127,16 @@
          * use an inner article/div.card. On a narrow e-ink screen that causes
          * the same padding/max-width/card box to be applied twice. Neutralize
          * only the outer body when an actual inner card container exists.
+         *
+         * Before Ranki's extra wrapper is removed, a genuine nested card means
+         * at least two descendants with .card. Afterwards the body itself owns
+         * .card, so one descendant is sufficient.
          */
         try {
-            if (!document.body || !document.body.querySelector) return;
-            var inner = document.body.querySelector('.card');
-            if (inner && inner !== document.body) {
+            if (!document.body || !document.body.querySelectorAll) return;
+            var cards = document.body.querySelectorAll('.card');
+            var hasInner = hasClass(document.body, 'card') ? cards.length > 0 : cards.length > 1;
+            if (hasInner) {
                 addClass(document.body, 'kanki-has-inner-card');
                 stats.nestedCardShell = 1;
             }
@@ -160,9 +165,10 @@
         /* Catch style blocks embedded in the card template before the base
            compatibility listener resolves variables and lays out the card. */
         preprocessStyles();
+        normalizeNestedCardShell();
 
         /* The base Kanki listener runs later in registration order and unwraps
-           Ranki's extra container. Defer shell detection until that is done. */
+           Ranki's extra container. Re-check once the final reviewer DOM exists. */
         setTimeout(function () {
             preprocessStyles();
             normalizeNestedCardShell();
