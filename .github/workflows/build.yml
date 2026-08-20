@@ -1,0 +1,69 @@
+name: Build Kanki package
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - '.github/workflows/build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARM cross compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabi curl unzip zip
+
+      - name: Fetch pinned miniaudio header
+        run: |
+          curl -fL --retry 3 -o src/miniaudio.h \
+            https://raw.githubusercontent.com/mackron/miniaudio/0.11.21/miniaudio.h
+
+      - name: Build audio helpers
+        run: |
+          arm-linux-gnueabihf-gcc -O2 -static -s -Isrc \
+            src/kanki_audio_server.c -o kanki-audio-armhf -lm -lpthread
+          arm-linux-gnueabi-gcc -O2 -static -s -Isrc \
+            src/kanki_audio_server.c -o kanki-audio-armel -lm -lpthread
+
+      - name: Build WebKit preload shims
+        run: |
+          arm-linux-gnueabihf-gcc -O2 -fPIC -shared -s \
+            src/webkit_audio_shim.c -o libkanki-webkit-armhf.so -ldl
+          arm-linux-gnueabi-gcc -O2 -fPIC -shared -s \
+            src/webkit_audio_shim.c -o libkanki-webkit-armel.so -ldl
+
+      - name: Inspect ARM ABI requirements
+        run: |
+          file kanki-audio-armhf kanki-audio-armel libkanki-webkit-armhf.so libkanki-webkit-armel.so
+          arm-linux-gnueabihf-readelf -V libkanki-webkit-armhf.so || true
+          arm-linux-gnueabi-readelf -V libkanki-webkit-armel.so || true
+
+      - name: Download upstream Ranki release
+        run: |
+          curl -fL --retry 3 -o ranki-upstream.zip \
+            https://github.com/crazy-electron/ranki/releases/latest/download/ranki.zip
+          unzip -q ranki-upstream.zip -d package
+
+      - name: Assemble Kanki
+        run: |
+          cp scripts/ranki.sh package/ranki/ranki.sh
+          cp kanki-audio-armhf package/ranki/kanki-audio-armhf
+          cp kanki-audio-armel package/ranki/kanki-audio-armel
+          cp libkanki-webkit-armhf.so package/ranki/libkanki-webkit-armhf.so
+          cp libkanki-webkit-armel.so package/ranki/libkanki-webkit-armel.so
+          chmod +x package/ranki/ranki.sh package/ranki/kanki-audio-armhf package/ranki/kanki-audio-armel
+          (cd package && zip -qr ../kanki.zip ranki)
+          sha256sum kanki.zip > kanki.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanki
+          path: |
+            kanki.zip
+            kanki.zip.sha256
