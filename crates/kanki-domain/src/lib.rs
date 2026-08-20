@@ -78,8 +78,14 @@ pub enum SessionError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionEffect {
-    Render { card: ReviewCard, side: Side },
-    CommitRating { card_id: CardId, rating: Rating },
+    Render {
+        card: Box<ReviewCard>,
+        side: Side,
+    },
+    CommitRating {
+        card_id: CardId,
+        rating: Rating,
+    },
     None,
 }
 
@@ -106,7 +112,7 @@ impl ReviewSession {
             Some(card) => {
                 self.state = SessionState::Question(card.clone());
                 SessionEffect::Render {
-                    card,
+                    card: Box::new(card),
                     side: Side::Question,
                 }
             }
@@ -124,7 +130,7 @@ impl ReviewSession {
         };
         self.state = SessionState::Answer(card.clone());
         Ok(SessionEffect::Render {
-            card,
+            card: Box::new(card),
             side: Side::Answer,
         })
     }
