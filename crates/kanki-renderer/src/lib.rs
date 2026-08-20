@@ -104,7 +104,9 @@ mod tests {
 
     #[test]
     fn runtime_does_not_resize_all_svg() {
-        assert!(!REVIEWER_CSS.contains("svg {"));
+        assert!(!REVIEWER_CSS
+            .lines()
+            .any(|line| line.trim_start().starts_with("svg {")));
         assert!(REVIEWER_CSS.contains(".replay-button > svg"));
     }
 }
