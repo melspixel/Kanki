@@ -43,7 +43,10 @@ pub fn show_card_script(card: &ReviewCard, side: Side) -> Result<String, Rendere
         css: &card.css,
         audio,
     };
-    Ok(format!("window.kankiReviewer.showCard({});", serde_json::to_string(&packet)?))
+    Ok(format!(
+        "window.kankiReviewer.showCard({});",
+        serde_json::to_string(&packet)?
+    ))
 }
 
 pub fn runtime_sha256() -> String {
@@ -92,7 +95,10 @@ mod tests {
     fn generic_runtime_has_no_known_deck_selectors() {
         let all = format!("{}\n{}", REVIEWER_CSS, REVIEWER_JS).to_ascii_lowercase();
         for forbidden in ["coca-english", "dictionary-logo", ".pos-badge", ".word {"] {
-            assert!(!all.contains(forbidden), "deck-specific selector leaked: {forbidden}");
+            assert!(
+                !all.contains(forbidden),
+                "deck-specific selector leaked: {forbidden}"
+            );
         }
     }
 
