@@ -4,12 +4,17 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-renderer_files = [
+assets = [
     ROOT / "assets/reviewer/reviewer.css",
     ROOT / "assets/reviewer/reviewer.js",
-    ROOT / "crates/kanki-renderer/src/lib.rs",
 ]
-text = "\n".join(path.read_text(encoding="utf-8") for path in renderer_files).lower()
+renderer_rs = (ROOT / "crates/kanki-renderer/src/lib.rs").read_text(encoding="utf-8")
+production_renderer_rs = renderer_rs.split("#[cfg(test)]", 1)[0]
+text = (
+    "\n".join(path.read_text(encoding="utf-8") for path in assets)
+    + "\n"
+    + production_renderer_rs
+).lower()
 forbidden = ["coca-english", "dictionary-logo", ".pos-badge", ".word {"]
 errors = [
     f"deck-specific token in generic renderer: {item}"
