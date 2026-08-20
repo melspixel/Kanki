@@ -112,16 +112,28 @@ static int decode_to_gst(const char *path)
 {
     ma_decoder decoder;
     ma_decoder_config cfg = ma_decoder_config_init(ma_format_s16, 2, 44100);
+    /* Kindle's validated third-party Bluetooth path is GStreamer 0.10 fdsrc
+     * -> Amazon mixersink with stream-type=Music.  The stream type matters:
+     * audiomgrd uses it to claim the music/A2DP route. */
     const char *gst_cmd =
-        "/usr/bin/gst-launch -q filesrc location=/dev/stdin "
+        "GST=/usr/bin/gst-launch-0.10; [ -x \"$GST\" ] || GST=/usr/bin/gst-launch; "
+        "\"$GST\" -v fdsrc fd=0 "
         "! 'audio/x-raw-int,endianness=(int)1234,signed=(boolean)true,width=(int)16,depth=(int)16,rate=(int)44100,channels=(int)2' "
-        "! queue ! mixersink 2>/dev/null";
+        "! queue ! mixersink stream-type=Music";
     FILE *gst;
     ma_int16 pcm[4096 * 2];
+    int status;
 
-    if (ma_decoder_init_file(path, &cfg, &decoder) != MA_SUCCESS) return 2;
+    fprintf(stderr, "kanki-audio: decode/play %s\n", path);
+    fflush(stderr);
+
+    if (ma_decoder_init_file(path, &cfg, &decoder) != MA_SUCCESS) {
+        fprintf(stderr, "kanki-audio: decoder could not open media\n");
+        return 2;
+    }
     gst = popen(gst_cmd, "w");
     if (!gst) {
+        fprintf(stderr, "kanki-audio: popen(gst-launch) failed: %s\n", strerror(errno));
         ma_decoder_uninit(&decoder);
         return 3;
     }
@@ -130,15 +142,23 @@ static int decode_to_gst(const char *path)
         ma_uint64 frames = 0;
         ma_result r = ma_decoder_read_pcm_frames(&decoder, pcm, 4096, &frames);
         if (frames > 0) {
-            if (fwrite(pcm, sizeof(ma_int16) * 2, (size_t)frames, gst) != (size_t)frames) break;
+            if (fwrite(pcm, sizeof(ma_int16) * 2, (size_t)frames, gst) != (size_t)frames) {
+                fprintf(stderr, "kanki-audio: gst pipe closed early\n");
+                break;
+            }
         }
         if (r == MA_AT_END || frames == 0) break;
-        if (r != MA_SUCCESS) break;
+        if (r != MA_SUCCESS) {
+            fprintf(stderr, "kanki-audio: decode error %d\n", (int)r);
+            break;
+        }
     }
 
     ma_decoder_uninit(&decoder);
-    pclose(gst);
-    return 0;
+    status = pclose(gst);
+    fprintf(stderr, "kanki-audio: gst exit status=%d\n", status);
+    fflush(stderr);
+    return status == 0 ? 0 : 4;
 }
 
 static void start_player(const char *path)
@@ -190,6 +210,7 @@ static void handle_client(int fd)
     }
 
     if (strncmp(target, "/stop", 5) == 0) {
+        fprintf(stderr, "kanki-audio: stop\n");
         stop_player();
         http_reply(fd, 200, "stopped");
         return;
@@ -209,7 +230,9 @@ static void handle_client(int fd)
             if (amp) *amp = '\0';
         }
         url_decode(decoded, sizeof(decoded), src_arg);
+        fprintf(stderr, "kanki-audio: request src=%s\n", decoded);
         if (!resolve_media_path(decoded, path, sizeof(path))) {
+            fprintf(stderr, "kanki-audio: media not found under %s\n", getenv("KANKI_MEDIA_DIR") ? getenv("KANKI_MEDIA_DIR") : "(unset)");
             http_reply(fd, 404, "media not found");
             return;
         }
@@ -230,6 +253,9 @@ int main(void)
     signal(SIGTERM, on_signal);
     signal(SIGPIPE, SIG_IGN);
 
+    fprintf(stderr, "kanki-audio: starting, media=%s\n", getenv("KANKI_MEDIA_DIR") ? getenv("KANKI_MEDIA_DIR") : "(unset)");
+    fflush(stderr);
+
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) return 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
@@ -240,6 +266,7 @@ int main(void)
     addr.sin_port = htons(PORT);
 
     if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(server_fd, 8) != 0) {
+        fprintf(stderr, "kanki-audio: bind/listen failed: %s\n", strerror(errno));
         close(server_fd);
         return 2;
     }
