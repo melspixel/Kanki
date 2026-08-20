@@ -31,18 +31,19 @@ jobs:
           arm-linux-gnueabi-gcc -O2 -static -s -Isrc \
             src/kanki_audio_server.c -o kanki-audio-armel -lm -lpthread
 
-      - name: Build WebKit preload shims
+      - name: Build libc-version-independent WebKit preload shims
         run: |
-          arm-linux-gnueabihf-gcc -O2 -fPIC -shared -s \
-            src/webkit_audio_shim.c -o libkanki-webkit-armhf.so -ldl
-          arm-linux-gnueabi-gcc -O2 -fPIC -shared -s \
-            src/webkit_audio_shim.c -o libkanki-webkit-armel.so -ldl
+          clang --target=arm-linux-gnueabihf -fuse-ld=lld -O2 -fPIC -fno-builtin \
+            -shared -nostdlib src/webkit_audio_shim.c -o libkanki-webkit-armhf.so
+          clang --target=arm-linux-gnueabi -fuse-ld=lld -O2 -fPIC -fno-builtin \
+            -shared -nostdlib src/webkit_audio_shim.c -o libkanki-webkit-armel.so
 
       - name: Inspect ARM ABI requirements
         run: |
           file kanki-audio-armhf kanki-audio-armel libkanki-webkit-armhf.so libkanki-webkit-armel.so
-          arm-linux-gnueabihf-readelf -V libkanki-webkit-armhf.so || true
-          arm-linux-gnueabi-readelf -V libkanki-webkit-armel.so || true
+          readelf -d libkanki-webkit-armhf.so | grep NEEDED && exit 1 || true
+          readelf -d libkanki-webkit-armel.so | grep NEEDED && exit 1 || true
+          readelf -Ws libkanki-webkit-armhf.so | grep UND || true
 
       - name: Download upstream Ranki release
         run: |
