@@ -53,16 +53,21 @@ jobs:
           echo "CFLAGS_armv7_unknown_linux_gnueabihf=-march=armv7-a -mtune=cortex-a7 -mfpu=neon -mfloat-abi=hard -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0" >> "$GITHUB_ENV"
           echo "CXXFLAGS_armv7_unknown_linux_gnueabihf=-march=armv7-a -mtune=cortex-a7 -mfpu=neon -mfloat-abi=hard -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0" >> "$GITHUB_ENV"
           echo "RUSTFLAGS=-C target-cpu=cortex-a7 -C link-arg=-Wl,--as-needed" >> "$GITHUB_ENV"
-      - name: Embed semantic bridge
+      - name: Embed semantic bridges
         run: |
           cp bridge/anki_bridge.rs third_party/anki/rslib/src/kanki_bridge.rs
+          cp bridge/sync_bridge.rs third_party/anki/rslib/src/kanki_sync_bridge.rs
           python3 - <<'PY'
           from pathlib import Path
           lib = Path('third_party/anki/rslib/src/lib.rs')
           text = lib.read_text()
           needle = 'pub mod version;'
           assert needle in text
-          lib.write_text(text.replace(needle, needle + '\npub mod kanki_bridge;', 1))
+          lib.write_text(text.replace(
+              needle,
+              needle + '\npub mod kanki_bridge;\npub mod kanki_sync_bridge;',
+              1,
+          ))
           cargo = Path('third_party/anki/rslib/Cargo.toml')
           text = cargo.read_text()
           if '[lib]' not in text:
@@ -82,7 +87,7 @@ jobs:
           file libanki-kanki.so
           readelf -h libanki-kanki.so | tee backend-elf.txt
           readelf -d libanki-kanki.so | tee backend-dynamic.txt
-          nm -D libanki-kanki.so | grep -E ' kanki_(build_info_json|core_new|open_collection_json|deck_tree_json|next_card_json|answer_json|bury_current_json)$' | tee backend-exports.txt
+          nm -D libanki-kanki.so | grep -E ' kanki_(build_info_json|core_new|open_collection_json|deck_tree_json|next_card_json|answer_json|bury_current_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee backend-exports.txt
           readelf --version-info libanki-kanki.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee backend-glibc.txt || true
           LIBC=$(find "$KHF_SYSROOT" -name libc.so.6 | head -1)
           readelf --version-info "$LIBC" | grep -oE 'GLIBC_[0-9.]+' | sort -Vu > sysroot-glibc.txt
