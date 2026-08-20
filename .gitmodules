@@ -7,3 +7,6 @@
 [submodule "third_party/kindle-sdk"]
 	path = third_party/kindle-sdk
 	url = https://github.com/KindleModding/kindle-sdk.git
+[submodule "third_party/audiobook-koplugin"]
+	path = third_party/audiobook-koplugin
+	url = https://github.com/stradichenko/audiobook.koplugin.git
