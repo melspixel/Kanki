@@ -39,9 +39,9 @@ jobs:
         run: |
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -D_XOPEN_SOURCE=700 -O2 -Wall -Wextra -Werror \
             -Idevice/audio device/audio/kanki_audio_server.c -o kanki-audio -lm -latomic
-          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -O2 -Wall -Wextra -Werror \
-            -DKGP_NATIVE_GLIBC third_party/audiobook-koplugin/kindle/gst-play.c \
-            -o kanki-gst-play -ldl
+          arm-kindlehf-linux-gnueabihf-gcc -std=gnu11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L \
+            -O2 -Wall -Wextra -Werror -DKGP_NATIVE_GLIBC \
+            third_party/audiobook-koplugin/kindle/gst-play.c -o kanki-gst-play -ldl
           file kanki-audio kanki-gst-play
           arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-audio \
             | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee audio-glibc.txt || true
