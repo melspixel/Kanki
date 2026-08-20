@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 90
     env:
       ANKI_REF: '26.08'
+      RUSTUP_TOOLCHAIN: '1.92.0'
       TARGET: armv7-unknown-linux-gnueabihf
       CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
       CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
@@ -34,7 +35,8 @@ jobs:
             gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
             clang cmake ninja-build pkg-config protobuf-compiler \
             python3 perl make git curl file
-          rustup target add "$TARGET"
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          rustup target add --toolchain "$RUSTUP_TOOLCHAIN" "$TARGET"
           rustc --version
           cargo --version
 
@@ -82,6 +84,7 @@ jobs:
           printf 'max_glibc=' >> backend.report.txt
           tail -1 backend.glibc.txt >> backend.report.txt
           cat backend.exports.txt >> backend.report.txt
+          find /tmp/anki/target/$TARGET/release/build -path '*/out/backend.rs' -print -exec cp {} generated-backend.rs \; -quit
 
       - uses: actions/upload-artifact@v4
         with:
@@ -93,3 +96,4 @@ jobs:
             backend.exports.txt
             backend.glibc.txt
             backend.report.txt
+            generated-backend.rs
