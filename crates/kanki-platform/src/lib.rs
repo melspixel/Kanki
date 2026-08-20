@@ -123,9 +123,7 @@ impl CssPixelApi {
         Self {
             set_w3c_pixels: unsafe {
                 library
-                    .get::<SetW3cPixelsFn>(
-                        b"webkit_web_view_set_useW3CStd_cssPixelsPerInch\0",
-                    )
+                    .get::<SetW3cPixelsFn>(b"webkit_web_view_set_useW3CStd_cssPixelsPerInch\0")
                     .ok()
                     .map(|symbol| *symbol)
             },
@@ -137,9 +135,7 @@ impl CssPixelApi {
             },
             set_full_content_zoom: unsafe {
                 library
-                    .get::<SetFullContentZoomFn>(
-                        b"webkit_web_view_set_full_content_zoom\0",
-                    )
+                    .get::<SetFullContentZoomFn>(b"webkit_web_view_set_full_content_zoom\0")
                     .ok()
                     .map(|symbol| *symbol)
             },
