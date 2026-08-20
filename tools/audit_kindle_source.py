@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import os
 from pathlib import Path
 import re
 import tarfile
@@ -27,8 +26,11 @@ PATTERNS = [
     "webkit_web_view_set_full_content_zoom",
     "cssPixelsPerInch",
     "useW3CStd",
+    "W3CStd",
     "fixed_layout",
+    "fixedLayout",
     "render_partial",
+    "renderPartial",
 ]
 
 
@@ -43,7 +45,7 @@ def is_text_candidate(name: str, size: int) -> bool:
     return suffix in TEXT_EXTS or "patch" in name.lower() or "webkit" in name.lower()
 
 
-def context_lines(text: str, needle: str, radius: int = 4) -> list[str]:
+def context_lines(text: str, needle: str, radius: int = 5) -> list[str]:
     lines = text.splitlines()
     out: list[str] = []
     for i, line in enumerate(lines):
@@ -63,17 +65,23 @@ def scan_tar(tf: tarfile.TarFile, label: str, report, manifest, depth: int = 0) 
         if interesting_name(m.name):
             manifest.write(f"{m.size}\t{m.name}\n")
 
+    # Once we have entered a renderer-related nested archive (for example
+    # webkit-1.0_1.4.2.tar.gz), scan all plausible source files. The API names
+    # we care about often live in generically-named files such as Settings.cpp.
+    scan_all_text = depth > 0 and interesting_name(label)
+
     for m in members:
         if not m.isfile():
             continue
         lower = m.name.lower()
-        # Scan renderer-related text files directly.
-        if interesting_name(m.name) and is_text_candidate(m.name, m.size):
+        if (scan_all_text or interesting_name(m.name)) and is_text_candidate(m.name, m.size):
             try:
                 f = tf.extractfile(m)
                 if f is None:
                     continue
                 data = f.read()
+                if b"\x00" in data[:4096]:
+                    continue
                 text = data.decode("utf-8", errors="replace")
             except Exception:
                 continue
@@ -118,7 +126,7 @@ def main() -> None:
     with report_path.open("w", encoding="utf-8") as report, manifest_path.open(
         "w", encoding="utf-8"
     ) as manifest:
-        report.write("KANKI_KINDLE_SOURCE_RENDERER_AUDIT_V1\n")
+        report.write("KANKI_KINDLE_SOURCE_RENDERER_AUDIT_V2\n")
         with tarfile.open(args.archive, mode="r:*") as outer:
             scan_tar(outer, args.archive.name, report, manifest)
 
