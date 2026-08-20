@@ -10,6 +10,9 @@ LOCK_DIR="$RANKI_DIR/.kanki.lock"
 BACKEND_SHIM="$RANKI_DIR/libkanki-backend-redirect-$ARCH.so"
 ANKI26_BACKEND="$RANKI_DIR/libanki-26.08-$ARCH.so"
 DISABLE_ANKI26="$RANKI_DIR/disable-anki26"
+DISABLE_RENDER_DEBUG="$RANKI_DIR/disable-render-debug"
+RENDER_DEBUG_DIR="$RANKI_DIR/render-debug"
+RENDER_DEBUG_PREVIOUS="$RANKI_DIR/render-debug.previous"
 
 acquire_lock() {
     if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -41,7 +44,7 @@ else
     export KANKI_GST_LOADER=/lib/ld-linux.so.3
 fi
 
-# Anki 26.08 is currently provided only for hard-float Kindles.  Keeping a
+# Anki 26.08 is currently provided only for hard-float Kindles. Keeping a
 # sentinel file named "disable-anki26" beside this script forces the original
 # embedded RAnki backend, which makes rollback possible without reinstalling.
 BACKEND_REQUEST="embedded-25.09"
@@ -54,7 +57,21 @@ if [ "$ARCH" = armhf ] && [ ! -e "$DISABLE_ANKI26" ] \
     BACKEND_REQUEST="external-26.08"
 fi
 
-# MTP clients may drop Unix executable bits on files copied to /mnt/us.  The
+# Renderer diagnostics are on by default in development builds. They capture
+# the exact HTML before/after Kanki preprocessing for the first 40 WebKit loads,
+# while computed-style/layout snapshots are written to ranki.log. Preserve one
+# previous launch so a failed relaunch does not immediately destroy evidence.
+unset KANKI_RENDER_DEBUG
+RENDER_DEBUG="disabled"
+if [ ! -e "$DISABLE_RENDER_DEBUG" ]; then
+    export KANKI_RENDER_DEBUG=1
+    RENDER_DEBUG="enabled"
+    rm -rf "$RENDER_DEBUG_PREVIOUS" 2>/dev/null || true
+    [ -d "$RENDER_DEBUG_DIR" ] && mv "$RENDER_DEBUG_DIR" "$RENDER_DEBUG_PREVIOUS" 2>/dev/null || true
+    mkdir -p "$RENDER_DEBUG_DIR" 2>/dev/null || true
+fi
+
+# MTP clients may drop Unix executable bits on files copied to /mnt/us. The
 # native player can still be launched through the system ELF loader as long as
 # it is readable, but chmod is harmless and helps on filesystems that preserve it.
 chmod 755 "$KANKI_GST_PLAYER" 2>/dev/null || true
@@ -66,6 +83,13 @@ chmod 755 "$AUDIO_SERVER" "$BIN" 2>/dev/null || true
     echo "arch=$ARCH"
     echo "media=$KANKI_MEDIA_DIR"
     echo "backend_request=$BACKEND_REQUEST"
+    echo "render_debug=$RENDER_DEBUG"
+    if [ "$RENDER_DEBUG" = "enabled" ]; then
+        echo "render_debug_dir=$RENDER_DEBUG_DIR"
+        echo "render_debug_previous=$RENDER_DEBUG_PREVIOUS"
+        echo "render_debug_capture_limit=40"
+        echo "render_debug_note=input.html is exact RAnki HTML; patched.html is exact WebKit input; KANKI_RENDER lines are computed layout"
+    fi
     if [ "$BACKEND_REQUEST" = "external-26.08" ]; then
         echo "backend_file=$ANKI26_BACKEND"
         echo "backend_disable_sentinel=$DISABLE_ANKI26"
