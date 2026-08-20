@@ -1,10 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 #include <arpa/inet.h>
-#include <ctype.h>
 #include <errno.h>
-#include <limits.h>
 #include <netinet/in.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,9 +28,6 @@ static pid_t player_pid = -1;
 static void stop_player(void)
 {
     if (player_pid > 0) {
-        /* The decoder spawns /bin/sh -> gst-launch. Put the playback tree in
-         * its own process group so stop/new-card cannot leave an orphaned
-         * mixersink pipeline playing behind the next pronunciation. */
         kill(-player_pid, SIGTERM);
         waitpid(player_pid, NULL, 0);
         player_pid = -1;
@@ -85,8 +81,11 @@ static int resolve_media_path(const char *src, char *out, size_t out_cap)
     if (!media || !*media || !src || !*src) return 0;
     media_len = strlen(media);
 
-    if (strncmp(p, "file://", 7) == 0) p += 7;
-    if (strncmp(p, "localhost/", 10) == 0) p += 10;
+    if (!strncmp(p, "file://", 7)) p += 7;
+    if (!strncmp(p, "localhost/", 10)) p += 10;
+
+    /* Remote URLs are intentionally not fetched in this helper yet. */
+    if (!strncmp(p, "http://", 7) || !strncmp(p, "https://", 8)) return 0;
 
     if (p[0] == '/') {
         if (strncmp(p, media, media_len) != 0 || (p[media_len] != '/' && p[media_len] != '\0')) return 0;
@@ -108,44 +107,66 @@ static int resolve_media_path(const char *src, char *out, size_t out_cap)
     return access(out, R_OK) == 0;
 }
 
-static int decode_to_gst(const char *path)
+static void put16le(unsigned char *p, uint16_t v)
+{
+    p[0] = (unsigned char)(v & 0xff);
+    p[1] = (unsigned char)((v >> 8) & 0xff);
+}
+
+static void put32le(unsigned char *p, uint32_t v)
+{
+    p[0] = (unsigned char)(v & 0xff);
+    p[1] = (unsigned char)((v >> 8) & 0xff);
+    p[2] = (unsigned char)((v >> 16) & 0xff);
+    p[3] = (unsigned char)((v >> 24) & 0xff);
+}
+
+static int decode_to_wav(const char *input, const char *output)
 {
     ma_decoder decoder;
     ma_decoder_config cfg = ma_decoder_config_init(ma_format_s16, 2, 44100);
-    /* Kindle's validated third-party Bluetooth path is GStreamer 0.10 fdsrc
-     * -> Amazon mixersink with stream-type=Music.  The stream type matters:
-     * audiomgrd uses it to claim the music/A2DP route. */
-    const char *gst_cmd =
-        "GST=/usr/bin/gst-launch-0.10; [ -x \"$GST\" ] || GST=/usr/bin/gst-launch; "
-        "\"$GST\" -v fdsrc fd=0 "
-        "! 'audio/x-raw-int,endianness=(int)1234,signed=(boolean)true,width=(int)16,depth=(int)16,rate=(int)44100,channels=(int)2' "
-        "! queue ! mixersink stream-type=Music";
-    FILE *gst;
     ma_int16 pcm[4096 * 2];
-    int status;
+    uint64_t frames_total = 0;
+    FILE *f;
+    unsigned char hdr[44];
 
-    fprintf(stderr, "kanki-audio: decode/play %s\n", path);
-    fflush(stderr);
-
-    if (ma_decoder_init_file(path, &cfg, &decoder) != MA_SUCCESS) {
-        fprintf(stderr, "kanki-audio: decoder could not open media\n");
+    if (ma_decoder_init_file(input, &cfg, &decoder) != MA_SUCCESS) {
+        fprintf(stderr, "kanki-audio: decoder could not open %s\n", input);
         return 2;
     }
-    gst = popen(gst_cmd, "w");
-    if (!gst) {
-        fprintf(stderr, "kanki-audio: popen(gst-launch) failed: %s\n", strerror(errno));
+
+    f = fopen(output, "wb+");
+    if (!f) {
+        fprintf(stderr, "kanki-audio: cannot create temp wav: %s\n", strerror(errno));
         ma_decoder_uninit(&decoder);
         return 3;
     }
+
+    memset(hdr, 0, sizeof(hdr));
+    memcpy(hdr, "RIFF", 4);
+    memcpy(hdr + 8, "WAVEfmt ", 8);
+    put32le(hdr + 16, 16);
+    put16le(hdr + 20, 1);
+    put16le(hdr + 22, 2);
+    put32le(hdr + 24, 44100);
+    put32le(hdr + 28, 44100 * 2 * 2);
+    put16le(hdr + 32, 4);
+    put16le(hdr + 34, 16);
+    memcpy(hdr + 36, "data", 4);
+    fwrite(hdr, 1, sizeof(hdr), f);
 
     while (1) {
         ma_uint64 frames = 0;
         ma_result r = ma_decoder_read_pcm_frames(&decoder, pcm, 4096, &frames);
         if (frames > 0) {
-            if (fwrite(pcm, sizeof(ma_int16) * 2, (size_t)frames, gst) != (size_t)frames) {
-                fprintf(stderr, "kanki-audio: gst pipe closed early\n");
-                break;
+            if (fwrite(pcm, sizeof(ma_int16) * 2, (size_t)frames, f) != (size_t)frames) {
+                fprintf(stderr, "kanki-audio: temp wav write failed\n");
+                fclose(f);
+                unlink(output);
+                ma_decoder_uninit(&decoder);
+                return 4;
             }
+            frames_total += frames;
         }
         if (r == MA_AT_END || frames == 0) break;
         if (r != MA_SUCCESS) {
@@ -154,11 +175,52 @@ static int decode_to_gst(const char *path)
         }
     }
 
+    {
+        uint64_t data64 = frames_total * 4;
+        uint32_t data_size = data64 > 0xffffffffu ? 0xffffffffu : (uint32_t)data64;
+        put32le(hdr + 4, 36u + data_size);
+        put32le(hdr + 40, data_size);
+        fseek(f, 0, SEEK_SET);
+        fwrite(hdr, 1, sizeof(hdr), f);
+    }
+
+    fclose(f);
     ma_decoder_uninit(&decoder);
-    status = pclose(gst);
-    fprintf(stderr, "kanki-audio: gst exit status=%d\n", status);
+    return 0;
+}
+
+static int decode_and_play(const char *path)
+{
+    const char *player = getenv("KANKI_GST_PLAYER");
+    char tmp[128];
+    pid_t pid;
+    int status = 0;
+
+    if (!player || access(player, X_OK) != 0) {
+        fprintf(stderr, "kanki-audio: native player missing/not executable: %s\n", player ? player : "(unset)");
+        return 10;
+    }
+
+    snprintf(tmp, sizeof(tmp), "/tmp/kanki-audio-%ld.wav", (long)getpid());
+    fprintf(stderr, "kanki-audio: decode %s -> %s\n", path, tmp);
+    if (decode_to_wav(path, tmp) != 0) return 11;
+
+    pid = fork();
+    if (pid == 0) {
+        execl(player, player, tmp, (char *)NULL);
+        fprintf(stderr, "kanki-audio: exec %s failed: %s\n", player, strerror(errno));
+        _exit(127);
+    }
+    if (pid < 0) {
+        unlink(tmp);
+        return 12;
+    }
+
+    waitpid(pid, &status, 0);
+    unlink(tmp);
+    fprintf(stderr, "kanki-audio: native player status=%d\n", status);
     fflush(stderr);
-    return status == 0 ? 0 : 4;
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : 13;
 }
 
 static void start_player(const char *path)
@@ -169,10 +231,9 @@ static void start_player(const char *path)
     if (pid == 0) {
         setpgid(0, 0);
         signal(SIGTERM, SIG_DFL);
-        _exit(decode_to_gst(path));
+        _exit(decode_and_play(path));
     }
     if (pid > 0) {
-        /* Close the fork/setpgid race from the parent side as well. */
         setpgid(pid, pid);
         player_pid = pid;
     }
@@ -198,32 +259,27 @@ static void http_reply(int fd, int code, const char *body)
 
 static void handle_client(int fd)
 {
-    char req[REQ_MAX];
-    char method[16], target[REQ_MAX];
+    char req[REQ_MAX], method[16], target[REQ_MAX];
     ssize_t n = read(fd, req, sizeof(req) - 1);
     if (n <= 0) return;
     req[n] = '\0';
 
-    if (sscanf(req, "%15s %8191s", method, target) != 2 || strcmp(method, "GET") != 0) {
+    if (sscanf(req, "%15s %8191s", method, target) != 2 || strcmp(method, "GET")) {
         http_reply(fd, 400, "bad request");
         return;
     }
 
-    if (strncmp(target, "/stop", 5) == 0) {
+    if (!strncmp(target, "/stop", 5)) {
         fprintf(stderr, "kanki-audio: stop\n");
         stop_player();
         http_reply(fd, 200, "stopped");
         return;
     }
 
-    if (strncmp(target, "/play?", 6) == 0) {
+    if (!strncmp(target, "/play?", 6)) {
         char *src_arg = strstr(target + 6, "src=");
-        char decoded[PATH_MAX_LOCAL];
-        char path[PATH_MAX_LOCAL];
-        if (!src_arg) {
-            http_reply(fd, 400, "missing src");
-            return;
-        }
+        char decoded[PATH_MAX_LOCAL], path[PATH_MAX_LOCAL];
+        if (!src_arg) { http_reply(fd, 400, "missing src"); return; }
         src_arg += 4;
         {
             char *amp = strchr(src_arg, '&');
@@ -232,7 +288,7 @@ static void handle_client(int fd)
         url_decode(decoded, sizeof(decoded), src_arg);
         fprintf(stderr, "kanki-audio: request src=%s\n", decoded);
         if (!resolve_media_path(decoded, path, sizeof(path))) {
-            fprintf(stderr, "kanki-audio: media not found under %s\n", getenv("KANKI_MEDIA_DIR") ? getenv("KANKI_MEDIA_DIR") : "(unset)");
+            fprintf(stderr, "kanki-audio: media unavailable (local-only): %s\n", decoded);
             http_reply(fd, 404, "media not found");
             return;
         }
@@ -253,7 +309,9 @@ int main(void)
     signal(SIGTERM, on_signal);
     signal(SIGPIPE, SIG_IGN);
 
-    fprintf(stderr, "kanki-audio: starting, media=%s\n", getenv("KANKI_MEDIA_DIR") ? getenv("KANKI_MEDIA_DIR") : "(unset)");
+    fprintf(stderr, "kanki-audio: starting, media=%s player=%s\n",
+        getenv("KANKI_MEDIA_DIR") ? getenv("KANKI_MEDIA_DIR") : "(unset)",
+        getenv("KANKI_GST_PLAYER") ? getenv("KANKI_GST_PLAYER") : "(unset)");
     fflush(stderr);
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
