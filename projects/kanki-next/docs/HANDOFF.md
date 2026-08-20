@@ -12,7 +12,7 @@ Completed:
 - implemented a reusable Lab126 WebKit scale module;
 - implemented a standalone ARMHF renderer probe;
 - implemented a persistent ES5 `#qa` reviewer shell;
-- added host tests, upstream provenance checks, cross-build/ABI checks, packaging, and device-report scripts;
+- added host tests, upstream provenance checks, cross-build/ABI checks, portable package/checksum smoke tests, and device-report scripts;
 - documented architecture, test plan, status, and exact next steps.
 
 ## Pinned inputs
@@ -52,6 +52,8 @@ probe-build-report.txt
 ```
 
 Do not install an uninspected binary. Verify the checksum and the CI ABI report first.
+
+The green CI baseline produced an ELF32 ARM EABI5 hard-float executable with interpreter `/lib/ld-linux-armhf.so.3`. Its only direct runtime dependencies are `libdl.so.2` and `libc.so.6`, and its maximum imported GLIBC symbol version is `GLIBC_2.4`. Lab126 WebKit APIs remain runtime-resolved with `dlsym`, so the binary does not link directly against Amazon-specific symbols. The package checksum file is relative-path and remains verifiable after download/extraction.
 
 ## Device test
 
