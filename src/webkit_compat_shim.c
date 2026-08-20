@@ -20,13 +20,14 @@ typedef void (*load_html_fn)(void *web_view, const char *content, const char *ba
 typedef void (*set_zoom_fn)(void *web_view, float zoom_level);
 
 static const char STYLE_OPEN[] = "<style id=\"kanki-reviewer-compat\">";
-static const char STYLE_CLOSE_SCRIPT_OPEN[] = "</style><script>";
+static const char STYLE_CLOSE[] = "</style>";
+static const char SCRIPT_OPEN[] = "<script>";
 static const char SCRIPT_CLOSE[] = "</script>";
 
 static char *inject_compat(const char *content)
 {
-    const char *head;
-    size_t content_len, css_len, js_len, a_len, b_len, c_len, prefix_len, total;
+    const char *head_open, *head_close;
+    size_t content_len, css_len, js_len, so_len, sc_len, jo_len, jc_len, total;
     char *out, *p;
 
     if (!content) return NULL;
@@ -35,31 +36,43 @@ static char *inject_compat(const char *content)
     content_len = k_strlen(content);
     css_len = k_strlen(KANKI_REVIEWER_CSS);
     js_len = k_strlen(KANKI_COMPAT_JS);
-    a_len = sizeof(STYLE_OPEN) - 1;
-    b_len = sizeof(STYLE_CLOSE_SCRIPT_OPEN) - 1;
-    c_len = sizeof(SCRIPT_CLOSE) - 1;
-    head = k_strstr(content, "</head>");
-    prefix_len = head ? (size_t)(head - content) : 0;
-    total = content_len + a_len + css_len + b_len + js_len + c_len;
+    so_len = sizeof(STYLE_OPEN) - 1;
+    sc_len = sizeof(STYLE_CLOSE) - 1;
+    jo_len = sizeof(SCRIPT_OPEN) - 1;
+    jc_len = sizeof(SCRIPT_CLOSE) - 1;
+    total = content_len + so_len + css_len + sc_len + jo_len + js_len + jc_len;
 
     out = (char *)malloc(total + 1);
     if (!out) return NULL;
     p = out;
 
-    if (head) {
-        k_memcpy(p, content, prefix_len); p += prefix_len;
-        k_memcpy(p, STYLE_OPEN, a_len); p += a_len;
+    head_open = k_strstr(content, "<head>");
+    head_close = k_strstr(content, "</head>");
+
+    if (head_open && head_close && head_open < head_close) {
+        size_t through_open = (size_t)(head_open - content) + 6;
+        size_t middle_len = (size_t)(head_close - (content + through_open));
+        size_t tail_len = content_len - (size_t)(head_close - content);
+
+        /* Reviewer baseline first, then the deck's own CSS, matching Anki's
+           precedence.  Compatibility JS runs after the deck CSS so it can
+           resolve custom properties before the body renders. */
+        k_memcpy(p, content, through_open); p += through_open;
+        k_memcpy(p, STYLE_OPEN, so_len); p += so_len;
         k_memcpy(p, KANKI_REVIEWER_CSS, css_len); p += css_len;
-        k_memcpy(p, STYLE_CLOSE_SCRIPT_OPEN, b_len); p += b_len;
+        k_memcpy(p, STYLE_CLOSE, sc_len); p += sc_len;
+        k_memcpy(p, content + through_open, middle_len); p += middle_len;
+        k_memcpy(p, SCRIPT_OPEN, jo_len); p += jo_len;
         k_memcpy(p, KANKI_COMPAT_JS, js_len); p += js_len;
-        k_memcpy(p, SCRIPT_CLOSE, c_len); p += c_len;
-        k_memcpy(p, head, content_len - prefix_len); p += content_len - prefix_len;
+        k_memcpy(p, SCRIPT_CLOSE, jc_len); p += jc_len;
+        k_memcpy(p, head_close, tail_len); p += tail_len;
     } else {
-        k_memcpy(p, STYLE_OPEN, a_len); p += a_len;
+        k_memcpy(p, STYLE_OPEN, so_len); p += so_len;
         k_memcpy(p, KANKI_REVIEWER_CSS, css_len); p += css_len;
-        k_memcpy(p, STYLE_CLOSE_SCRIPT_OPEN, b_len); p += b_len;
+        k_memcpy(p, STYLE_CLOSE, sc_len); p += sc_len;
+        k_memcpy(p, SCRIPT_OPEN, jo_len); p += jo_len;
         k_memcpy(p, KANKI_COMPAT_JS, js_len); p += js_len;
-        k_memcpy(p, SCRIPT_CLOSE, c_len); p += c_len;
+        k_memcpy(p, SCRIPT_CLOSE, jc_len); p += jc_len;
         k_memcpy(p, content, content_len); p += content_len;
     }
     *p = '\0';
