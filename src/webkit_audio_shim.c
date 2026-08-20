@@ -16,8 +16,9 @@ typedef void (*set_zoom_fn)(void *web_view, float zoom_level);
 /*
  * Kindle's WebKit is old and Ranki multiplies its card zoom by screen-width
  * scaling.  On modern 1200px-class Paperwhites that can push the effective
- * zoom above 3x.  This shim both supplies missing Anki audio behavior and
- * applies conservative Kindle-specific presentation fixes.
+ * zoom above 3x.  This shim supplies missing Anki audio behavior and applies
+ * conservative Kindle-specific presentation fixes.  COCA-English receives a
+ * targeted e-ink layout override using only old-WebKit-safe CSS values.
  */
 static const char kanki_audio_shim[] =
 "<script>(function(){"
@@ -27,7 +28,28 @@ static const char kanki_audio_shim[] =
 "'.kanki-audio-link{font-size:20px!important;line-height:24px!important;display:inline-block!important;vertical-align:middle!important;text-decoration:none!important;padding:1px 5px!important;margin:0 2px!important;width:auto!important;height:auto!important;}' +"
 "'.kindle .replay-button,.kindle .soundLink,.kindle .audio-button{font-size:20px!important;line-height:24px!important;max-width:40px!important;max-height:40px!important;width:auto!important;height:auto!important;}' +"
 "'.kindle .replay-button svg,.kindle .soundLink svg,.kindle .audio-button svg,.kindle button svg{width:28px!important;height:28px!important;max-width:28px!important;max-height:28px!important;}' +"
-"'.kindle img{max-width:100%!important;height:auto;}';"
+"'.kindle img{max-width:100%!important;height:auto;}' +"
+"'.kindle article.card{position:relative!important;width:auto!important;max-width:none!important;margin:0!important;padding:8px 10px!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;color:#111!important;text-align:left!important;font-family:Georgia,serif!important;font-size:20px!important;line-height:1.42!important;}' +"
+"'.kindle .dictionary-logo-link{display:none!important;}' +"
+"'.kindle .card-header{display:block!important;margin:0 0 5px 0!important;padding:0!important;}' +"
+"'.kindle .word{display:inline!important;margin:0 10px 0 0!important;padding:0!important;font-family:Georgia,serif!important;font-size:34px!important;font-weight:700!important;line-height:1.10!important;color:#000!important;letter-spacing:0!important;}' +"
+"'.kindle .pos-badge{display:inline-block!important;margin:0!important;padding:2px 5px!important;border:1px solid #999!important;border-radius:2px!important;background:transparent!important;color:#333!important;font-size:16px!important;font-weight:600!important;line-height:1.15!important;letter-spacing:0!important;text-transform:none!important;vertical-align:middle!important;}' +"
+"'.kindle .pronunciation-audio{display:block!important;margin:4px 0 8px 0!important;padding:0!important;}' +"
+"'.kindle .pronunciation{display:inline!important;margin:0!important;font-family:Georgia,serif!important;font-size:20px!important;line-height:1.20!important;font-style:italic!important;color:#333!important;}' +"
+"'.kindle .audio-button{display:inline-block!important;margin:0 0 0 8px!important;padding:0!important;width:28px!important;height:28px!important;max-width:28px!important;max-height:28px!important;vertical-align:middle!important;border-radius:0!important;}' +"
+"'.kindle .audio-button svg{display:block!important;width:24px!important;height:24px!important;max-width:24px!important;max-height:24px!important;}' +"
+"'.kindle .grammar{margin:0 0 7px 0!important;padding:0!important;font-size:18px!important;line-height:1.35!important;font-style:italic!important;color:#222!important;}' +"
+"'.kindle .divider{margin:9px 0!important;padding:0!important;border:0!important;border-top:1px solid #aaa!important;height:0!important;}' +"
+"'.kindle .definition-section,.kindle .examples-section{margin:0!important;padding:0!important;}' +"
+"'.kindle .section-title{margin:0 0 4px 0!important;padding:0!important;font-size:18px!important;font-weight:700!important;line-height:1.20!important;color:#111!important;}' +"
+"'.kindle .definition-content{margin:0!important;padding:0!important;font-size:21px!important;line-height:1.45!important;color:#111!important;}' +"
+"'.kindle .examples-list{list-style:none!important;margin:0!important;padding:0!important;}' +"
+"'.kindle .example-sentence{display:block!important;margin:0 0 7px 0!important;padding:0!important;}' +"
+"'.kindle .example-item,.kindle .examples-list>.example-item{display:block!important;position:relative!important;margin:0 0 7px 0!important;padding:0!important;font-size:20px!important;line-height:1.42!important;color:#111!important;}' +"
+"'.kindle .example-item:before{display:none!important;content:none!important;}' +"
+"'.kindle .example-item em{font-style:normal!important;font-weight:700!important;text-decoration:underline!important;color:#000!important;}' +"
+"'.kindle .example-audio{display:none!important;}' +"
+"'.kindle .tts-button{display:none!important;}';"
 "if(s.styleSheet)s.styleSheet.cssText=css;else s.appendChild(document.createTextNode(css));h.appendChild(s);}catch(e){}}"
 "function ping(path,src){try{var i=new Image();i.style.display='none';"
 "i.src='http://127.0.0.1:17392/'+path+'?src='+encodeURIComponent(src||'')+'&t='+(new Date().getTime());"
