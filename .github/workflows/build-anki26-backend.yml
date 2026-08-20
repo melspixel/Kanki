@@ -21,6 +21,7 @@ jobs:
       ANKI_REF: '26.08'
       RUSTUP_TOOLCHAIN: '1.92.0'
       TARGET: armv7-unknown-linux-gnueabihf
+      PROTOC: /usr/bin/protoc
       CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
       CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
       CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++
@@ -39,11 +40,13 @@ jobs:
           rustup target add --toolchain "$RUSTUP_TOOLCHAIN" "$TARGET"
           rustc --version
           cargo --version
+          "$PROTOC" --version
 
       - name: Fetch Anki 26.08
         run: |
           git clone --depth 1 --branch "$ANKI_REF" https://github.com/ankitects/anki.git /tmp/anki
           git -C /tmp/anki rev-parse HEAD | tee anki26.commit
+          mkdir -p /tmp/anki/out/rslib/proto
 
       - name: Add Kanki C FFI and shared-library crate type
         run: |
