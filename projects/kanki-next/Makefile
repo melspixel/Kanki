@@ -4,7 +4,7 @@ CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror
 KINDLE_CC ?= arm-kindlehf-linux-gnueabihf-gcc
 
-.PHONY: all assets test host-build armhf-probe upstream-audit clean
+.PHONY: all assets test host-build package-smoke armhf-probe upstream-audit clean
 
 all: test
 
@@ -27,6 +27,14 @@ $(BUILD)/render_probe-host: src/kindle_webkit_scale.c src/render_probe.c src/kin
 
 host-build: $(BUILD)/render_probe-host
 
+package-smoke: $(BUILD)/render_probe-host
+	rm -rf $(BUILD)/package-smoke
+	scripts/package-probe.sh $(BUILD)/render_probe-host $(BUILD)/package-smoke
+	cd $(BUILD)/package-smoke && sha256sum -c kanki-next-render-probe.zip.sha256
+	unzip -t $(BUILD)/package-smoke/kanki-next-render-probe.zip
+	unzip -p $(BUILD)/package-smoke/kanki-next-render-probe.zip kanki-next/menu.json | python3 -m json.tool >/dev/null
+	unzip -p $(BUILD)/package-smoke/kanki-next-render-probe.zip kanki-next/BUILD.txt | grep -q '^KANKI_NEXT_RENDER_PROBE_BUILD_V1$$'
+
 $(BUILD)/kanki-next-render-probe-armhf: src/kindle_webkit_scale.c src/render_probe.c src/kindle_webkit_scale.h $(BUILD)/probe_asset.h
 	$(KINDLE_CC) $(CFLAGS) -Isrc -I$(BUILD) src/kindle_webkit_scale.c src/render_probe.c -o $@ -ldl
 
@@ -41,7 +49,7 @@ upstream-audit:
 		--lock upstream.lock \
 		--output $(BUILD)/ranki-audit.json
 
-test: assets $(BUILD)/test_scale $(BUILD)/render_probe-host
+test: assets $(BUILD)/test_scale $(BUILD)/render_probe-host package-smoke
 	$(BUILD)/test_scale
 	python3 tests/test_probe_contract.py --root $(ROOT) --header $(BUILD)/probe_asset.h
 	python3 tests/test_audit_ranki.py

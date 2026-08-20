@@ -46,7 +46,10 @@ chmod +x \
     cd "$STAGE"
     zip -qr "$DIST/kanki-next-render-probe.zip" kanki-next
 )
-sha256sum "$DIST/kanki-next-render-probe.zip" >"$DIST/kanki-next-render-probe.zip.sha256"
+(
+    cd "$DIST"
+    sha256sum kanki-next-render-probe.zip >kanki-next-render-probe.zip.sha256
+)
 
 rm -rf "$STAGE"
 printf '%s\n' "$DIST/kanki-next-render-probe.zip"

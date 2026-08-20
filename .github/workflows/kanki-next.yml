@@ -25,7 +25,7 @@ jobs:
       - name: Install host dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential python3-pil nodejs make
+          sudo apt-get install -y build-essential python3-pil nodejs make zip unzip
 
       - name: Run host and contract tests
         working-directory: projects/kanki-next
@@ -78,6 +78,7 @@ jobs:
       KOX_TAG: '2025.05'
       KHF_TRIPLE: arm-kindlehf-linux-gnueabihf
       PW6_MAX_GLIBC: '2.35'
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -139,7 +140,7 @@ jobs:
 
           {
             echo 'KANKI_NEXT_PROBE_BUILD_REPORT_V1'
-            echo "commit=$GITHUB_SHA"
+            echo "commit=$SOURCE_SHA"
             echo "toolchain=$KHF_TRIPLE"
             echo "koxtoolchain_tag=$KOX_TAG"
             echo "pw6_oracle_max_glibc=$PW6_MAX_GLIBC"
@@ -155,7 +156,7 @@ jobs:
       - name: Package KUAL extension
         working-directory: projects/kanki-next
         env:
-          KANKI_NEXT_COMMIT: ${{ github.sha }}
+          KANKI_NEXT_COMMIT: ${{ env.SOURCE_SHA }}
           KANKI_NEXT_TOOLCHAIN: arm-kindlehf-linux-gnueabihf/koxtoolchain-2025.05
         run: |
           export KANKI_NEXT_BUILT_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -163,7 +164,8 @@ jobs:
             build/kanki-next-render-probe-armhf \
             build/dist
           unzip -l build/dist/kanki-next-render-probe.zip
-          sha256sum -c build/dist/kanki-next-render-probe.zip.sha256
+          cd build/dist
+          sha256sum -c kanki-next-render-probe.zip.sha256
 
       - uses: actions/upload-artifact@v4
         with:
