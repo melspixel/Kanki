@@ -1,0 +1,90 @@
+name: Build Anki 26.08 backend
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [anki-26.08-backend]
+    paths:
+      - 'vendor/anki26/**'
+      - '.github/workflows/build-anki26-backend.yml'
+
+jobs:
+  backend-armhf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      ANKI_REF: '26.08'
+      TARGET: armv7-unknown-linux-gnueabihf
+      CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+      CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
+      CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++
+      AR_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-ar
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cross/build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
+            clang cmake ninja-build pkg-config protobuf-compiler \
+            python3 perl make git curl file
+          rustup target add "$TARGET"
+          rustc --version
+          cargo --version
+
+      - name: Fetch Anki 26.08
+        run: |
+          git clone --depth 1 --branch "$ANKI_REF" https://github.com/ankitects/anki.git /tmp/anki
+          git -C /tmp/anki rev-parse HEAD | tee anki26.commit
+
+      - name: Add Kanki C FFI and shared-library crate type
+        run: |
+          cp vendor/anki26/ffi.rs /tmp/anki/rslib/src/kanki_ffi.rs
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/anki/rslib/src/lib.rs')
+          s=p.read_text()
+          needle='pub mod version;'
+          assert needle in s
+          s=s.replace(needle, needle+'\npub mod kanki_ffi;', 1)
+          p.write_text(s)
+
+          p=Path('/tmp/anki/rslib/Cargo.toml')
+          s=p.read_text()
+          if '[lib]' not in s:
+              s += '\n[lib]\ncrate-type = ["cdylib"]\n'
+          p.write_text(s)
+          PY
+          tail -8 /tmp/anki/rslib/Cargo.toml
+          grep -n 'kanki_ffi' /tmp/anki/rslib/src/lib.rs
+
+      - name: Build Anki 26.08 backend for ARMHF
+        working-directory: /tmp/anki
+        run: |
+          cargo build -p anki --release --target "$TARGET" --features rustls
+
+      - name: Inspect backend
+        run: |
+          LIB=/tmp/anki/target/$TARGET/release/libanki.so
+          test -f "$LIB"
+          cp "$LIB" libanki-26.08-armhf.so
+          file libanki-26.08-armhf.so
+          readelf -h libanki-26.08-armhf.so
+          readelf -d libanki-26.08-armhf.so | tee backend.dynamic.txt
+          nm -D libanki-26.08-armhf.so | grep ' anki_backend_' | tee backend.exports.txt
+          readelf --version-info libanki-26.08-armhf.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee backend.glibc.txt
+          printf 'max_glibc=' >> backend.report.txt
+          tail -1 backend.glibc.txt >> backend.report.txt
+          cat backend.exports.txt >> backend.report.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anki-26.08-backend-armhf
+          path: |
+            libanki-26.08-armhf.so
+            anki26.commit
+            backend.dynamic.txt
+            backend.exports.txt
+            backend.glibc.txt
+            backend.report.txt
