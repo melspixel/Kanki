@@ -90,7 +90,9 @@ pub struct ReviewSession {
 
 impl Default for ReviewSession {
     fn default() -> Self {
-        Self { state: SessionState::Empty }
+        Self {
+            state: SessionState::Empty,
+        }
     }
 }
 
@@ -103,7 +105,10 @@ impl ReviewSession {
         match card {
             Some(card) => {
                 self.state = SessionState::Question(card.clone());
-                SessionEffect::Render { card, side: Side::Question }
+                SessionEffect::Render {
+                    card,
+                    side: Side::Question,
+                }
             }
             None => {
                 self.state = SessionState::Finished;
@@ -118,7 +123,10 @@ impl ReviewSession {
             _ => return Err(SessionError::AnswerWithoutQuestion),
         };
         self.state = SessionState::Answer(card.clone());
-        Ok(SessionEffect::Render { card, side: Side::Answer })
+        Ok(SessionEffect::Render {
+            card,
+            side: Side::Answer,
+        })
     }
 
     pub fn rate(&mut self, rating: Rating) -> Result<SessionEffect, SessionError> {
@@ -152,11 +160,35 @@ mod tests {
     #[test]
     fn review_requires_question_then_answer_then_rating() {
         let mut session = ReviewSession::default();
-        assert_eq!(session.show_answer(), Err(SessionError::AnswerWithoutQuestion));
-        assert!(matches!(session.load(Some(card())), SessionEffect::Render { side: Side::Question, .. }));
-        assert!(matches!(session.show_answer().unwrap(), SessionEffect::Render { side: Side::Answer, .. }));
-        assert_eq!(session.rate(Rating::Good).unwrap(), SessionEffect::CommitRating { card_id: CardId(7), rating: Rating::Good });
-        assert_eq!(session.rate(Rating::Good), Err(SessionError::RatingWithoutAnswer));
+        assert_eq!(
+            session.show_answer(),
+            Err(SessionError::AnswerWithoutQuestion)
+        );
+        assert!(matches!(
+            session.load(Some(card())),
+            SessionEffect::Render {
+                side: Side::Question,
+                ..
+            }
+        ));
+        assert!(matches!(
+            session.show_answer().unwrap(),
+            SessionEffect::Render {
+                side: Side::Answer,
+                ..
+            }
+        ));
+        assert_eq!(
+            session.rate(Rating::Good).unwrap(),
+            SessionEffect::CommitRating {
+                card_id: CardId(7),
+                rating: Rating::Good
+            }
+        );
+        assert_eq!(
+            session.rate(Rating::Good),
+            Err(SessionError::RatingWithoutAnswer)
+        );
     }
 
     #[test]
