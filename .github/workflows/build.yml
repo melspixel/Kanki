@@ -30,6 +30,7 @@ jobs:
           node --check src/anki_adaptive_v2.js
           node --check src/anki_compat.js
           node --check src/render_diagnostics.js
+          sh -n scripts/kindle-system-fingerprint.sh
           python3 -m py_compile tools/embed_assets.py
           if grep -Eqi 'COCA-English|dictionary-logo-link|\.word\{|\.pos-badge\{' \
               src/anki_adaptive_v2.js src/anki_compat.js src/render_diagnostics.js src/anki_reviewer.css; then
@@ -98,13 +99,14 @@ jobs:
       - name: Assemble Kanki
         run: |
           cp scripts/ranki.sh package/ranki/ranki.sh
+          cp scripts/kindle-system-fingerprint.sh package/ranki/kindle-system-fingerprint.sh
           cp kanki-audio-armhf package/ranki/kanki-audio-armhf
           cp kanki-audio-armel package/ranki/kanki-audio-armel
           cp kanki-gst-play-armhf package/ranki/kanki-gst-play-armhf
           cp libkanki-webkit-armhf.so package/ranki/libkanki-webkit-armhf.so
           cp libkanki-webkit-armel.so package/ranki/libkanki-webkit-armel.so
-          printf 'Kanki adaptive renderer v2 + render diagnostics\ncommit=%s\n' "$GITHUB_SHA" > package/ranki/KANKI_BUILD.txt
-          chmod +x package/ranki/ranki.sh package/ranki/kanki-audio-armhf package/ranki/kanki-audio-armel package/ranki/kanki-gst-play-armhf
+          printf 'Kanki adaptive renderer v2 + render diagnostics + system fingerprint\ncommit=%s\n' "$GITHUB_SHA" > package/ranki/KANKI_BUILD.txt
+          chmod +x package/ranki/ranki.sh package/ranki/kindle-system-fingerprint.sh package/ranki/kanki-audio-armhf package/ranki/kanki-audio-armel package/ranki/kanki-gst-play-armhf
           (cd package && zip -qr ../kanki.zip ranki)
           sha256sum kanki.zip > kanki.zip.sha256
 
