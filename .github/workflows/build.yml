@@ -27,14 +27,17 @@ jobs:
 
       - name: Validate generic compatibility assets
         run: |
+          node --check src/anki_adaptive_v2.js
           node --check src/anki_compat.js
           python3 -m py_compile tools/embed_assets.py
-          if grep -Eqi 'COCA-English|dictionary-logo-link|\.word\{|\.pos-badge\{' src/anki_compat.js src/anki_reviewer.css; then
+          if grep -Eqi 'COCA-English|dictionary-logo-link|\.word\{|\.pos-badge\{' \
+              src/anki_adaptive_v2.js src/anki_compat.js src/anki_reviewer.css; then
             echo 'Deck-specific styling leaked into the generic renderer.' >&2
             exit 1
           fi
           python3 tools/embed_assets.py src/anki_reviewer.css src/anki_compat.js > /tmp/kanki_embedded_assets.h
           test -s /tmp/kanki_embedded_assets.h
+          grep -q 'kanki-layout-v2' /tmp/kanki_embedded_assets.h
 
       - name: Fetch pinned miniaudio header
         run: |
@@ -81,6 +84,7 @@ jobs:
           readelf -d libkanki-webkit-armhf.so | grep NEEDED && exit 1 || true
           readelf -d libkanki-webkit-armel.so | grep NEEDED && exit 1 || true
           readelf -Ws libkanki-webkit-armhf.so | grep -E 'webkit_web_view_load_html_string|webkit_web_view_set_zoom_level|gtk_tree_view_expand_all'
+          strings libkanki-webkit-armhf.so | grep -q 'kanki-layout-v2'
 
       - name: Download upstream Ranki release
         run: |
@@ -96,7 +100,7 @@ jobs:
           cp kanki-gst-play-armhf package/ranki/kanki-gst-play-armhf
           cp libkanki-webkit-armhf.so package/ranki/libkanki-webkit-armhf.so
           cp libkanki-webkit-armel.so package/ranki/libkanki-webkit-armel.so
-          printf 'Kanki Anki-compat refactor\ncommit=%s\n' "$GITHUB_SHA" > package/ranki/KANKI_BUILD.txt
+          printf 'Kanki adaptive renderer v2\ncommit=%s\n' "$GITHUB_SHA" > package/ranki/KANKI_BUILD.txt
           chmod +x package/ranki/ranki.sh package/ranki/kanki-audio-armhf package/ranki/kanki-audio-armel package/ranki/kanki-gst-play-armhf
           (cd package && zip -qr ../kanki.zip ranki)
           sha256sum kanki.zip > kanki.zip.sha256
