@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Strict host syntax and ES5 parsing
         run: |
-          gcc -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -fsyntax-only device/kanki_device.c -Ibridge
+          gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_device.c -Ibridge
           node --check assets/device/decks.js
           node --check assets/reviewer/reviewer.js
           sh -n scripts/kanki-launch.sh
@@ -52,7 +52,7 @@ jobs:
           echo "$HOME/x-tools/arm-kindlehf-linux-gnueabihf/bin" >> "$GITHUB_PATH"
       - name: Build dynamic Kindle UI shell
         run: |
-          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -Wall -Wextra -Werror -Ibridge \
+          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             -DKANKI_BUILD_COMMIT=\"$GITHUB_SHA\" \
             -DKANKI_ANKI_COMMIT=\"e5a6fbe27fdd4d57d5f712191b4a753032e57853\" \
             device/kanki_device.c -ldl -o kanki-device
