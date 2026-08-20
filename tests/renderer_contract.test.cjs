@@ -42,6 +42,10 @@ window.kankiBridge.renderFailed = (message) => {
   throw new Error(message);
 };
 
+function hostValue(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 const card = {
   finished: false,
   card_id: 77,
@@ -74,17 +78,17 @@ assert.strictEqual(document.querySelectorAll('.replay-button').length, 1);
 assert.strictEqual(document.querySelector('.replay-button > svg').getAttribute('viewBox'), '0 0 40 40');
 assert.strictEqual(document.getElementById('illustration').getAttribute('width'), '123');
 assert.strictEqual(document.getElementById('illustration').getAttribute('height'), '77');
-assert.deepStrictEqual(audio[0], ['sound', 'word.mp3']);
+assert.deepStrictEqual(hostValue(audio[0]), ['sound', 'word.mp3']);
 
 const replay = document.querySelector('.replay-button');
 replay.onclick();
-assert.deepStrictEqual(audio[1], ['sound', 'word.mp3']);
+assert.deepStrictEqual(hostValue(audio[1]), ['sound', 'word.mp3']);
 
 window.kankiDevice.showAnswer();
 assert.strictEqual(document.getElementById('qa'), qa, 'answer must not reload the page');
 assert.strictEqual(window.__answerRuns, 1, 'answer scripts must execute after insertion');
 assert.strictEqual(document.getElementById('answer-text').textContent, 'answer');
-assert.deepStrictEqual(audio[2], ['tts', 'answer', 'en_US', [], 1]);
+assert.deepStrictEqual(hostValue(audio[2]), ['tts', 'answer', 'en_US', [], 1]);
 assert.strictEqual(document.querySelectorAll('.replay-button').length, 1);
 
 window.kankiDevice.nativeResponse(
@@ -93,7 +97,7 @@ window.kankiDevice.nativeResponse(
 );
 assert.match(qa.textContent, /Review complete/);
 assert.strictEqual(document.getElementById('qa'), qa);
-assert.deepStrictEqual(audio[audio.length - 1], ['stop']);
+assert.deepStrictEqual(hostValue(audio[audio.length - 1]), ['stop']);
 
 assert.ok(!/^\s*svg\s*\{/m.test(css), 'generic SVG rules are forbidden');
 assert.ok(css.includes('.replay-button > svg'));
