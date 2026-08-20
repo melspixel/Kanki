@@ -15,7 +15,6 @@ use anki_proto::collection::{CloseCollectionRequest, OpenCollectionRequest};
 use anki_proto::decks::{
     set_deck_collapsed_request, DeckId, DeckTreeNode, DeckTreeRequest, SetDeckCollapsedRequest,
 };
-use anki_proto::generic::Empty;
 use anki_proto::scheduler::{
     bury_or_suspend_cards_request, card_answer, BuryOrSuspendCardsRequest, CardAnswer,
     GetQueuedCardsRequest, SchedulingStates,
@@ -76,7 +75,9 @@ struct DeckDto {
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum AvDto {
-    Sound { source: String },
+    Sound {
+        source: String,
+    },
     Tts {
         text: String,
         lang: String,
@@ -174,14 +175,12 @@ fn extract_av(
     text: String,
     question_side: bool,
 ) -> Result<(String, Vec<AvDto>), String> {
-    let response = BackendCardRenderingService::extract_av_tags(
-        backend,
-        ExtractAvTagsRequest {
+    let response = backend
+        .extract_av_tags(ExtractAvTagsRequest {
             text,
             question_side,
-        },
-    )
-    .map_err(|err| err.to_string())?;
+        })
+        .map_err(|err| err.to_string())?;
     let mut tags = Vec::new();
     for tag in response.av_tags {
         match tag.value {
@@ -268,12 +267,12 @@ pub extern "C" fn kanki_open_collection_json(
 ) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        let request = OpenCollectionRequest {
-            collection_path: c_string(collection_path, "collection_path")?,
-            media_folder_path: c_string(media_folder_path, "media_folder_path")?,
-            media_db_path: c_string(media_db_path, "media_db_path")?,
-        };
-        BackendCollectionService::open_collection(&core.backend, request)
+        core.backend
+            .open_collection(OpenCollectionRequest {
+                collection_path: c_string(collection_path, "collection_path")?,
+                media_folder_path: c_string(media_folder_path, "media_folder_path")?,
+                media_db_path: c_string(media_db_path, "media_db_path")?,
+            })
             .map_err(|err| err.to_string())?;
         core.current = None;
         Ok(serde_json::json!({"opened": true}))
@@ -284,13 +283,11 @@ pub extern "C" fn kanki_open_collection_json(
 pub extern "C" fn kanki_close_collection_json(core: *mut KankiCore) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        BackendCollectionService::close_collection(
-            &core.backend,
-            CloseCollectionRequest {
+        core.backend
+            .close_collection(CloseCollectionRequest {
                 downgrade_to_schema11: false,
-            },
-        )
-        .map_err(|err| err.to_string())?;
+            })
+            .map_err(|err| err.to_string())?;
         core.current = None;
         Ok(serde_json::json!({"closed": true}))
     })())
@@ -305,7 +302,9 @@ pub extern "C" fn kanki_deck_tree_json(core: *mut KankiCore) -> *mut c_char {
             .unwrap_or_default()
             .as_secs()
             .min(i64::MAX as u64) as i64;
-        let tree = BackendDecksService::deck_tree(&core.backend, DeckTreeRequest { now })
+        let tree = core
+            .backend
+            .deck_tree(DeckTreeRequest { now })
             .map_err(|err| err.to_string())?;
         Ok(deck_dto(tree))
     })())
@@ -318,7 +317,8 @@ pub extern "C" fn kanki_set_current_deck_json(
 ) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        BackendDecksService::set_current_deck(&core.backend, DeckId { did: deck_id })
+        core.backend
+            .set_current_deck(DeckId { did: deck_id })
             .map_err(|err| err.to_string())?;
         core.current = None;
         Ok(serde_json::json!({"deck_id": deck_id}))
@@ -333,15 +333,13 @@ pub extern "C" fn kanki_set_deck_collapsed_json(
 ) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        BackendDecksService::set_deck_collapsed(
-            &core.backend,
-            SetDeckCollapsedRequest {
+        core.backend
+            .set_deck_collapsed(SetDeckCollapsedRequest {
                 deck_id,
                 collapsed: collapsed != 0,
                 scope: set_deck_collapsed_request::Scope::Reviewer as i32,
-            },
-        )
-        .map_err(|err| err.to_string())?;
+            })
+            .map_err(|err| err.to_string())?;
         Ok(serde_json::json!({"deck_id": deck_id, "collapsed": collapsed != 0}))
     })())
 }
@@ -350,14 +348,13 @@ pub extern "C" fn kanki_set_deck_collapsed_json(
 pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        let mut queue = BackendSchedulerService::get_queued_cards(
-            &core.backend,
-            GetQueuedCardsRequest {
+        let mut queue = core
+            .backend
+            .get_queued_cards(GetQueuedCardsRequest {
                 fetch_limit: 1,
                 intraday_learning_only: false,
-            },
-        )
-        .map_err(|err| err.to_string())?;
+            })
+            .map_err(|err| err.to_string())?;
 
         let counts = CountsDto {
             new: queue.new_count,
@@ -387,23 +384,23 @@ pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
             current.custom_data = Some(card.custom_data.clone());
         }
 
-        let rendered = BackendCardRenderingService::render_existing_card(
-            &core.backend,
-            RenderExistingCardRequest {
+        let rendered = core
+            .backend
+            .render_existing_card(RenderExistingCardRequest {
                 card_id: card.id,
                 browser: false,
                 partial_render: false,
-            },
-        )
-        .map_err(|err| err.to_string())?;
+            })
+            .map_err(|err| err.to_string())?;
         let (question_html, question_audio) =
             extract_av(&core.backend, render_nodes(rendered.question_nodes), true)?;
         let (answer_html, answer_audio) =
             extract_av(&core.backend, render_nodes(rendered.answer_nodes), false)?;
-        let intervals =
-            BackendSchedulerService::describe_next_states(&core.backend, states.clone())
-                .map_err(|err| err.to_string())?
-                .vals;
+        let intervals = core
+            .backend
+            .describe_next_states(states.clone())
+            .map_err(|err| err.to_string())?
+            .vals;
 
         core.current = Some(CurrentReview {
             card_id: card.id,
@@ -449,9 +446,8 @@ pub extern "C" fn kanki_answer_json(
             .elapsed()
             .as_millis()
             .min(u32::MAX as u128) as u32;
-        BackendSchedulerService::answer_card(
-            &core.backend,
-            CardAnswer {
+        core.backend
+            .answer_card(CardAnswer {
                 card_id: current.card_id,
                 current_state: current.states.current.clone(),
                 new_state,
@@ -462,9 +458,8 @@ pub extern "C" fn kanki_answer_json(
                 } else {
                     milliseconds_taken
                 },
-            },
-        )
-        .map_err(|err| err.to_string())?;
+            })
+            .map_err(|err| err.to_string())?;
         core.current = None;
         Ok(serde_json::json!({"card_id": current.card_id, "rating": rating}))
     })())
@@ -478,15 +473,13 @@ pub extern "C" fn kanki_bury_current_json(core: *mut KankiCore) -> *mut c_char {
             .current
             .clone()
             .ok_or("no current card is available to bury")?;
-        BackendSchedulerService::bury_or_suspend_cards(
-            &core.backend,
-            BuryOrSuspendCardsRequest {
+        core.backend
+            .bury_or_suspend_cards(BuryOrSuspendCardsRequest {
                 card_ids: vec![current.card_id],
                 note_ids: vec![],
                 mode: bury_or_suspend_cards_request::Mode::BuryUser as i32,
-            },
-        )
-        .map_err(|err| err.to_string())?;
+            })
+            .map_err(|err| err.to_string())?;
         core.current = None;
         Ok(serde_json::json!({"card_id": current.card_id, "buried": true}))
     })())
@@ -496,7 +489,8 @@ pub extern "C" fn kanki_bury_current_json(core: *mut KankiCore) -> *mut c_char {
 pub extern "C" fn kanki_health_json(core: *mut KankiCore) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        BackendCollectionService::latest_progress(&core.backend, Empty {})
+        core.backend
+            .latest_progress()
             .map_err(|err| err.to_string())?;
         Ok(serde_json::json!({"backend": "responsive"}))
     })())
