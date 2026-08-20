@@ -1,0 +1,51 @@
+name: Audit PW6 Kindle source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [renderer-adaptive-v2]
+    paths:
+      - 'tools/audit_kindle_source.py'
+      - '.github/workflows/audit-pw6-source.yml'
+  pull_request:
+    branches: [anki-26.08-backend]
+    paths:
+      - 'tools/audit_kindle_source.py'
+      - '.github/workflows/audit-pw6-source.yml'
+
+jobs:
+  source-oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # Latest PW6 source package currently listed on Amazon's Source Code Notice.
+      # The runtime firmware oracle may be newer; this source bundle is used to
+      # understand Amazon/Lab126 renderer patches and public API additions.
+      SOURCE_URL: https://s3.amazonaws.com/kindledownloads/Kindle_src_5.19.5_4794310058.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download official Amazon source bundle
+        run: |
+          curl -fL --retry 3 --retry-delay 2 "$SOURCE_URL" -o /tmp/kindle-pw6-source.tar.gz
+          test -s /tmp/kindle-pw6-source.tar.gz
+          ls -lh /tmp/kindle-pw6-source.tar.gz
+          sha256sum /tmp/kindle-pw6-source.tar.gz | tee source-package.sha256
+
+      - name: Audit renderer-related source and patches
+        run: |
+          mkdir -p source-audit
+          python3 tools/audit_kindle_source.py /tmp/kindle-pw6-source.tar.gz source-audit
+          cp source-package.sha256 source-audit/
+          echo '--- source audit meta ---'
+          cat source-audit/source-audit-meta.txt
+          echo '--- matching source excerpts ---'
+          sed -n '1,500p' source-audit/renderer-api-source-matches.txt
+          echo '--- renderer-related manifest ---'
+          sed -n '1,500p' source-audit/renderer-source-manifest.txt
+
+      # Publish only derived text evidence, not the Amazon source archive.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pw6-source-renderer-oracle
+          path: source-audit/
