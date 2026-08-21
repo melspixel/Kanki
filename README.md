@@ -6,7 +6,7 @@ Kanki is a source-owned Kindle front end around the **real, pinned Anki Rust bac
 
 `rewrite-v1` is the new implementation line. The historical patched client remains on `main` until the replacement passes the hardware acceptance matrix. No release from this branch should overwrite a working installation unless it is explicitly marked as a device test build.
 
-For current implementation/verification state, read `docs/STATUS.md`. For zero-context takeover, read `docs/RESUME.md`. Closure evidence is tracked in issue #11 and PR #10 remains Draft until that closure record is complete.
+For local-Codex/zero-context takeover, read **`AGENTS.md` then `docs/CODEX_HANDOFF.md`**. For the documentation map, read `docs/README.md`. Current implementation/verification state lives in `docs/STATUS.md`; closure evidence is tracked in issue #11 and PR #10 remains Draft until that closure record is complete.
 
 Current pinned references:
 
@@ -27,38 +27,47 @@ Current pinned references:
 
 ## Repository map
 
-- `crates/kanki-domain` — review state machine and stable front-end data model.
-- `crates/kanki-backend` — application-facing backend abstractions.
-- `crates/kanki-renderer` — persistent reviewer packet/document policy.
-- `crates/kanki-platform` — platform boundary.
-- `crates/kanki-app` — executable and self-test entry point.
+- `crates/` — Rust domain/host components. Audit each crate's production/test role before removing scaffolding.
 - `bridge/` — typed semantic Anki review/sync C ABI.
-- `device/` — source-owned Kindle GTK/WebKit, sync and audio executables.
+- `device/` — source-owned Kindle GTK/WebKit, sync, diagnostics and audio executables.
 - `assets/device` — deck/sync/reviewer shell pages.
 - `assets/reviewer` — reviewer runtime and generic old-WebKit compatibility.
+- `scripts/` — runtime scripts installed on Kindle.
+- `tools/` — canonical build, local Docker, policy and developer tooling.
+- `packaging/` — install-facing configuration and shortcuts.
+- `tests/` — bridge/renderer/audio/diagnostics contracts.
 - `third_party/anki` — exact Anki release used by production builds.
 - `third_party/ranki-reference` — historical implementation reference; never linked or packaged.
-- `third_party/kindle-sdk` — extraction/toolchain reference.
-- `docs/` — architecture, decisions, status, handoff and closure gates.
+- `third_party/kindle-sdk` — Kindle system/toolchain reference.
+- `docs/` — architecture, status, local build, testing, parity and handoff documentation.
 
 ## Development
 
+Initialize pins:
+
 ```sh
 git submodule update --init --recursive
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo run -p kanki-app -- --self-test
-python3 tools/check_policy.py
 ```
 
-Use the GitHub workflows as the canonical recipes for typed Anki and KindleHF builds. Do not create a separate undocumented packaging procedure.
+Host gates:
+
+```sh
+sh tools/run_host_gates.sh
+```
+
+Full local Kindle package (recommended while GitHub-hosted Actions are unavailable):
+
+```sh
+bash tools/local_package_docker.sh
+```
+
+The canonical full package recipe is `tools/build_kindle_package.sh`; CI and local builders must call the same script rather than maintaining duplicate build logic.
 
 See `docs/TESTING.md` before producing or installing a device build.
 
 ## Handoff discipline
 
-Before ending a substantial development session, update `docs/STATUS.md`, issue #11 and, when the next action/blocker changes, `docs/RESUME.md`. Architecture changes require an ADR. A future maintainer should be able to continue using only the repository and GitHub history.
+Before ending a substantial development session, update `docs/STATUS.md`, issue #11 and, when the next action/blocker changes, `docs/CODEX_HANDOFF.md`/`docs/RESUME.md`. Architecture changes require an ADR. A future maintainer should be able to continue using only the repository and GitHub history.
 
 ## License
 
