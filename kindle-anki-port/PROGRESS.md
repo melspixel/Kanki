@@ -1,6 +1,6 @@
 # Kindle Anki Port — Current Progress
 
-Updated: 2026-08-21 UTC
+Updated: 2026-08-22 UTC
 
 ## Phase summary
 
@@ -12,11 +12,11 @@ Updated: 2026-08-21 UTC
 | Rust semantic adapter | **host-green checkpoint** | Backend-owned `services::kap_bridge` resolves prior private-service E0624 blocker |
 | Official Anki rslib tests | **green checkpoint** | `539 passed; 0 failed` against pinned Anki 26.08.1 |
 | Real APKG core integration | **green for 5 decks** | question/reveal/rate/close exercised; typed answer observed; AV observed on 3 decks |
-| Kindle native host | host/static green, ARMHF green | strict C99/Werror gates pass; fresh ARM EABI5 hard-float binary produced |
-| Web reviewer | static contract green, device rendering pending | persistent `#qa`, script reinsertion, typed input, paging and compatibility code pass static contract tests |
+| Kindle native host | host/static green checkpoint, ARMHF green checkpoint | strict C99/Werror gates pass; fresh ARM EABI5 hard-float binary produced; canonical-head rerun pending |
+| Web reviewer | **runtime-fixture green; device rendering pending** | static/ES5/CSS contracts plus 10-group public-API reviewer runtime matrix pass; real WebKit/e-ink remains device/rootfs work |
 | Audio | implementation integrated, device audio pending | GStreamer/mixersink worker self-test passes; real Bluetooth/audible route requires PW6 |
-| Sync | implementation present, live-account acceptance pending | `kap-sync` plus collection/full/media/abort ABI compile/export; deterministic worker fixtures exist |
-| Static/lifecycle tests | **green** | injector, semantic/source contract, JS syntax/DOM, C strict build, worker self-tests and lifecycle tests pass |
+| Sync | **deterministic decision/error fixture green; live-account pending** | collection/full/media/abort ABI plus shutdown/error matrix; conflicting full-sync directions now rejected |
+| Static/lifecycle tests | **green checkpoint plus new isolated fixture evidence** | prior complete gate green; 2026-08-22 sync Werror fixture and reviewer runtime matrix pass; full canonical-head gate rerun pending |
 | Host release build | **green checkpoint** | release `libanki.so` built and exports named `kap_*` ABI |
 | ARMHF cross-build | **fresh green checkpoint** | `kap-app`, `kap-audio`, `kap-sync`, `libanki-kindle.so` rebuilt as ARMv7 EABI5 hard-float |
 | ABI/GLIBC audit | **green against KindleHF sysroot** | workers GLIBC_2.4; backend max GLIBC_2.18; exact PW6 5.19.6 runtime libc ceiling independently pinned as GLIBC_2.35 |
@@ -39,7 +39,8 @@ The repository is also no longer dependent on split source archives for the inde
 Detailed evidence is in:
 
 - `docs/VM_BUILD_20260821.md` — first green semantic/ARMHF/package checkpoint;
-- `docs/VM_CONTINUATION_20260821.md` — canonical source cleanup, exact PW6 runtime pin, fresh ARMHF/package rebuild and QEMU status.
+- `docs/VM_CONTINUATION_20260821.md` — canonical source cleanup, exact PW6 runtime pin, fresh ARMHF/package rebuild and QEMU status;
+- `docs/VM_CONTINUATION_20260822.md` — sync hardening, deterministic shutdown/error coverage and executable reviewer runtime fixtures.
 
 ### Full upstream backend tests
 
@@ -59,6 +60,34 @@ Five real decks passed the C ABI reviewer lifecycle test:
 - `COCA-English.apkg`;
 - `新东方 雅思 乱序版.apkg` — AV observed;
 - `百词斩考研.apkg` — AV observed.
+
+### 2026-08-22 deterministic sync / reviewer evidence
+
+The sync worker now rejects simultaneous `--full-upload` and `--full-download` instead of silently allowing the later option to select a destructive direction. Its deterministic fixture covers required-sync decisions, endpoint/timeout/server-USN propagation, open/sync/full/media errors, credential non-disclosure, and signal-driven `abort -> close -> core_free` shutdown ordering.
+
+Validated exact GitHub blobs:
+
+```text
+native/sync.c                     ec6c109f8d331c31aae403b45f9ff09f83272fa8
+tests/fake_sync_backend.c         4ea347196aaa6ead68283867fded7fec21dc536c
+tests/test_sync_worker.sh         17d4874a12a758f1fac1977a8e3ac20fb41fc95d
+```
+
+Result:
+
+```text
+test_sync_worker: ok
+```
+
+A dependency-free Node/vm fake-DOM harness now drives production `web/reviewer.js` through the public `window.kapReviewer` API. Ten fixture groups cover mixed CJK/Latin rendering, card classes/CSS/intervals, typed input, inline-script replacement, desktop replay-control removal, AV marker/replay/TTS routing, nested-scroll flattening, answer separator behavior, state transitions, render/backend errors and touch paging.
+
+Result:
+
+```text
+test_reviewer_runtime_fixtures: ok (10 fixture groups)
+```
+
+`testenv/scripts/run-static-gates.sh` includes the runtime reviewer fixture. The then-current reviewer/CSS files used for local execution were independently verified against their Git blob SHAs before the test.
 
 ### Fresh ARMHF / GLIBC checkpoint
 
@@ -84,19 +113,21 @@ This archive passes manifest, privacy/state, required-file and ZIP-integrity gat
 
 A statically linked ARMHF sanity binary produced by KindleHF executes under QEMU 8.2.2. The toolchain sysroot itself is deliberately not treated as a PW6 runtime replacement: attempting dynamic execution against it triggered an `ld.so` relocation assertion even for a trivial program. The exact-rootfs verifier and smoke harness are therefore required before target-runtime acceptance.
 
+The VM retains exact PW6 firmware/rootfs/runtime oracle reports and hashes but not the complete extracted rootfs bytes; report files are not accepted as a substitute for an actual target rootfs in the dynamic QEMU gate.
+
 ## Build strategy after Actions quota exhaustion
 
-- Iterative builds/tests run in the VM/container with prepared offline Rust/Cargo/protoc/KindleHF inputs.
+- Iterative builds/tests run in the VM/container with prepared offline Rust/Cargo/protoc/KindleHF inputs when available.
 - Meaningful source and evidence are written to GitHub immediately.
-- `.github/workflows/kindle-anki-port.yml` is maintained as the independent reproducibility definition and now consumes the ordinary source tree directly.
+- `.github/workflows/kindle-anki-port.yml` is maintained as the independent reproducibility definition and consumes the ordinary source tree directly.
 - GitHub Actions remains a later independent rerun when quota is available, not the primary development compiler.
 - The user's local host is not used for ordinary compilation.
 
 ## Current ordered next actions
 
-1. Re-materialize/checkout the current canonical GitHub ordinary tree in the VM and rerun static, full rslib, real-APKG, ARMHF and package gates so final provenance points to the canonical source head rather than a prior VM checkpoint.
+1. Re-materialize/checkout the then-current canonical GitHub ordinary tree in a build-capable VM and rerun the complete static gate, full rslib, real-APKG, ARMHF and package gates so final provenance points to the canonical source head rather than a prior VM checkpoint.
 2. Obtain the exact checksum-verified PW6 5.19.6 rootfs bytes as a private test input, run `verify-pw6-rootfs.py`, then execute backend/audio/sync QEMU smoke.
-3. Add broader deterministic renderer fixtures and sync decision/error cases.
+3. Extend renderer evidence from the new public-API fake-DOM runtime matrix toward target-WebKit/rootfs rendering and additional backend-rendered packet fixtures where useful.
 4. Persist the final canonical-head `Kindle-Anki-Port-PW6-armhf.zip`, exact SHA-256, package contents, ABI/GLIBC reports and test report durably on GitHub.
 5. Begin PW6 hardware-in-the-loop acceptance only after all non-hardware gates above are green and persisted.
 
