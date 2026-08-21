@@ -55,6 +55,8 @@ The permanent invariants are enumerated in `docs/RESUME.md`. In particular:
 - typed semantic Anki bridge;
 - deck-agnostic renderer compatibility only;
 - explicit collection ownership across review/sync;
+- one manifest-owned PW6 `flock` inode whose descriptor is inherited only by
+  the active reviewer/sync collection worker; PID/path checks are not locks;
 - `anki_data` is never part of install/upgrade/rollback mutation;
 - release components must refuse mixed build identities;
 - launch, standalone sync and diagnostic reports share the packaged read-only
@@ -159,7 +161,9 @@ canonical package exists for the clean current `HEAD`. It authenticates the
 fixed official PW6 5.19.6 firmware, rootfs and TTS squashfs, checks ARMHF
 attributes/symbol versions/dependency closures, and executes loader-level
 UI/backend/audio probes plus the complete packaged install verifier through the
-PW6 BusyBox shell. It also runs the actual packaged redacted-report script with
+PW6 BusyBox shell. It executes the shared operation-lock helper with the
+firmware's actual `/usr/bin/flock`, including inherited-worker lifetime, and
+also runs the actual packaged redacted-report script with
 synthetic private sentinels and rejects non-private, incomplete or leaking
 output. Its firmware cache and evidence remain below ignored `out/`; no
 firmware bytes enter the package. Passing is Gate D evidence and must retain

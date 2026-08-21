@@ -355,6 +355,8 @@ Do not violate these during cleanup or debugging:
 12. Package identity and manifest mismatch must fail closed.
 13. Default diagnostics are bounded and privacy-safe; raw note/card content is opt-in.
 14. Toolchains/dependencies are pinned/checksummed.
+15. Reviewer and sync collection workers serialize on the manifest-owned PW6
+    `flock` inode; PID/path metadata is never treated as a lock.
 
 ## 7. Local build is now the primary engineering path
 
@@ -488,6 +490,9 @@ Issue #11 is authoritative, but expect work in these areas:
 - queue/render/AV/type-answer/answer/bury semantics;
 - effective deck-config autoplay and answer-side question-audio replay;
 - sync/full-sync/media-sync lifecycle;
+- collection-operation contention, launcher handoff and wrapper/worker signal
+  lifetime pass on host; the fixed PW6 rootfs gate is canonical and physical
+  interruption/suspend behavior remains separate;
 - ARMHF Anki library plus fixed PW6 rootfs ABI/loader audit; real device
   execution remains separate;
 - native GTK2/WebKit app launch on PW6;

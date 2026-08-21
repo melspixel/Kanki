@@ -27,6 +27,8 @@ A GitHub job that terminates with no step list is an infrastructure/account/repo
   or non-integer values;
 - renderer diagnostics contract: metrics contain no element text; raw capture is disabled by default and bounded when enabled;
 - launcher/report shell syntax;
+- collection-operation contention, exact launcher-to-sync descriptor handoff,
+  signal forwarding and inherited-worker lock lifetime;
 - package manifest validation;
 - pinned/checksummed KindleHF toolchain policy (no floating `latest` build input).
 
@@ -119,6 +121,10 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
 - execute the packaged report under the PW6 BusyBox shell with synthetic
   private sentinels and require 0700/0600 staging/archive modes, atomic cleanup,
   retained safe metrics and no secret/config/raw-capture content;
+- execute the packaged collection-operation helper with the actual fixed PW6
+  `/usr/bin/flock` and BusyBox shell; a second descriptor must fail with 74,
+  launcher handoff must validate, and a worker must retain the lock after its
+  wrapper descriptor closes;
 - package contains no Amazon firmware or proprietary library bytes.
 
 Gate D rootfs evidence must retain the firmware/rootfs/TTS hashes, package
@@ -139,7 +145,8 @@ or prove display/audio output, Lab126 service behavior or computed geometry.
 8. Answer at least one card with each rating, bury one card and restart.
 9. Sync, restart, and verify schedule/media integrity on desktop Anki.
 10. Exercise explicit full-upload/full-download decision paths on a disposable/safely backed-up collection.
-11. Exercise back/exit, duplicate launch, sleep/wake and USB connection.
+11. Exercise back/exit, duplicate launch, standalone-sync exclusion,
+   interruption/forced wrapper exit, sleep/wake and USB connection.
 12. Export the default diagnostic bundle and confirm it contains no credentials, database, raw note text or raw card captures.
 13. If renderer source capture is required, enable `enable-render-capture`, confirm only the bounded first render set is written, inspect/share deliberately, then disable it.
 14. Roll back to the previous release without touching `anki_data`.

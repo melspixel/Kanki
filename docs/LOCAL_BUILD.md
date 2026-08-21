@@ -108,6 +108,10 @@ package plus GTK2/GObject/WebKitGTK/X11/GStreamer dependency closures with the
 PW6 loader, and executes the device UI/backend and audio capability probes via
 QEMU/chroot. It also executes the actual packaged install verifier over the
 complete package tree through the PW6 BusyBox shell. It then executes the
+manifest-owned collection-operation helper with the firmware's actual
+util-linux `flock` and BusyBox shell, including a conflicting descriptor,
+exact launcher handoff and a worker that outlives its wrapper descriptor. It
+then executes the
 packaged redacted-report script at its real `/mnt/us/extensions/kanki` path
 with synthetic credentials, config and raw-capture sentinels. The audit
 requires private/atomic output, retained safe metrics, passing integrity and

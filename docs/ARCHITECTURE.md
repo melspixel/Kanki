@@ -42,9 +42,16 @@ The platform layer owns:
 - Lab126 W3C-CSS-pixel and full-content-zoom extensions;
 - e-ink refresh policy;
 - native audio through GStreamer `mixersink`;
-- safe filesystem paths and single-instance lifecycle.
+- safe filesystem paths and single-instance/collection-owner lifecycle.
 
 The platform layer is loaded against the audited firmware ABI. It must feature-detect private Lab126 symbols and log the selected path.
+
+Reviewer and sync processes share one manifest-owned operation-lock inode.
+The fixed PW6 `/usr/bin/flock` holds an exclusive descriptor lock before any
+process opens the collection; the active reviewer or sync worker inherits that
+descriptor, while audio and diagnostics do not. PID/mode files are diagnostic
+metadata and never authorize stale-lock deletion. See
+`adr/0005-kernel-owned-collection-operation-lock.md`.
 
 ## Data flow
 
@@ -61,6 +68,9 @@ Kindle button/touch -> native device controller -> semantic bridge -> Anki Backe
 - A rendering error cannot mutate scheduling state.
 - A rating is committed only after the answer side is visible.
 - Sync and media sync are explicit operations with progress/abort surfaces.
+- Reviewer and sync collection opens are mutually exclusive across wrapper
+  exit and `SIGKILL`; kernel descriptor lifetime, not path existence, owns the
+  boundary.
 - Device packages contain build IDs and reject mixed component versions.
 
 ## What is intentionally not reused
