@@ -35,6 +35,7 @@ jobs:
         run: |
           gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_device.c -Ibridge
           gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_sync_cli.c -Ibridge
+          gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_raise.c
           node --check assets/device/decks.js
           node --check assets/reviewer/reviewer.js
           sh -n scripts/kanki-launch.sh
@@ -56,7 +57,7 @@ jobs:
           wget -q https://github.com/KindleModding/koxtoolchain/releases/latest/download/kindlehf.tar.gz -O /tmp/kindlehf.tar.gz
           tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
           echo "$HOME/x-tools/arm-kindlehf-linux-gnueabihf/bin" >> "$GITHUB_PATH"
-      - name: Build dynamic Kindle UI and sync clients
+      - name: Build dynamic Kindle UI, sync and reactivation clients
         run: |
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             -DKANKI_BUILD_COMMIT=\"$GITHUB_SHA\" \
@@ -64,24 +65,34 @@ jobs:
             device/kanki_device.c -ldl -o kanki-device
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             device/kanki_sync_cli.c -ldl -o kanki-sync
-          file kanki-device kanki-sync
+          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror \
+            device/kanki_raise.c -ldl -o kanki-raise
+          file kanki-device kanki-sync kanki-raise
           arm-kindlehf-linux-gnueabihf-readelf -h kanki-device | tee device-elf.txt
           arm-kindlehf-linux-gnueabihf-readelf -h kanki-sync | tee sync-elf.txt
+          arm-kindlehf-linux-gnueabihf-readelf -h kanki-raise | tee raise-elf.txt
           arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-device \
             | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee device-glibc.txt || true
           arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-sync \
             | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee sync-glibc.txt || true
+          arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-raise \
+            | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee raise-glibc.txt || true
           arm-kindlehf-linux-gnueabihf-nm -D kanki-device | grep -E ' U (dlopen|dlsym|dlclose)' | tee device-dynamic-imports.txt
           arm-kindlehf-linux-gnueabihf-nm -D kanki-sync | grep -E ' U (dlopen|dlsym|dlclose)' | tee sync-dynamic-imports.txt
+          arm-kindlehf-linux-gnueabihf-nm -D kanki-raise | grep -E ' U (dlopen|dlsym|dlclose)' | tee raise-dynamic-imports.txt
       - uses: actions/upload-artifact@v4
         with:
           name: kindle-device-shell
           path: |
             kanki-device
             kanki-sync
+            kanki-raise
             device-elf.txt
             sync-elf.txt
+            raise-elf.txt
             device-glibc.txt
             sync-glibc.txt
+            raise-glibc.txt
             device-dynamic-imports.txt
             sync-dynamic-imports.txt
+            raise-dynamic-imports.txt
