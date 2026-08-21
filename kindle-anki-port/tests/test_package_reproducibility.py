@@ -16,6 +16,9 @@ PACKAGE_SCRIPT = SOURCE_ROOT / "testenv/scripts/package-and-audit.sh"
 SOURCE_DATE_EPOCH = 1787340224
 BUILD_COMMIT = "0123456789abcdef0123456789abcdef01234567"
 ANKI_COMMIT = json.loads((SOURCE_ROOT / "upstream.lock.json").read_text(encoding="utf-8"))["commit"]
+ROOTFS_IMAGE_SHA256 = json.loads(
+    (SOURCE_ROOT / "testenv/qemu/pw6-5.19.6-rootfs-manifest.json").read_text(encoding="utf-8")
+)["rootfs_image"]["sha256"]
 EXECUTABLES = {
     "extensions/kindle-anki-port/kap-app",
     "extensions/kindle-anki-port/kap-audio",
@@ -81,6 +84,7 @@ def write_qemu_provenance(
     *,
     source_commit: str = BUILD_COMMIT,
     anki_commit: str = ANKI_COMMIT,
+    rootfs_image_sha256: str = ROOTFS_IMAGE_SHA256,
     binary_hash_overrides: dict[str, str] | None = None,
 ) -> None:
     overrides = binary_hash_overrides or {}
@@ -92,6 +96,7 @@ def write_qemu_provenance(
         "rootfs_manifest_id=pw6-5.19.6-rootfs-manifest.json",
         f"rootfs_manifest_sha256={sha256(manifest)}",
         "rootfs_verified=true",
+        f"rootfs_image_sha256={rootfs_image_sha256}",
     ]
     for name in ("libanki-kindle.so", "kap-app", "kap-audio", "kap-sync"):
         lines.append(f"{name}_sha256={overrides.get(name, sha256(armhf / name))}")
@@ -103,7 +108,8 @@ def make_qemu(root: Path, armhf: Path, project: Path) -> Path:
     qemu.mkdir()
     (qemu / "QEMU-SMOKE.txt").write_text("QEMU smoke: PASS\n", encoding="utf-8")
     (qemu / "rootfs-verification.txt").write_text(
-        "PW6 rootfs verification: PASS\n", encoding="utf-8"
+        f"rootfs image sha256: PASS {ROOTFS_IMAGE_SHA256}\nPW6 rootfs verification: PASS\n",
+        encoding="utf-8",
     )
     (qemu / "backend-smoke.txt").write_text("qemu backend smoke: ok\n", encoding="utf-8")
     (qemu / "audio-self-test.txt").write_text("kap-audio self-test: ok\n", encoding="utf-8")
@@ -241,6 +247,10 @@ def main() -> int:
         wrong_qemu_anki = run_package(project, armhf, qemu, dist, release, tz="UTC", mask=0o022)
         assert_provenance_rejected(wrong_qemu_anki, "QEMU anki_commit mismatch")
 
+        write_qemu_provenance(qemu, armhf, project, rootfs_image_sha256="a" * 64)
+        wrong_rootfs_image = run_package(project, armhf, qemu, dist, release, tz="UTC", mask=0o022)
+        assert_provenance_rejected(wrong_rootfs_image, "QEMU rootfs image hash mismatch")
+
         write_qemu_provenance(
             qemu,
             armhf,
@@ -284,6 +294,8 @@ def main() -> int:
             raise AssertionError("package provenance omitted canonical archive hash")
         if f"rootfs_manifest_sha256={sha256(project / 'testenv/qemu/pw6-5.19.6-rootfs-manifest.json')}\n" not in provenance:
             raise AssertionError("package provenance omitted rootfs manifest hash")
+        if f"rootfs_image_sha256={ROOTFS_IMAGE_SHA256}\n" not in provenance:
+            raise AssertionError("package provenance omitted canonical rootfs image hash")
         if "qemu_provenance_sha256=" not in provenance:
             raise AssertionError("package provenance omitted QEMU provenance hash")
 
