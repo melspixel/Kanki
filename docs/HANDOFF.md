@@ -109,7 +109,11 @@ The canonical recipe emits `archive-info.txt`, sorts regular-file paths, fixes
 package permissions and derives ZIP timestamps from the source commit epoch.
 `tools/create_reproducible_zip.py` is an internal helper of that recipe, not a
 second package recipe. Release evidence compares two clean full builds of the
-same candidate byte-for-byte; matching manifests alone are insufficient.
+same candidate byte-for-byte using distinct empty Cargo target volumes;
+matching manifests or two runs reusing one generated `anki_i18n` cache are
+insufficient. The recipe authenticates the fixed Anki i18n build generator,
+uses only ordered build-time maps, records the normalization hashes, and
+restores the submodule before exit. See ADR 0004.
 
 Host reviewer tests use a project-local, reproducible JavaScript toolchain:
 `tools/install_host_node.sh` checksum-verifies Node 20.18.2 for the supported
@@ -155,9 +159,11 @@ canonical package exists for the clean current `HEAD`. It authenticates the
 fixed official PW6 5.19.6 firmware, rootfs and TTS squashfs, checks ARMHF
 attributes/symbol versions/dependency closures, and executes loader-level
 UI/backend/audio probes plus the complete packaged install verifier through the
-PW6 BusyBox shell. Its firmware cache and evidence remain below ignored
-`out/`; no firmware bytes enter the package. Passing is Gate D evidence and
-must retain `hardware_execution=not_run` until the exact ZIP runs on PW6.
+PW6 BusyBox shell. It also runs the actual packaged redacted-report script with
+synthetic private sentinels and rejects non-private, incomplete or leaking
+output. Its firmware cache and evidence remain below ignored `out/`; no
+firmware bytes enter the package. Passing is Gate D evidence and must retain
+`hardware_execution=not_run` until the exact ZIP runs on PW6.
 
 ## Build and CI ownership map
 
@@ -191,13 +197,17 @@ When GitHub Actions is unavailable or untrusted, record at minimum:
 - builder platform (`linux/amd64` by default on Apple Silicon);
 - Rust version (`1.92.0` for this line);
 - `toolchain-info.txt` including koxtoolchain version/checksum;
+- `anki-i18n-info.txt` including authenticated upstream/normalized hashes;
 - `mathjax-info.txt` and `archive-info.txt`;
 - generated ZIP SHA-256;
 - `package-exports.txt` and GLIBC evidence;
 - package manifest verification result;
 - any warnings or emulation limitations.
 
-Where practical, perform a second clean rebuild before declaring a release candidate and compare package contents/manifest. Bit-for-bit reproducibility is a separate property to verify, not something to assume.
+Perform two clean builds with distinct empty Cargo target volumes before
+declaring a release candidate. Compare backend, `BUILD.json`, manifest,
+archive evidence and ZIP byte-for-byte. Bit-for-bit reproducibility is a
+separate property to verify, not something to assume.
 
 ## Diagnostic bundle
 
@@ -213,6 +223,11 @@ A single command must create a redacted ZIP containing enough information to dia
 - sync state/error category without credentials.
 
 Raw card HTML/CSS capture is explicit opt-in, bounded, and never automatically included in the standard report.
+
+Report creation must use private 0700 directory/work-tree modes and a 0600
+archive. A unique partial archive is published atomically only after success;
+failure and signal paths remove owned staging without following symbolic output
+roots.
 
 The default bundle must not contain:
 

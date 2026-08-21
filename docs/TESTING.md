@@ -90,6 +90,8 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
 
 - cross-build ARMv7 hard-float with checksum-pinned KindleHF toolchain;
 - record the resolved toolchain release and SHA-256 in build identity;
+- authenticate and record the fixed Anki i18n generator plus its deterministic
+  build-only normalization identity;
 - compare GLIBC/GCC symbol requirements with audited rootfs;
 - verify required standard and Lab126 symbols;
 - run `bash tools/local_pw6_rootfs_audit.sh` against the authenticated official
@@ -102,6 +104,8 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
 - produce one reproducible self-identifying ZIP with the canonical package
   recipe, whether the executor is hosted or local;
 - compare two clean canonical builds of the exact candidate byte-for-byte;
+- use distinct empty Cargo target volumes for that comparison so a cached
+  generated `anki_i18n` artifact cannot hide source nondeterminism;
 - bind sorted archive paths, permissions and timestamps to source-controlled
   inputs and record the source date epoch/archive hash;
 - verify `MANIFEST.sha256` plus the packaged authenticated verifier against the
@@ -112,6 +116,9 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
   standalone sync and report generation do not access log, lock or report
   inputs before verifier success;
 - verify package includes diagnostic/report runtime and does not include `extensions/ranki`, `collection.anki2` or user `config.ini`;
+- execute the packaged report under the PW6 BusyBox shell with synthetic
+  private sentinels and require 0700/0600 staging/archive modes, atomic cleanup,
+  retained safe metrics and no secret/config/raw-capture content;
 - package contains no Amazon firmware or proprietary library bytes.
 
 Gate D rootfs evidence must retain the firmware/rootfs/TTS hashes, package

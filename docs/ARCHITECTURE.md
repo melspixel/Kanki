@@ -15,6 +15,11 @@ into versioned JSON packets consumed by the native device application.
 
 Owned by Anki: collection schema, FSRS/scheduler, rendering, sync, media metadata, deck collapse state and AV extraction.
 
+The fixed upstream i18n build generator is authenticated and normalized to
+ordered build-time maps before host/ARMHF compilation, then restored. This
+changes resource generation order only; Anki runtime keys, values and product
+semantics remain upstream-owned. See `adr/0004-deterministic-anki-i18n-build.md`.
+
 ### 2. Host domain oracle
 
 `kanki-domain` is a small deterministic host-test state machine. It knows

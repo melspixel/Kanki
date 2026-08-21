@@ -39,8 +39,9 @@ The wrapper:
 4. marks mounted repositories as safe Git directories inside the container;
 5. reuses named Docker volumes for Cargo and KindleHF downloads;
 6. calls the canonical `tools/build_kindle_package.sh` recipe;
-7. performs manifest, exported-symbol and target-GLIBC gates;
-8. restores the temporary source injection into the Anki submodule even when the build fails.
+7. authenticates and deterministically orders the fixed Anki i18n generator;
+8. performs manifest, exported-symbol and target-GLIBC gates;
+9. restores every temporary Anki source change even when the build fails.
 
 Successful outputs are written to:
 
@@ -52,17 +53,35 @@ out/local-kindle/package-exports.txt
 out/local-kindle/package-glibc.txt
 out/local-kindle/sysroot-glibc.txt
 out/local-kindle/toolchain-info.txt
+out/local-kindle/anki-i18n-info.txt
 out/local-kindle/mathjax-info.txt
 out/local-kindle/archive-info.txt
 ```
 
-`BUILD.json` inside the ZIP records the exact repository commit, Anki pin, Kindle SDK pin, audiobook helper pin, miniaudio pin, MathJax version/checksum, source commit epoch, koxtoolchain version/checksum, target triple and the canonical builder script. `archive-info.txt` records that epoch, the sorted archive file count and the final archive SHA-256.
+`BUILD.json` inside the ZIP records the exact repository commit, Anki pin,
+Kindle SDK pin, audiobook helper pin, miniaudio pin, MathJax
+version/checksum, authenticated Anki i18n normalization identity/hashes,
+source commit epoch, koxtoolchain version/checksum, target triple and the
+canonical builder script. `archive-info.txt` records that epoch, the sorted
+archive file count and the final archive SHA-256.
 
 The canonical recipe creates the ZIP from sorted regular-file paths with fixed
 permissions and the source commit time. Source checkout mtimes and package-tree
 creation order therefore do not affect the archive. A host contract checks
 this property, but release evidence still requires two clean full builds of
 the exact candidate and a byte comparison.
+
+Use distinct previously unused target volumes for that comparison; rebuilding
+twice against one cached `anki_i18n` artifact does not prove source
+reproducibility. Record the first output hashes before the second command
+replaces `out/local-kindle/`:
+
+```sh
+KANKI_LOCAL_TARGET_VOLUME=kanki-candidate-a bash tools/local_package_docker.sh
+shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip
+KANKI_LOCAL_TARGET_VOLUME=kanki-candidate-b bash tools/local_package_docker.sh
+shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip
+```
 
 ## PW6 5.19.6 rootfs ABI audit
 
@@ -88,9 +107,13 @@ compares required GLIBC/GCC/LIBATOMIC symbol versions with the rootfs, resolves
 package plus GTK2/GObject/WebKitGTK/X11/GStreamer dependency closures with the
 PW6 loader, and executes the device UI/backend and audio capability probes via
 QEMU/chroot. It also executes the actual packaged install verifier over the
-complete package tree through the PW6 BusyBox shell. The TTS squashfs is staged
-at `/usr/lib/tts` to model the firmware runtime mount; it is not patched or
-copied into the Kanki package.
+complete package tree through the PW6 BusyBox shell. It then executes the
+packaged redacted-report script at its real `/mnt/us/extensions/kanki` path
+with synthetic credentials, config and raw-capture sentinels. The audit
+requires private/atomic output, retained safe metrics, passing integrity and
+absence of every private sentinel. The TTS squashfs is staged at
+`/usr/lib/tts` to model the firmware runtime mount; it is not patched or copied
+into the Kanki package.
 
 Evidence is written below:
 
@@ -172,6 +195,7 @@ out/host-anki/apkg-packets.json
 out/host-anki/apkg-reviewer.txt
 out/host-anki/node-install.txt
 out/host-anki/jsdom-install.txt
+out/host-anki/anki-i18n-info.txt
 out/host-anki/sync-integration.txt
 out/host-anki/bridge-exports.txt
 out/host-anki/bridge-dynamic.txt
@@ -227,18 +251,27 @@ For every meaningful local build, record:
 - builder platform (`linux/amd64` by default);
 - Rust version;
 - `toolchain-info.txt`;
+- `anki-i18n-info.txt`;
 - `mathjax-info.txt` and `archive-info.txt`;
 - ZIP SHA-256;
 - package exported-symbol and GLIBC evidence files;
 - manifest verification result;
 - whether this is the first build or a repeated clean rebuild.
 
-Where practical, perform a second clean rebuild before freezing a release candidate and compare package contents/manifest. Bit-for-bit reproducibility is a separate gate to establish rather than assume.
+Perform the candidate comparison with distinct empty target volumes and compare
+the backend, manifest, `BUILD.json`, archive evidence and ZIP byte-for-byte.
+Bit-for-bit reproducibility is a separate gate to establish rather than
+assume.
 
 ## Troubleshooting
 
 If Docker reports an architecture warning on Apple Silicon, confirm that amd64 emulation is enabled and leave `KANKI_LOCAL_PLATFORM=linux/amd64`. Do not switch to an ARM64 builder unless a separately checksum-pinned ARM64-host KindleHF toolchain is introduced and documented.
 
-If the build is interrupted, rerun the same command. Cargo and KindleHF downloads are cached. The builder restores the temporary `third_party/anki/rslib` bridge injection with a shell trap, so repeated builds must not accumulate source edits.
+If the build is interrupted, rerun the same command. Cargo and KindleHF
+downloads are cached. The builder restores the temporary
+`third_party/anki/rslib` bridge injection and i18n build-order normalization
+with a shell trap, so repeated builds must not accumulate source edits. An
+i18n source-identity failure means the fixed upstream file or gitlink drifted;
+do not bypass the hash check.
 
 If the package script reports a pin mismatch, do not bypass it. Update the checkout/submodules to the commit documented by `docs/RESUME.md` and retry.

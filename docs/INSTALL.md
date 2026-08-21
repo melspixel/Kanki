@@ -46,6 +46,11 @@ Restart Kanki. For the first bounded set of renders, raw HTML/CSS/AV metadata is
 
 The normal redacted diagnostic bundle never includes these raw capture files. Share them only deliberately when card content is acceptable to disclose.
 
+`shortcut_kanki_report.sh` writes below `/mnt/us/kanki_reports` with a private
+0700 output root/work tree and a 0600 archive. Each run uses a timestamp/PID
+name, publishes through a unique partial archive, and removes staging on
+failure. A symbolic output root or pre-existing output path is refused.
+
 Diagnostic directory/service startup failure is fatal and is written explicitly to `kanki.log`; Kanki must not silently claim diagnostics are enabled when no directory exists.
 
 ## Full-sync decision
