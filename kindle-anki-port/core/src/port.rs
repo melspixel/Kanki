@@ -669,8 +669,8 @@ pub extern "C" fn kap_set_deck_collapsed_json(
 pub extern "C" fn kap_next_question_json(core: *mut KapCore) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        if core.phase == Phase::Answer {
-            return Err("current answer must be rated or buried before advancing".into());
+        if core.phase != Phase::Idle || core.current.is_some() {
+            return Err("current card must be rated or buried before advancing".into());
         }
         let mut queue = kap_bridge::get_queued_cards(&core.backend, GetQueuedCardsRequest {
                 fetch_limit: 1,
