@@ -32,11 +32,29 @@ canonical_path() {
     printf '%s\n' "$target"
 }
 
-verified_app_pid() {
+pid_is_running() {
     pid=$1
     [ -n "$pid" ] || return 1
     case "$pid" in *[!0-9]*) return 1;; esac
     kill -0 "$pid" 2>/dev/null || return 1
+    if [ -r "/proc/$pid/stat" ]; then
+        stat_line=$(cat "/proc/$pid/stat" 2>/dev/null || true)
+        case "$stat_line" in
+            *') '*)
+                stat_tail=${stat_line##*) }
+                state=${stat_tail%% *}
+                [ "$state" = Z ] && return 1
+                ;;
+        esac
+    fi
+    return 0
+}
+
+verified_app_pid() {
+    pid=$1
+    [ -n "$pid" ] || return 1
+    case "$pid" in *[!0-9]*) return 1;; esac
+    pid_is_running "$pid" || return 1
     exe=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
     [ "$exe" = "$(canonical_path "$APP_BIN")" ]
 }
@@ -101,12 +119,12 @@ acquire_sync_lock() {
                 ;;
             *)
                 unknown_attempts=0
-                if kill -0 "$owner" 2>/dev/null; then
+                if pid_is_running "$owner"; then
                     log "sync refused while operation lock is busy mode=${mode:-unknown} owner=$owner"
                     return 74
                 fi
                 latest_owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
-                if [ "$latest_owner" = "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+                if [ "$latest_owner" = "$owner" ] && ! pid_is_running "$owner"; then
                     rm -rf "$OP_LOCK" 2>/dev/null || true
                     continue
                 fi
