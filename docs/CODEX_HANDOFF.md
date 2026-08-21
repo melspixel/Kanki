@@ -77,25 +77,38 @@ That monorepo split is defensible. The main sources of confusion are elsewhere:
 
 ### 4.1 Too many historical branches
 
-Observed experimental/history branches include, in addition to `main` and `rewrite-v1`:
+The following preservation ledger was captured with a read-only
+`git ls-remote --heads origin` on 2026-08-21, before deleting any branch.
+At capture time `main` was
+`f9d2c884a3e191f5975d484675a3283d1bbb4c3d` and `rewrite-v1` was
+`48e63674036a370fcfbfd5471ff8ea3ee25b30a7`. A deleted name can be
+reconstructed directly from the recorded object ID.
 
-- `test2-ci`
-- `test3-native-audio`
-- `test4-audio-ui`
-- `test4-final`
-- `test5-coca-layout`
-- `anki-26.08-backend`
-- `refactor-anki-compat`
-- `renderer-adaptive-v2`
-- `dropin-native-renderer`
-- `desktop-anki-kindle-port`
-- `kanki-next-bootstrap`
-- `kindle-anki-port`
-- `kindleanki-v1-closure`
+| Historical remote branch | Preserved tip SHA | Initial ancestry/content disposition |
+| --- | --- | --- |
+| `anki-26.08-backend` | `b872a164c58aa5955975169944a647fdd678e99e` | non-ancestor; content audit required |
+| `ci-validation` | `54127ee6e21303ba1ba96477dedd467b7b2b5205` | non-ancestor; content audit required |
+| `desktop-anki-kindle-port` | `f9d2c884a3e191f5975d484675a3283d1bbb4c3d` | identical to preserved `main` tip |
+| `dropin-native-renderer` | `4212ab0054faaf4c6f156835729f69d87500148a` | non-ancestor; content audit required |
+| `handoff-codex-cleanup` | `92a7313a2608324616ee140fc030bcc5b31787fb` | temporary non-ancestor; content audit required |
+| `kanki-next-bootstrap` | `86dcd09f3a3f34e7669ddd310dc360781a98ed74` | non-ancestor; content audit required |
+| `kindle-anki-port` | `afe207d3a771273f75f306c482b65b9cfd8c1bbe` | non-ancestor; content audit required |
+| `kindleanki-v1-closure` | `90dae0fdf57889fc70d4ac447908eee04287394f` | fully contained in `rewrite-v1` |
+| `refactor-anki-compat` | `2bc08be6b6cb27c70fff55f2c27fbdc3d1c8a075` | fully contained in `rewrite-v1` |
+| `renderer-adaptive-v2` | `0993c13d87819c11ea161d3e3c07c8363552b411` | non-ancestor; content audit required |
+| `repo-cleanup-v1` | `b683b9e4ca711d2276d70c28f6364a0d1266b5e2` | temporary non-ancestor; content audit required |
+| `test2-ci` | `d656669deb06ed0d068a86f9fbffdabf33914163` | non-ancestor single trigger commit; verify before deletion |
+| `test3-native-audio` | `09bc1a13aaf0d26da64c7054fc07aa45ddc9dec7` | fully contained in `rewrite-v1` |
+| `test4-audio-ui` | `a7d34dd1aa07cc4a8ad79f79390d48b5e2ea7c35` | fully contained in `rewrite-v1` |
+| `test4-final` | `40e3ed3ce4c36a0e6ec92345909ceae563dde53e` | fully contained in `rewrite-v1` |
+| `test5-coca-layout` | `1cafa1a754577a79b6d08ccad70a0bcf684ac46b` | fully contained in `rewrite-v1` |
 
-There may be others. These branches make GitHub look like it contains many projects when most are historical experiments.
-
-Do not delete them blindly. First preserve their tips as archival tags or record a branch→commit map, verify that no unmerged source is required by `rewrite-v1`, then delete obsolete branches using normal Git/GitHub tooling. The intended long-term branch set is small:
+This ledger preserves names and tips but is not permission to discard unique
+content. For every non-ancestor branch, inspect its unique commits and tree,
+record why required behavior is present or intentionally rejected in
+`rewrite-v1`, and only then delete the remote name. These branches make GitHub
+look like it contains many products when most are historical experiments. The
+intended long-term branch set is small:
 
 - `main`
 - one active integration branch until release (`rewrite-v1`)
