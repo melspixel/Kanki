@@ -51,6 +51,10 @@ static int write_all(int fd, const char *data, size_t len) {
     return 1;
 }
 
+static void log_literal(const char *text) {
+    write_all(2, text, k_strlen(text));
+}
+
 static int open_render_file(unsigned int seq, const char *suffix) {
     char path[160];
     char num[16];
@@ -100,7 +104,7 @@ static void dump_render_meta(unsigned int seq, const char *base_uri, size_t inpu
 static void log_render_native(unsigned int seq, size_t input_len, size_t patched_len) {
     if (!debug_enabled()) return;
     if (seq == RENDER_CAPTURE_LIMIT + 1) {
-        write_all(2, "KANKI_RENDER_NATIVE|capture-limit-reached|40\n", 45);
+        log_literal("KANKI_RENDER_NATIVE|capture-limit-reached|40\n");
         return;
     }
     if (seq > RENDER_CAPTURE_LIMIT) return;
@@ -110,27 +114,84 @@ static void log_render_native(unsigned int seq, size_t input_len, size_t patched
     write_all(2, "\n", 1);
 }
 
+/* Kindle/Lab126 WebKit scale oracle. These extensions are resolved at runtime
+ * so the shared object remains usable on systems that only expose stock
+ * WebKitGTK 1.x. */
+typedef void *(*web_view_new_fn)(void);
 typedef void (*load_html_fn)(void *web_view, const char *content, const char *base_uri);
 typedef void (*set_zoom_fn)(void *web_view, float zoom_level);
+typedef void (*set_w3c_css_pixels_fn)(int enabled);
+typedef float (*get_pixel_density_fn)(void);
+typedef void (*set_full_content_zoom_fn)(void *web_view, int enabled);
+
+static set_w3c_css_pixels_fn k_set_w3c_css_pixels = NULL;
+static get_pixel_density_fn k_get_pixel_density = NULL;
+static set_full_content_zoom_fn k_set_full_content_zoom = NULL;
+static int scale_api_resolved = 0;
+static int scale_mode = 0; /* 0 unknown, 1 native, 2 fallback missing API, 3 fallback invalid density */
+static int scale_mode_logged = 0;
+
+static void resolve_scale_api(void) {
+    if (scale_api_resolved) return;
+    scale_api_resolved = 1;
+    k_set_w3c_css_pixels = (set_w3c_css_pixels_fn)dlsym(
+        RTLD_NEXT, "webkit_web_view_set_useW3CStd_cssPixelsPerInch");
+    k_get_pixel_density = (get_pixel_density_fn)dlsym(
+        RTLD_NEXT, "webkit_web_view_get_pixel_density");
+    k_set_full_content_zoom = (set_full_content_zoom_fn)dlsym(
+        RTLD_NEXT, "webkit_web_view_set_full_content_zoom");
+}
+
+static void prepare_global_css_pixels(void) {
+    resolve_scale_api();
+    if (k_set_w3c_css_pixels) k_set_w3c_css_pixels(1);
+}
+
+static int density_is_valid(float density) {
+    return density == density && density >= 0.75f && density <= 4.50f;
+}
+
+static void log_scale_mode_once(int mode) {
+    if (scale_mode_logged == mode) return;
+    scale_mode_logged = mode;
+    if (mode == 1) log_literal("KANKI_SCALE|native-css-pixels|full-content-zoom\n");
+    else if (mode == 3) log_literal("KANKI_SCALE|fallback|invalid-pixel-density|zoom=1\n");
+    else log_literal("KANKI_SCALE|fallback|missing-lab126-api|zoom=1\n");
+}
+
+void *webkit_web_view_new(void) {
+    static web_view_new_fn real_fn = NULL;
+    if (!real_fn) {
+        real_fn = (web_view_new_fn)dlsym(RTLD_NEXT, "webkit_web_view_new");
+        if (!real_fn) return NULL;
+    }
+    /* Mesquite enables the global W3C CSS-pixel mode before creating views. */
+    prepare_global_css_pixels();
+    return real_fn();
+}
 
 static const char STYLE_OPEN[] = "<style id=\"kanki-reviewer-compat\">";
 static const char STYLE_CLOSE[] = "</style>";
 static const char RID_OPEN[] = "<script>window.__kankiRenderId=";
 static const char RID_CLOSE[] = ";</script>";
+static const char SCALE_NATIVE[] = "<script>window.__kankiNativeCssPixels=1;document.documentElement.className+=' kanki-native-scale';</script>";
+static const char SCALE_FALLBACK[] = "<script>window.__kankiNativeCssPixels=0;document.documentElement.className+=' kanki-scale-fallback';</script>";
 static const char SCRIPT_OPEN[] = "<script>";
 static const char SCRIPT_CLOSE[] = "</script>";
 
 static char *inject_compat(const char *content, unsigned int seq)
 {
-    const char *head_open, *head_close;
+    const char *head_open, *head_close, *scale_script;
     char rid[16];
     size_t rid_len;
-    size_t content_len, css_len, js_len, so_len, sc_len, ro_len, rc_len, jo_len, jc_len, total;
+    size_t content_len, css_len, js_len, so_len, sc_len, ro_len, rc_len;
+    size_t ss_len, jo_len, jc_len, total;
     char *out, *p;
 
     if (!content) return NULL;
     if (k_strstr(content, "kanki-reviewer-compat") != NULL) return NULL;
 
+    scale_script = scale_mode == 1 ? SCALE_NATIVE : SCALE_FALLBACK;
     content_len = k_strlen(content);
     css_len = k_strlen(KANKI_REVIEWER_CSS);
     js_len = k_strlen(KANKI_COMPAT_JS);
@@ -139,9 +200,11 @@ static char *inject_compat(const char *content, unsigned int seq)
     sc_len = sizeof(STYLE_CLOSE) - 1;
     ro_len = sizeof(RID_OPEN) - 1;
     rc_len = sizeof(RID_CLOSE) - 1;
+    ss_len = k_strlen(scale_script);
     jo_len = sizeof(SCRIPT_OPEN) - 1;
     jc_len = sizeof(SCRIPT_CLOSE) - 1;
-    total = content_len + so_len + css_len + sc_len + ro_len + rid_len + rc_len + jo_len + js_len + jc_len;
+    total = content_len + so_len + css_len + sc_len + ro_len + rid_len + rc_len +
+            ss_len + jo_len + js_len + jc_len;
 
     out = (char *)malloc(total + 1);
     if (!out) return NULL;
@@ -155,9 +218,6 @@ static char *inject_compat(const char *content, unsigned int seq)
         size_t middle_len = (size_t)(head_close - (content + through_open));
         size_t tail_len = content_len - (size_t)(head_close - content);
 
-        /* Reviewer baseline first, then the deck's own CSS. The render-id and
-           compatibility scripts come after deck CSS so diagnostics see exactly
-           the source that legacy WebKit is asked to interpret. */
         k_memcpy(p, content, through_open); p += through_open;
         k_memcpy(p, STYLE_OPEN, so_len); p += so_len;
         k_memcpy(p, KANKI_REVIEWER_CSS, css_len); p += css_len;
@@ -166,6 +226,7 @@ static char *inject_compat(const char *content, unsigned int seq)
         k_memcpy(p, RID_OPEN, ro_len); p += ro_len;
         k_memcpy(p, rid, rid_len); p += rid_len;
         k_memcpy(p, RID_CLOSE, rc_len); p += rc_len;
+        k_memcpy(p, scale_script, ss_len); p += ss_len;
         k_memcpy(p, SCRIPT_OPEN, jo_len); p += jo_len;
         k_memcpy(p, KANKI_COMPAT_JS, js_len); p += js_len;
         k_memcpy(p, SCRIPT_CLOSE, jc_len); p += jc_len;
@@ -177,6 +238,7 @@ static char *inject_compat(const char *content, unsigned int seq)
         k_memcpy(p, RID_OPEN, ro_len); p += ro_len;
         k_memcpy(p, rid, rid_len); p += rid_len;
         k_memcpy(p, RID_CLOSE, rc_len); p += rc_len;
+        k_memcpy(p, scale_script, ss_len); p += ss_len;
         k_memcpy(p, SCRIPT_OPEN, jo_len); p += jo_len;
         k_memcpy(p, KANKI_COMPAT_JS, js_len); p += js_len;
         k_memcpy(p, SCRIPT_CLOSE, jc_len); p += jc_len;
@@ -216,21 +278,42 @@ void webkit_web_view_load_html_string(void *web_view, const char *content, const
     }
 }
 
-void webkit_web_view_set_zoom_level(void *web_view, float zoom_level)
+void webkit_web_view_set_zoom_level(void *web_view, float requested_zoom)
 {
     static set_zoom_fn real_fn = NULL;
+    float density = 1.0f;
+    (void)requested_zoom;
+
     if (!real_fn) {
         real_fn = (set_zoom_fn)dlsym(RTLD_NEXT, "webkit_web_view_set_zoom_level");
         if (!real_fn) return;
     }
-    /* Keep one uniform physical scale, while preserving every relative font
-       size supplied by the deck itself. */
-    if (zoom_level > 1.25f) zoom_level = 1.25f;
-    if (zoom_level < 0.90f) zoom_level = 0.90f;
-    real_fn(web_view, zoom_level);
+
+    prepare_global_css_pixels();
+    if (k_set_w3c_css_pixels && k_get_pixel_density && k_set_full_content_zoom) {
+        density = k_get_pixel_density();
+        if (density_is_valid(density)) {
+            /* Full-content zoom is essential: without it WebKitGTK 1.x scales
+             * text but not replaced elements such as images. */
+            k_set_full_content_zoom(web_view, 1);
+            real_fn(web_view, density);
+            scale_mode = 1;
+            log_scale_mode_once(scale_mode);
+            return;
+        }
+        scale_mode = 3;
+    } else {
+        scale_mode = 2;
+    }
+
+    /* Never apply the panel density when full-content zoom is unavailable;
+     * doing so recreates RAnki's text-only zoom defect. */
+    if (k_set_full_content_zoom) k_set_full_content_zoom(web_view, 1);
+    real_fn(web_view, 1.0f);
+    log_scale_mode_once(scale_mode);
 }
 
-/* Upstream Ranki calls view.expand_all() after every deck-tree refresh. GTK
+/* Upstream RAnki calls view.expand_all() after every deck-tree refresh. GTK
  * starts tree rows collapsed by default, so suppressing only this blanket call
  * gives a compact deck list while preserving normal click-to-expand behavior. */
 void gtk_tree_view_expand_all(void *tree_view)
