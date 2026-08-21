@@ -254,20 +254,33 @@
     return output.join(';') + (output.length ? ';' : '');
   }
 
-  function collectGapRule(selector, body, media, gaps) {
+  function resolvedPx(value, vars) {
+    value = simplifyCalc(resolveValue(value, vars));
+    return /^\s*-?[0-9.]+px\s*$/.test(value) ? parseFloat(value) : null;
+  }
+
+  function collectGapRule(selector, body, vars, media, gaps) {
     var list = declarations(body);
     var display = '';
     var direction = 'row';
     var gap = '';
+    var rowGap = '';
+    var columnGap = '';
     var i;
     for (i = 0; i < list.length; i += 1) {
       var name = list[i].name.toLowerCase();
-      if (name === 'display') display = list[i].value.toLowerCase();
-      else if (name === 'flex-direction') direction = list[i].value.toLowerCase();
-      else if (name === 'gap' || name === 'row-gap' || name === 'column-gap') gap = list[i].value;
+      if (name === 'display') display = trim(list[i].value).toLowerCase();
+      else if (name === 'flex-direction') direction = trim(list[i].value).toLowerCase();
+      else if (name === 'gap') gap = list[i].value;
+      else if (name === 'row-gap') rowGap = list[i].value;
+      else if (name === 'column-gap') columnGap = list[i].value;
     }
-    if ((display === 'flex' || display === 'inline-flex') && /^\s*[0-9.]+px\s*$/.test(gap)) {
-      gaps.push({selector: selector, gap: parseFloat(gap), column: /column/.test(direction), media: media || ''});
+    if (display !== 'flex' && display !== 'inline-flex') return;
+    var column = /column/.test(direction);
+    var value = column ? (rowGap || gap) : (columnGap || gap);
+    var pixels = resolvedPx(value, vars);
+    if (pixels != null && pixels >= 0) {
+      gaps.push({selector: selector, gap: pixels, column: column, media: media || ''});
     }
   }
 
@@ -288,7 +301,7 @@
       } else if (rule.prelude.indexOf('@keyframes') === 0 || rule.prelude.indexOf('@-webkit-keyframes') === 0) {
         output += rule.prelude + '{' + rule.body + '}';
       } else {
-        collectGapRule(rule.prelude, rule.body, media, gaps);
+        collectGapRule(rule.prelude, rule.body, vars, media, gaps);
         output += rule.prelude + '{' + transformDeclarations(rule.body, vars) + '}';
       }
       cursor = rule.closing + 1;
@@ -329,8 +342,11 @@
       for (j = 0; j < nodes.length; j += 1) {
         var children = nodes[j].children;
         for (k = 0; k < children.length; k += 1) {
-          if (rules[i].column) children[k].style.marginBottom = k + 1 < children.length ? rules[i].gap + 'px' : '';
-          else children[k].style.marginRight = k + 1 < children.length ? rules[i].gap + 'px' : '';
+          if (rules[i].column) {
+            children[k].style.marginBottom = k + 1 < children.length ? rules[i].gap + 'px' : '';
+          } else {
+            children[k].style.marginRight = k + 1 < children.length ? rules[i].gap + 'px' : '';
+          }
         }
       }
     }
