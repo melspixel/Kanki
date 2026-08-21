@@ -38,8 +38,13 @@ def main() -> int:
 
     # Release entrypoints must preserve the source -> ARMHF -> exact-rootfs QEMU
     # -> package chain. A plain `make package` must never silently package ARMHF
-    # bytes that have not passed the current QEMU release gate.
+    # bytes that have not passed the current QEMU release gate. Exact-rootfs L2
+    # additionally requires the retained image bytes so the full image SHA can
+    # be verified, not just a selected-file oracle from an extracted directory.
+    require(top_make, "ROOTFS_IMAGE ?=", "top-level Makefile")
     require(top_make, "QEMU ?= $(PROJECT_ROOT)/$(BUILD)/qemu", "top-level Makefile")
+    require(top_make, 'ROOTFS_IMAGE=<retained checksum-verified PW6 rootfs image> is required', "top-level Makefile qemu-smoke")
+    require(top_make, 'ROOTFS_IMAGE="$(ROOTFS_IMAGE)"', "top-level Makefile qemu-smoke")
     require(top_make, 'OUT="$(QEMU)"', "top-level Makefile qemu-smoke")
     require(top_make, 'BUILD_COMMIT="$(BUILD_COMMIT)"', "top-level Makefile qemu-smoke")
     require(top_make, 'QEMU=<fresh run-qemu-smoke output directory> is required', "top-level Makefile package")
@@ -47,6 +52,7 @@ def main() -> int:
 
     require(env_make, 'ANKI="$(ANKI_ROOT)"', "testenv Makefile")
     require(env_make, 'TOOLCHAIN_BIN="$(TOOLCHAIN_BIN)"', "testenv Makefile")
+    require(env_make, 'ROOTFS_IMAGE="$(ROOTFS_IMAGE)"', "testenv Makefile")
     require(env_make, 'python3 scripts/package_audit.py --package "$(PACKAGE)"', "testenv Makefile")
     require(env_make, 'sh "$(PROJECT_ROOT)/tests/test_zombie_operation_lock.sh"', "testenv Makefile")
 
