@@ -18,10 +18,10 @@ Updated: 2026-08-22 UTC
 | Exact-rootfs QEMU provenance | hardened | source/Anki/manifest/ARMHF identity bound; private paths removed from provenance |
 | Package privacy/provenance | hardened | packaging requires matching exact-rootfs QEMU evidence and exact tested ARMHF hashes |
 | Release entrypoints | hardened | Makefile/VM driver/public CI now prevent package-before-exact-QEMU |
-| Test-policy docs | hardened | `TEST_ENVIRONMENT.md` and `testenv/README.md` now encode L1 -> L2 QEMU -> L2.5 package; static contract locks order |
-| Public GitHub Actions | checkpoint-only | intentionally no final ZIP without private rootfs; current capacity unavailable |
+| Test-policy docs | hardened | `TEST_ENVIRONMENT.md`, `testenv/README.md`, and `RELEASE_GATES.md` encode L1 -> L2 QEMU -> L2.5 package -> durable software artifacts -> separate HIL; static contract locks order |
+| Public GitHub Actions | checkpoint-only | intentionally no final ZIP without private rootfs; current runs still fail before recorded steps |
 | Final ZIP persistence | incomplete | old ZIP stale; fresh current-head QEMU-bound installer absent |
-| PW6 hardware acceptance | not started | separate physical final gate |
+| PW6 hardware acceptance | not started | separate physical final gate after software-delivery hashes exist |
 
 ## Important historical checkpoints
 
@@ -156,57 +156,59 @@ VM_RUNBOOK.md                             b00d067e33245ab971c46378d6a81760a02252
 
 Detailed report: `docs/VM_RELEASE_ENTRYPOINT_HARDENING_20260822.md`.
 
-## Test-policy documentation alignment
+## Release-policy documentation alignment
 
-The release-entrypoint audit exposed two policy-document defects:
+A further policy audit found `docs/RELEASE_GATES.md` still described a generic `Package` gate before any exact-rootfs QEMU gate and listed hardware acceptance in the same numbered release sequence. That contradicted the executable QEMU-before-package policy and the separate-HIL completion semantics.
 
-```text
-docs/TEST_ENVIRONMENT.md old state:
-  archive/package audit appeared in L1 before exact-rootfs L2
-
-testenv/README.md old state:
-  step 4 package-and-audit.sh
-  step 5 run-qemu-smoke.sh
-```
-
-Both are corrected to:
+It is now aligned with the other maintained policy surfaces:
 
 ```text
 L0 host/static
 -> L1 ARMHF/ABI
 -> L2 exact PW6 rootfs QEMU
 -> L2.5 package/privacy/reproducibility
--> durable GitHub artifacts
--> separate L5 PW6 HIL
+-> durable GitHub software artifacts
+-> separate physical PW6 HIL
 ```
 
-`tests/test_build_entrypoints.py` now reads both documents and fails static gates if this ordering drifts again.
+`tests/test_build_entrypoints.py` now reads `docs/RELEASE_GATES.md` in addition to `docs/TEST_ENVIRONMENT.md` and `testenv/README.md`, and fails if the document stops requiring exact-rootfs QEMU before package construction or folds HIL back into software delivery.
 
-Current blobs:
+Current release-policy blobs:
 
 ```text
 docs/TEST_ENVIRONMENT.md          86bf0ce922844fcbb74c9af4996d7dbf61635e80
 testenv/README.md                 979e45d878a3255f7ea429b17dec0dd36050f2d9
-tests/test_build_entrypoints.py   2f562fe953202736bb75a870cc6d7d188a5ab6d5
+docs/RELEASE_GATES.md             6b40202cc35115270e72811933fe781b379f8fff
+tests/test_build_entrypoints.py   009872702acab56cb1cd9ca62ce599f9d8352b6a
 ```
 
-Follow-on commits:
+Targeted regression:
 
 ```text
-226a91a4432f9209cc201358a1cd59f9d963528a
-e47a4493b2360f0eb6eb4973eee902a25330175d
-79a92947096b9488003f9eb3016fd40c2bf8b2bd
-d6587acd129c0af9b10eec64d4353fd3b10bd9c7
-2312494b74e17e2b7445b860360c1831bd0cbc99
+old RELEASE_GATES contract: FAIL
+new RELEASE_GATES contract: PASS
+test_build_entrypoints.py py_compile: PASS
+KAP_RELEASE_GATE_POLICY_20260822.log SHA-256
+503bc75f03c1648ec7031eb7919f8a3cdf04a81f159234902a51b4134648218d
 ```
 
-Audit log: `docs/logs/KAP_RELEASE_POLICY_DOC_ALIGNMENT_20260822.log`.
+Commits:
+
+```text
+70e939954f193e7fb70dfb7c9be295156ad6393f
+1baf30a181c6438c08770dce4a29ccc10e750ed0
+5d99fbaf1d0679135001e32609fe90ee677c128d
+61695cc717681c1de64b6bd212465fb7c76b5ae1
+af58e6669dcc2bfc93fac975d746009530d58b54
+```
+
+Detailed report: `docs/VM_RELEASE_GATE_POLICY_HARDENING_20260822.md`.
 
 ## Current validation limitation
 
 No fresh complete current-head build is claimed. The direct execution container still fails ordinary `git clone`/fetch because `github.com` DNS resolution is unavailable (`rc=128`), and the private PW6 rootfs is not mounted.
 
-A recent GitHub Actions run failed before any recorded job step; it provided no code-level diagnostic and is not counted as green or as a source regression result.
+The canonical GitHub Actions run for code head `1baf30a181c6438c08770dce4a29ccc10e750ed0` failed before any recorded job step. Job `96929703461` exposed zero steps and no usable log blob; a rerun request was accepted, but no step-level result was available in this continuation. This is not counted as green and is not treated as a code regression result.
 
 ## Stale installer checkpoint
 
@@ -220,13 +222,13 @@ It cannot satisfy the current QEMU-bound release chain and remains stale.
 ## Current blockers / next actions
 
 1. Materialize the latest clean branch head in a network-capable build VM with exact pinned Anki/Cargo/protoc/KindleHF inputs.
-2. Run complete static gates, including release-entrypoint, VM-driver, QEMU/package and documentation-order contracts.
+2. Run complete static gates, including release-entrypoint, VM-driver, QEMU/package and all three documentation-order contracts.
 3. Run full official Anki backend plus five real APKG integrations from that same source identity.
 4. Run ARMHF cross-build and ABI/GLIBC/export audit.
 5. Supply the checksum-matching private PW6 rootfs and run exact-rootfs QEMU for those exact ARMHF bytes.
 6. Run the QEMU-bound package gate and persist final ZIP/SHA-256/manifest/contents/all reports durably on GitHub.
-7. Perform physical PW6 HIL separately.
+7. Perform physical PW6 HIL separately after software-delivery hashes are recorded.
 
 ## Completion definition
 
-**Not released.** Completion requires the full current-head source -> Anki -> APKG -> ARMHF -> exact-rootfs QEMU -> package -> durable GitHub evidence chain. Physical PW6 acceptance is a separate final gate.
+**Not released.** Completion requires the full current-head source -> Anki -> APKG -> ARMHF -> exact-rootfs QEMU -> package -> durable GitHub evidence chain. Physical PW6 acceptance is a separate final result.
