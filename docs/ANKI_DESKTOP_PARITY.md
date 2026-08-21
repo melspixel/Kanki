@@ -10,9 +10,13 @@ Primary upstream files/protocols:
 
 - `qt/aqt/reviewer.py`
 - `qt/aqt/theme.py`
+- `pylib/anki/cards.py`
+- `pylib/anki/scheduler/v3.py`
+- `pylib/anki/scheduler/legacy.py`
 - `proto/anki/scheduler.proto`
 - `proto/anki/card_rendering.proto`
 - `proto/anki/decks.proto`
+- `proto/anki/deck_config.proto`
 - `proto/anki/sync.proto`
 
 Kanki equivalents:
@@ -40,9 +44,9 @@ Kanki equivalents:
 | Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Near parity; verify cases below |
 | Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` | **Known placement delta: fix required** |
 | Answer separator with FrontSide | Remove `<hr id=answer>` temporarily, then place it immediately before comparison at `[[type:...]]` replacement | Current bridge may prepend separator to complete answer document | **Bug candidate; must fix/test before release** |
-| Autoplay | Only when `card.autoplay()` is true | Reviewer currently auto-plays first extracted AV tag | **Semantic delta; requires backend autoplay flag or deliberate decision** |
-| Answer-side question replay | If `replay_question_audio_on_answer_side()`, answer replay concatenates question + answer tags | Current packet exposes answer tags only | **Semantic delta; requires packet flag/combined AV behavior** |
-| Answer buttons | Desktop can expose 2/3/4 logical buttons depending scheduler/card | Native bottom bar currently always creates 4 buttons | **Semantic delta; needs typed availability/visibility rule** |
+| Autoplay | `Card.autoplay()` is deck-config driven | Reviewer currently auto-plays first extracted AV tag | **Semantic delta; bridge should expose `!disable_autoplay`** |
+| Answer-side question replay | `Card.replay_question_audio_on_answer_side()` is deck-config driven | Current packet exposes answer tags only | **Semantic delta; bridge should expose `!skip_question_when_replaying_answer`** |
+| Answer buttons | Pinned v3 scheduler's `answerButtons()` returns 4 | Native bottom bar owns 4 buttons | Equivalent for supported 26.08.1 v3 scheduler; keep interval labels backend-driven |
 | Answer intervals | `describe_next_states()` labels | Bridge calls typed `describe_next_states()` | Implemented |
 | Card timer | Desktop starts timer on card fetch and uses time limit/options | Bridge records `Instant`; native/UI submission can pass elapsed milliseconds | Core timing implemented; UI semantics verify |
 | Bury card | Scheduler bury-card request | Typed `bury_or_suspend_cards()` | Implemented; integration evidence pending |
@@ -91,34 +95,50 @@ Required fix before renderer parity is closed:
 
 ### 4. Autoplay must be data-driven
 
-Desktop asks `card.autoplay()` before automatically playing question/answer AV tags. Kanki's current reviewer automatically plays the first semantic AV tag when a packet is shown.
+Desktop `Card.autoplay()` reads the effective deck config. In the current protobuf model the corresponding Rust deck-config field is `disable_autoplay`, so the semantic value Kanki needs is:
+
+```text
+autoplay = !deck_config.disable_autoplay
+```
+
+Kanki's current reviewer instead automatically plays the first semantic AV tag whenever a packet is shown.
 
 Required design:
 
-- expose autoplay decision from the typed bridge/card model;
-- do not infer it from presence of audio;
+- resolve the effective deck config from the card's current/original deck in the typed bridge;
+- expose an explicit `autoplay` boolean in the review packet;
+- do not infer autoplay from the presence of audio;
 - replay buttons remain available when autoplay is off;
 - add autoplay-on/off fixtures.
 
 ### 5. Answer-side question-audio replay must be represented explicitly
 
-Desktop answer replay can combine question and answer AV tags when `card.replay_question_audio_on_answer_side()` is enabled.
+Desktop `Card.replay_question_audio_on_answer_side()` is also deck-config driven. In the current protobuf deck config the storage-oriented field is `skip_question_when_replaying_answer`; the reviewer semantic is therefore:
+
+```text
+replay_question_audio_on_answer_side = !deck_config.skip_question_when_replaying_answer
+```
+
+Desktop answer replay concatenates question and answer AV tags when that semantic is true.
 
 Required design:
 
-- expose the setting/decision in `ReviewDto` or prepare-answer DTO;
-- build the effective answer-side autoplay/replay queue according to Anki semantics;
-- do not make the UI reconstruct deck-config rules independently.
+- expose the resolved semantic in `ReviewDto`/prepared-answer data;
+- construct the effective answer replay/autoplay queue according to Anki semantics;
+- do not make JavaScript reconstruct deck-config inheritance independently;
+- test both values, including filtered cards whose effective deck is their original deck.
 
-### 6. Rating-button cardinality must come from scheduling semantics
+### 6. Four rating buttons are correct for the pinned v3 scheduler
 
-Desktop supports 2-, 3- and 4-button cases. The current native shell always owns four physical buttons, which is acceptable as a widget allocation strategy but not as a visibility rule.
+Desktop reviewer code retains generic rendering branches for 2/3/4 buttons, but the pinned Anki v3 scheduler's `SchedulerBaseWithLegacy.answerButtons()` returns `4`. Kanki is explicitly built on the pinned v3 backend, so a four-button review bar is not currently a parity bug.
 
-Required design:
+Requirements that remain:
 
-- semantic backend DTO states which ratings are available for the displayed card;
-- hide inapplicable buttons and label applicable buttons with `describe_next_states()` output;
-- integration fixtures cover all cardinalities encountered by pinned Anki.
+- keep the displayed interval text from typed `describe_next_states()` rather than reproducing interval logic in the UI;
+- keep rating mapping Again=1, Hard=2, Good=3, Easy=4 aligned with the bridge;
+- test all four ratings and revlog/state results.
+
+If a future Anki backend changes v3 button cardinality, treat that as an upstream semantic change during the pinned-version upgrade review instead of pre-implementing obsolete v1/v2 UI behavior.
 
 ### 7. Kindle native CSS pixels should be configured at WebView lifecycle level
 
@@ -144,4 +164,4 @@ Never let card link navigation destroy the reviewer lifecycle accidentally.
 
 ## Release gate
 
-Any row marked **Semantic delta**, **Bug candidate** or **Known placement delta** remains open in issue #11 until code plus same-commit test evidence exists. The renderer corpus must include type-answer, autoplay/audio and rating-cardinality cases in addition to visual layout fixtures.
+Any row marked **Semantic delta**, **Bug candidate** or **Known placement delta** remains open in issue #11 until code plus same-commit test evidence exists. The renderer corpus must include type-answer and autoplay/audio semantics in addition to visual layout fixtures.
