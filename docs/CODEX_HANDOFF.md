@@ -284,6 +284,14 @@ Kanki/
 
 This target is advisory. Prefer fewer moves if existing paths are already clear to maintainers. The important outcome is ownership and removal of historical ambiguity, not cosmetic renaming.
 
+The post-cleanup top-level audit at exact SHA
+`55d0a2bf8ed39ef5762cbe94d59d3c4ac51dfb8f` found that the existing directory
+split already has one documented owner per responsibility and no tracked
+archive/staging/parallel-product root. No directory move was performed. Treat
+the tree above as a design vocabulary, not a pending rename checklist; require
+a concrete ownership or build-boundary defect before proposing a future
+`git mv`.
+
 ## 6. Non-negotiable architecture
 
 Do not violate these during cleanup or debugging:

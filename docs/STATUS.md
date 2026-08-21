@@ -248,6 +248,31 @@ points and session-handoff rules remain. All referenced owner files exist,
 file changed. The first release failure and next candidate command therefore
 remain physical PW6 Gate E and the checksum command above.
 
+### Top-level ownership checkpoint
+
+At exact repository SHA
+`55d0a2bf8ed39ef5762cbe94d59d3c4ac51dfb8f`, the tracked top-level tree was
+audited after the behavior-preserving cleanup. Root-level files are limited to
+repository policy/metadata, the Rust workspace manifests and project notices;
+implementation and operational content is contained by `.github/`, `assets/`,
+`bridge/`, `crates/`, `device/`, `docs/`, `packaging/`, `scripts/`, `tests/`,
+`third_party/` and `tools/`. Every responsibility directory has its own
+`README.md`, and the root responsibility map agrees with those owners. No
+tracked archive parts, restoration scripts, staging tree or second product
+root was found.
+
+No directory move is justified by this evidence, so no cosmetic `git mv` was
+performed. This audit changed no product, build or package file and found no
+compiler, test or package failure. The fully recorded non-hardware candidate
+remains `7a0d83975d7f8180f22abec8cc7596e03622ce66`; its first open evidence
+failure remains physical PW6 Gate E, with original COCA/user-APKG and
+independent-host evidence also unavailable. The next repository-maintenance
+command, after allowing the concurrently written port branch to settle, is:
+
+```sh
+git ls-remote --heads origin kindle-anki-port
+```
+
 ### Baseline failure ledger
 
 - Initial audited SHA: `6e8330a4384af20af2c4404a12f8521638265147`.
