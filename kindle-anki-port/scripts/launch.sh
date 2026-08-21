@@ -26,11 +26,29 @@ canonical_path() {
     printf '%s\n' "$target"
 }
 
-verified_app_pid() {
+pid_is_running() {
     pid=$1
     [ -n "$pid" ] || return 1
     case "$pid" in *[!0-9]*) return 1;; esac
     kill -0 "$pid" 2>/dev/null || return 1
+    if [ -r "/proc/$pid/stat" ]; then
+        stat_line=$(cat "/proc/$pid/stat" 2>/dev/null || true)
+        case "$stat_line" in
+            *') '*)
+                stat_tail=${stat_line##*) }
+                state=${stat_tail%% *}
+                [ "$state" = Z ] && return 1
+                ;;
+        esac
+    fi
+    return 0
+}
+
+verified_app_pid() {
+    pid=$1
+    [ -n "$pid" ] || return 1
+    case "$pid" in *[!0-9]*) return 1;; esac
+    pid_is_running "$pid" || return 1
     exe=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
     [ -n "$exe" ] || return 1
     [ "$exe" = "$(canonical_path "$BIN")" ]
@@ -62,7 +80,7 @@ acquire_launch_lock() {
         mode=$(cat "$OP_LOCK/mode" 2>/dev/null || true)
         case "$owner" in
             ''|*[!0-9]*) owner_alive=0 ;;
-            *) if kill -0 "$owner" 2>/dev/null; then owner_alive=1; else owner_alive=0; fi ;;
+            *) if pid_is_running "$owner"; then owner_alive=1; else owner_alive=0; fi ;;
         esac
         if [ "$owner_alive" = 1 ] && [ "$mode" = sync ]; then
             log "launch refused while sync is running owner=$owner"
