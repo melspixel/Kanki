@@ -2,7 +2,6 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -22,12 +21,29 @@
 #define PORT 17393
 #define REQUEST_CAP 8192
 #define FIELD_CAP 4096
+#define MAX_METRIC_LINES 400U
+#define MAX_ELEMENT_LINES 480U
+#define MAX_CAPTURE_REQUESTS 20000U
+#define MAX_CAPTURE_BYTES (8U * 1024U * 1024U)
 
 static volatile sig_atomic_t running = 1;
+static unsigned int metric_lines = 0;
+static unsigned int element_lines = 0;
+static unsigned int capture_requests = 0;
+static size_t capture_bytes = 0;
 
 static void on_signal(int sig) {
     (void)sig;
     running = 0;
+}
+
+static void single_line(char *value) {
+    unsigned char *p = (unsigned char *)value;
+    if (!value) return;
+    while (*p) {
+        if (*p < 32 || *p == 127) *p = ' ';
+        p += 1;
+    }
 }
 
 static void log_line(const char *format, ...) {
@@ -105,6 +121,23 @@ static int safe_token(const char *value) {
     return 1;
 }
 
+static int capture_id_allowed(const char *value) {
+    char *end = NULL;
+    long sequence;
+    if (!safe_token(value)) return 0;
+    sequence = strtol(value, &end, 10);
+    if (sequence < 1 || sequence > 12) return 0;
+    return end && (*end == '\0' || *end == '-');
+}
+
+static int capture_kind_allowed(const char *kind) {
+    return strcmp(kind, "html") == 0 || strcmp(kind, "css") == 0 || strcmp(kind, "meta") == 0;
+}
+
+static int capture_side_allowed(const char *side) {
+    return strcmp(side, "question") == 0 || strcmp(side, "answer") == 0;
+}
+
 static void respond(int client, const char *status) {
     char buffer[256];
     int length = snprintf(buffer, sizeof(buffer),
@@ -127,6 +160,7 @@ static void handle_metric(const char *query) {
     char scroll_height[32] = "";
     char dpr[32] = "";
     char elements[32] = "";
+    if (metric_lines >= MAX_METRIC_LINES) return;
     (void)query_value(query, "id", id, sizeof(id));
     (void)query_value(query, "side", side, sizeof(side));
     (void)query_value(query, "phase", phase, sizeof(phase));
@@ -139,6 +173,19 @@ static void handle_metric(const char *query) {
     (void)query_value(query, "sh", scroll_height, sizeof(scroll_height));
     (void)query_value(query, "dpr", dpr, sizeof(dpr));
     (void)query_value(query, "elements", elements, sizeof(elements));
+    single_line(id);
+    single_line(side);
+    single_line(phase);
+    single_line(body);
+    single_line(width);
+    single_line(height);
+    single_line(qa_width);
+    single_line(qa_height);
+    single_line(scroll_width);
+    single_line(scroll_height);
+    single_line(dpr);
+    single_line(elements);
+    metric_lines += 1;
     log_line("METRIC id=%s side=%s phase=%s inner=%sx%s qa=%sx%s scroll=%sx%s dpr=%s elements=%s body=%s",
              id, side, phase, width, height, qa_width, qa_height, scroll_width, scroll_height,
              dpr, elements, body);
@@ -154,6 +201,7 @@ static void handle_element(const char *query) {
     char geometry[128] = "";
     char font[192] = "";
     char display[64] = "";
+    if (element_lines >= MAX_ELEMENT_LINES) return;
     (void)query_value(query, "id", id, sizeof(id));
     (void)query_value(query, "side", side, sizeof(side));
     (void)query_value(query, "phase", phase, sizeof(phase));
@@ -163,6 +211,16 @@ static void handle_element(const char *query) {
     (void)query_value(query, "g", geometry, sizeof(geometry));
     (void)query_value(query, "font", font, sizeof(font));
     (void)query_value(query, "display", display, sizeof(display));
+    single_line(id);
+    single_line(side);
+    single_line(phase);
+    single_line(index);
+    single_line(tag);
+    single_line(cls);
+    single_line(geometry);
+    single_line(font);
+    single_line(display);
+    element_lines += 1;
     log_line("ELEMENT id=%s side=%s phase=%s i=%s tag=%s class=%s geometry=%s font=%s display=%s",
              id, side, phase, index, tag, cls, geometry, font, display);
 }
@@ -175,22 +233,31 @@ static void handle_capture(const char *query) {
     char data[FIELD_CAP];
     char path[512];
     long part_number;
+    size_t data_length;
     FILE *file;
     if (access(CAPTURE_SENTINEL, F_OK) != 0) return;
+    if (capture_requests >= MAX_CAPTURE_REQUESTS || capture_bytes >= MAX_CAPTURE_BYTES) return;
     if (!query_value(query, "id", id, sizeof(id)) ||
         !query_value(query, "side", side, sizeof(side)) ||
         !query_value(query, "kind", kind, sizeof(kind)) ||
         !query_value(query, "part", part, sizeof(part)) ||
         !query_value(query, "data", data, sizeof(data))) return;
-    if (!safe_token(id) || !safe_token(side) || !safe_token(kind)) return;
+    if (!capture_id_allowed(id) || !capture_side_allowed(side) || !capture_kind_allowed(kind)) return;
     part_number = strtol(part, NULL, 10);
     if (part_number < 0 || part_number > 4096) return;
+    data_length = strlen(data);
+    if (data_length > MAX_CAPTURE_BYTES - capture_bytes) return;
     if (snprintf(path, sizeof(path), "%s/render-%s-%s-%s.txt", DEBUG_DIR, id, side, kind) >=
         (int)sizeof(path)) return;
     file = fopen(path, part_number == 0 ? "wb" : "ab");
     if (!file) return;
-    fwrite(data, 1, strlen(data), file);
+    if (data_length > 0 && fwrite(data, 1, data_length, file) != data_length) {
+        fclose(file);
+        return;
+    }
     fclose(file);
+    capture_requests += 1;
+    capture_bytes += data_length;
 }
 
 static void handle_client(int client) {
@@ -240,8 +307,12 @@ int main(void) {
         fprintf(stderr, "kanki-diag: cannot create %s: %s\n", DEBUG_DIR, strerror(errno));
         return 73;
     }
-    log_line("START port=%d raw_capture=%s", PORT,
-             access(CAPTURE_SENTINEL, F_OK) == 0 ? "enabled" : "disabled");
+    log_line("START port=%d raw_capture=%s metric_cap=%u element_cap=%u capture_bytes_cap=%u",
+             PORT,
+             access(CAPTURE_SENTINEL, F_OK) == 0 ? "enabled" : "disabled",
+             MAX_METRIC_LINES,
+             MAX_ELEMENT_LINES,
+             (unsigned int)MAX_CAPTURE_BYTES);
 
     server = socket(AF_INET, SOCK_STREAM, 0);
     if (server < 0) return 74;
@@ -270,6 +341,7 @@ int main(void) {
         close(client);
     }
     close(server);
-    log_line("STOP");
+    log_line("STOP metric_lines=%u element_lines=%u capture_requests=%u capture_bytes=%u",
+             metric_lines, element_lines, capture_requests, (unsigned int)capture_bytes);
     return 0;
 }
