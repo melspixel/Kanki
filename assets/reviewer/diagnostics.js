@@ -5,7 +5,8 @@
   var renderNumber = 0;
   var queue = [];
   var busy = false;
-  var RENDER_LIMIT = 12;
+  var RAW_RENDER_LIMIT = 12;
+  var METRIC_RENDER_LIMIT = 200;
   var ELEMENT_LIMIT = 40;
   var CHUNK_SIZE = 500;
 
@@ -122,7 +123,7 @@
       height = rectHeight(rect);
       if (!(width > 0 && height > 0)) continue;
       style = window.getComputedStyle ? window.getComputedStyle(node, null) : node.currentStyle;
-      ping('element', {
+      enqueue('element', {
         id: id,
         side: side,
         phase: phase,
@@ -132,7 +133,7 @@
         g: [finiteNumber(rect.left), finiteNumber(rect.top), finiteNumber(width), finiteNumber(height)].join(','),
         font: style ? [style.fontFamily || '', style.fontSize || '', style.fontWeight || '', style.lineHeight || ''].join('|').substring(0, 170) : '',
         display: style ? [style.display || '', style.position || '', style.overflow || ''].join('|') : ''
-      }, null);
+      });
       count += 1;
     }
     return count;
@@ -141,7 +142,7 @@
   function pageMetrics(id, side, phase, withElements) {
     var rect = qa.getBoundingClientRect ? qa.getBoundingClientRect() : null;
     var count = withElements ? elementMetrics(id, side, phase) : qa.getElementsByTagName('*').length;
-    ping('metric', {
+    enqueue('metric', {
       id: id,
       side: side,
       phase: phase,
@@ -154,16 +155,21 @@
       sh: Math.max(document.documentElement.scrollHeight || 0, document.body.scrollHeight || 0),
       dpr: window.devicePixelRatio || 1,
       elements: count
-    }, null);
+    });
   }
 
   function begin(packet, cardId) {
     var side = packet && packet.side || 'unknown';
     var safeCard = cardId == null ? 'none' : String(cardId).replace(/[^A-Za-z0-9_-]/g, '_');
     renderNumber += 1;
-    var id = String(renderNumber) + '-' + safeCard;
+    var sequence = renderNumber;
+    var id = String(sequence) + '-' + safeCard;
 
-    if (renderNumber <= RENDER_LIMIT && rawCaptureEnabled()) {
+    if (sequence > METRIC_RENDER_LIMIT) return;
+
+    pageMetrics(id, side, 'initial', false);
+
+    if (sequence <= RAW_RENDER_LIMIT && rawCaptureEnabled()) {
       captureChunks(id, side, 'html', packet && packet.html || '');
       captureChunks(id, side, 'css', packet && packet.css || '');
       captureChunks(id, side, 'meta', JSON.stringify({
@@ -173,9 +179,8 @@
       }));
     }
 
-    pageMetrics(id, side, 'initial', false);
     window.setTimeout(function () {
-      pageMetrics(id, side, 'settled', renderNumber <= RENDER_LIMIT);
+      pageMetrics(id, side, 'settled', sequence <= RAW_RENDER_LIMIT);
     }, 300);
   }
 
