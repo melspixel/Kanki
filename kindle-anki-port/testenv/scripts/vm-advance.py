@@ -2,7 +2,8 @@
 """Run one durable VM-side Kindle Anki checkpoint through canonical gates.
 
 The driver deliberately delegates build semantics to the maintained gate scripts. It
-never substitutes a narrow cargo test for the official-backend gate and never marks
+never substitutes a narrow cargo test for the official-backend gate, never packages
+before exact-rootfs QEMU has passed for the exact ARMHF bytes, and never marks
 physical PW6 acceptance.
 """
 from __future__ import annotations
@@ -105,6 +106,7 @@ def main() -> int:
     logs = work / "logs"
     report_path = work / "report.json"
     armhf = work / "armhf"
+    qemu_exact = work / "qemu-exact-rootfs"
     release = work / "release"
     logs.mkdir(parents=True, exist_ok=True)
 
@@ -125,7 +127,7 @@ def main() -> int:
     build_commit = git_head(project)
 
     report: dict[str, Any] = {
-        "schema": 2,
+        "schema": 3,
         "started_utc_epoch": time.time(),
         "project": str(project),
         "build_commit": build_commit,
@@ -266,12 +268,59 @@ def main() -> int:
         if path.is_file():
             report["artifacts"][f"armhf/{name}"] = sha256(path)
 
+    missing: list[str] = []
+    if len(unique_apkgs) < 5:
+        missing.append("five-real-APKG integration")
+    if not typed_apkg:
+        missing.append("typed-APKG integration")
+    if not args.rootfs:
+        missing.append("exact-rootfs QEMU smoke")
+        missing.append("final package")
+
+    # Final packaging is intentionally impossible until exact-rootfs QEMU has
+    # passed for the exact ARMHF bytes. If the private rootfs is absent, stop at
+    # a durable ARMHF checkpoint rather than constructing a final-looking ZIP.
+    if not args.rootfs:
+        report["result"] = "armhf-checkpoint-passed"
+        report["release_gate_missing"] = missing
+        report["completed_utc_epoch"] = time.time()
+        write_report(report_path, report)
+        return 0
+
+    rootfs = args.rootfs.resolve()
+    qemu_env = {
+        "PROJECT": str(project),
+        "ARMHF": str(armhf),
+        "ROOTFS": str(rootfs),
+        "TOOLCHAIN_BIN": str(bindir),
+        "QEMU_ARM": args.qemu_arm,
+        "OUT": str(qemu_exact),
+        "BUILD_COMMIT": build_commit,
+    }
+    if args.rootfs_image:
+        qemu_env["ROOTFS_IMAGE"] = str(args.rootfs_image.resolve())
+    if not gate(
+        "qemu-exact-rootfs",
+        ["bash", str(project / "testenv/scripts/run-qemu-smoke.sh")],
+        qemu_env,
+        1800,
+    ):
+        return 1
+
+    report["artifacts"]["qemu_provenance_sha256"] = sha256(
+        qemu_exact / "QEMU-PROVENANCE.txt"
+    )
+
+    # A package can be produced only after the exact-rootfs gate above. The
+    # package script independently rechecks the QEMU source/Anki/manifest/binary
+    # hashes, so stale evidence cannot be relabelled by this orchestration layer.
     if not gate(
         "package-audit",
         ["bash", str(project / "testenv/scripts/package-and-audit.sh")],
         {
             "PROJECT": str(project),
             "ARMHF": str(armhf),
+            "QEMU": str(qemu_exact),
             "RELEASE": str(release),
             "BUILD_COMMIT": build_commit,
             "VERSION": "0.1.0-dev",
@@ -287,36 +336,13 @@ def main() -> int:
             if path.is_file()
         }
 
-    if args.rootfs:
-        rootfs = args.rootfs.resolve()
-        qemu_env = {
-            "PROJECT": str(project),
-            "ARMHF": str(armhf),
-            "ROOTFS": str(rootfs),
-            "TOOLCHAIN_BIN": str(bindir),
-            "QEMU_ARM": args.qemu_arm,
-            "OUT": str(work / "qemu-exact-rootfs"),
-        }
-        if args.rootfs_image:
-            qemu_env["ROOTFS_IMAGE"] = str(args.rootfs_image.resolve())
-        if not gate(
-            "qemu-exact-rootfs",
-            ["bash", str(project / "testenv/scripts/run-qemu-smoke.sh")],
-            qemu_env,
-            1800,
-        ):
-            return 1
-
-    missing: list[str] = []
     if len(unique_apkgs) < 5:
-        missing.append("five-real-APKG integration")
+        missing.append("five-real-APKG integration") if "five-real-APKG integration" not in missing else None
     if not typed_apkg:
-        missing.append("typed-APKG integration")
-    if not args.rootfs:
-        missing.append("exact-rootfs QEMU smoke")
+        missing.append("typed-APKG integration") if "typed-APKG integration" not in missing else None
 
     if missing:
-        report["result"] = "armhf-package-checkpoint-passed"
+        report["result"] = "qemu-package-checkpoint-passed"
         report["release_gate_missing"] = missing
     else:
         report["result"] = "non-hardware-release-gates-passed"
