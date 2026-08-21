@@ -24,6 +24,13 @@ text = (
 
 errors: list[str] = []
 
+# One-shot source migration helpers are removed once their behavior is owned by
+# canonical source. Reintroducing either file would create a second mutable
+# source path outside the package recipe.
+for obsolete_migration in ["patch_sync_ui.py", "patch_type_answer_ui.py"]:
+    if (ROOT / "tools" / obsolete_migration).exists():
+        errors.append(f"obsolete one-shot source migration returned: {obsolete_migration}")
+
 # A generic reviewer must never accumulate one-deck fixes. If a deck needs a
 # selector here, the compatibility boundary is wrong and must be redesigned.
 forbidden_deck_tokens = [

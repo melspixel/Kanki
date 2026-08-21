@@ -116,17 +116,13 @@ intended long-term branch set is small:
 
 ### 4.2 Transitional developer patch scripts
 
-`tools/` currently includes files such as:
-
-- `patch_sync_ui.py`
-- `patch_type_answer_ui.py`
-
-These names strongly suggest transitional source-edit helpers created during rapid iteration. Audit whether the changes they apply are already integrated into canonical source files. If yes, remove them. If they are still required, either:
-
-- convert them into deterministic build-generation steps with tests and documentation; or
-- move them under an explicitly historical/migration-only directory and explain why they exist.
-
-A release build must not depend on an undocumented “patch this file after checkout” sequence.
+The former `tools/patch_sync_ui.py` and
+`tools/patch_type_answer_ui.py` were audited against `device/kanki_device.c`,
+the persistent reviewer and their executable contracts. Every intended change
+is canonical source, and neither script was referenced by a build, test or
+workflow. They were removed as obsolete one-shot migrations. The host policy
+gate rejects their reintroduction; the release build has no undocumented
+“patch this file after checkout” sequence.
 
 ### 4.3 CI workflow sprawl
 
