@@ -24,6 +24,8 @@ ROOTFS_TREE=$CACHE/rootfs-tree
 TTS_TREE=$CACHE/tts-squashfs
 KINDLETOOL=$TOOLS_CACHE/kindletool-$KINDLETOOL_COMMIT
 EXT=$PACKAGE_ROOT/extensions/kanki
+CHROOT_PACKAGE=/mnt/us/extensions/kanki
+CHROOT_REPORTS=/mnt/us/kanki_reports
 
 PACKAGE_ELF=(
     libanki-kanki.so
@@ -256,19 +258,19 @@ printf '%s\n' '== stage immutable rootfs clone and canonical package =='
 CHROOT=$(mktemp -d /tmp/kanki-pw6-chroot.XXXXXX)
 register_temp "$CHROOT"
 cp -a "$ROOTFS_TREE/." "$CHROOT/"
-mkdir -p "$CHROOT/opt/kanki-audit" "$CHROOT/opt/kanki-package" \
-    "$CHROOT/usr/lib/tts" "$CHROOT/var/tmp"
+mkdir -p "$CHROOT/opt/kanki-audit" "$CHROOT$CHROOT_PACKAGE" \
+    "$CHROOT$CHROOT_REPORTS" "$CHROOT/usr/lib/tts" "$CHROOT/var/tmp"
 install -m 0755 /usr/bin/qemu-arm-static "$CHROOT/usr/bin/qemu-arm-static"
 for name in "${PACKAGE_ELF[@]}"; do
     install -m 0755 "$EXT/$name" "$CHROOT/opt/kanki-audit/$name"
 done
-cp -a "$EXT/." "$CHROOT/opt/kanki-package/"
+cp -a "$EXT/." "$CHROOT$CHROOT_PACKAGE/"
 cp -a "$TTS_TREE/." "$CHROOT/usr/lib/tts/"
 
 printf '%s\n' '== execute packaged verifier under PW6 BusyBox =='
 if ! env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin \
     /usr/sbin/chroot "$CHROOT" /usr/bin/qemu-arm-static \
-    /bin/sh /opt/kanki-package/kanki-verify.sh /opt/kanki-package \
+    /bin/sh "$CHROOT_PACKAGE/kanki-verify.sh" "$CHROOT_PACKAGE" \
     > "$EVIDENCE/package-verifier-pw6-busybox.txt" 2>&1; then
     cat "$EVIDENCE/package-verifier-pw6-busybox.txt" >&2
     fail "packaged install verifier failed under the PW6 BusyBox shell"
@@ -276,6 +278,102 @@ fi
 grep -Fxq 'kanki-install-integrity=pass' \
     "$EVIDENCE/package-verifier-pw6-busybox.txt" ||
     fail "PW6 BusyBox verifier evidence lacks the success marker"
+
+printf '%s\n' '== execute privacy-redacted report under PW6 BusyBox =='
+REPORT_SENTINEL=KANKI_PRIVATE_SENTINEL_DO_NOT_BUNDLE
+REPORT_SAFE_LOG=KANKI_SAFE_LOG_MARKER
+REPORT_SAFE_METRIC=KANKI_SAFE_METRIC_MARKER
+printf '%s\n' \
+    "$REPORT_SAFE_LOG startup=ready" \
+    "password=$REPORT_SENTINEL" \
+    "hkey=$REPORT_SENTINEL" \
+    "endpoint=$REPORT_SENTINEL" \
+    > "$CHROOT$CHROOT_PACKAGE/kanki.log"
+printf 'hkey=%s\n' "$REPORT_SENTINEL" \
+    > "$CHROOT$CHROOT_PACKAGE/config.ini"
+mkdir "$CHROOT$CHROOT_PACKAGE/render-debug"
+printf '%s innerWidth=1072 qaWidth=1072\n' "$REPORT_SAFE_METRIC" \
+    > "$CHROOT$CHROOT_PACKAGE/render-debug/metrics.log"
+printf '{"raw_note":"%s"}\n' "$REPORT_SENTINEL" \
+    > "$CHROOT$CHROOT_PACKAGE/render-debug/card-0001.json"
+printf '%s\n' "$REPORT_SENTINEL" \
+    > "$CHROOT$CHROOT_PACKAGE/enable-render-capture"
+
+if ! env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    /usr/sbin/chroot "$CHROOT" /usr/bin/qemu-arm-static \
+    /bin/sh "$CHROOT_PACKAGE/kanki-report.sh" \
+    > "$EVIDENCE/redacted-report-pw6-busybox.txt" 2>&1; then
+    cat "$EVIDENCE/redacted-report-pw6-busybox.txt" >&2
+    fail "redacted report failed under the PW6 BusyBox shell"
+fi
+grep -Fq "Kanki report created: $CHROOT_REPORTS/kanki-report-" \
+    "$EVIDENCE/redacted-report-pw6-busybox.txt" ||
+    fail "PW6 BusyBox report evidence lacks the published archive marker"
+
+mapfile -t REPORT_ARCHIVES < <(
+    find "$CHROOT$CHROOT_REPORTS" -mindepth 1 -maxdepth 1 \
+        -type f -name 'kanki-report-*.tar.gz' -print
+)
+test "${#REPORT_ARCHIVES[@]}" -eq 1 ||
+    fail "PW6 BusyBox report did not publish exactly one archive"
+REPORT_ARCHIVE=${REPORT_ARCHIVES[0]}
+test "$(stat -c %a "$CHROOT$CHROOT_REPORTS")" = 700 ||
+    fail "PW6 BusyBox report output root is not private mode 0700"
+test "$(stat -c %a "$REPORT_ARCHIVE")" = 600 ||
+    fail "PW6 BusyBox report archive is not private mode 0600"
+if find "$CHROOT$CHROOT_REPORTS" -mindepth 1 -maxdepth 1 \
+    \( -type d -name 'kanki-report-*' -o -name '.kanki-report-*.partial' \) \
+    -print | grep -q .; then
+    fail "PW6 BusyBox report left a work tree or partial archive"
+fi
+
+REPORT_EXTRACT=$(mktemp -d "$CACHE/.report-extract.XXXXXX")
+register_temp "$REPORT_EXTRACT"
+tar -xzf "$REPORT_ARCHIVE" -C "$REPORT_EXTRACT"
+mapfile -t REPORT_TREES < <(
+    find "$REPORT_EXTRACT" -mindepth 1 -maxdepth 1 -type d \
+        -name 'kanki-report-*' -print
+)
+test "${#REPORT_TREES[@]}" -eq 1 ||
+    fail "PW6 BusyBox report archive lacks one bounded report root"
+REPORT_TREE=${REPORT_TREES[0]}
+test "$(stat -c %a "$REPORT_TREE")" = 700 ||
+    fail "PW6 BusyBox report work tree was not private mode 0700"
+for name in README.txt BUILD.json MANIFEST.sha256 INSTALL.md \
+            renderer-metrics.log kanki.redacted.log system.txt integrity.txt; do
+    test -f "$REPORT_TREE/$name" ||
+        fail "PW6 BusyBox report archive lacks $name"
+    test "$(stat -c %a "$REPORT_TREE/$name")" = 600 ||
+        fail "PW6 BusyBox report member $name is not private mode 0600"
+done
+if grep -R -Fq "$REPORT_SENTINEL" "$REPORT_TREE"; then
+    fail "PW6 BusyBox report archive leaked a synthetic private sentinel"
+fi
+grep -Fq "$REPORT_SAFE_LOG startup=ready" "$REPORT_TREE/kanki.redacted.log" ||
+    fail "PW6 BusyBox report lost the non-private log control line"
+grep -Fq "$REPORT_SAFE_METRIC" "$REPORT_TREE/renderer-metrics.log" ||
+    fail "PW6 BusyBox report lost the privacy-safe renderer metric"
+grep -Fxq 'kanki-install-integrity=pass' "$REPORT_TREE/integrity.txt" ||
+    fail "PW6 BusyBox report did not record passing install integrity"
+if find "$REPORT_TREE" -type f \
+    \( -name config.ini -o -name 'card-*' -o -name enable-render-capture \) \
+    -print | grep -q .; then
+    fail "PW6 BusyBox report included config, raw capture or capture sentinel"
+fi
+{
+    printf 'output_root_mode=%s\n' \
+        "$(stat -c %a "$CHROOT$CHROOT_REPORTS")"
+    printf 'archive_mode=%s\n' "$(stat -c %a "$REPORT_ARCHIVE")"
+    printf 'report_tree_mode=%s\n' "$(stat -c %a "$REPORT_TREE")"
+    printf 'report_member_mode=600\n'
+    printf 'archive_sha256=%s\n' "$(sha256 "$REPORT_ARCHIVE")"
+    printf 'private_sentinel_absent=pass\n'
+    printf 'safe_log_control=pass\n'
+    printf 'safe_renderer_metric=pass\n'
+    printf 'raw_capture_excluded=pass\n'
+    printf 'failure_staging_absent=pass\n'
+} > "$EVIDENCE/redacted-report-privacy.txt"
+tar -tzvf "$REPORT_ARCHIVE" > "$EVIDENCE/redacted-report-contents.txt"
 
 printf '%s\n' '== verify ARMv7 hard-float ELF identity and symbol versions =='
 : > "$EVIDENCE/elf-abi.txt"
@@ -519,6 +617,7 @@ grep -Fq 'gst-play: preloaded /usr/lib/tts/libIvonaEInkCommon.so.1.0' \
     printf 'tts_sqsh_sha256=%s\n' "$TTS_SQSH_SHA256"
     printf 'package_manifest=pass\n'
     printf 'package_verifier_pw6_busybox=pass\n'
+    printf 'redacted_report_pw6_busybox=pass\n'
     printf 'armv7_hard_float=pass\n'
     printf 'loader_resolution=pass\n'
     printf 'ui_backend_dlopen_dlsym=pass\n'

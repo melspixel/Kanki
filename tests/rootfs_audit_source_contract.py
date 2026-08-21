@@ -96,10 +96,19 @@ for fragment in [
     "hardware_execution=not_run",
     "mktemp -d /tmp/kanki-pw6-chroot.XXXXXX",
     'cp -a "$ROOTFS_TREE/." "$CHROOT/"',
-    'cp -a "$EXT/." "$CHROOT/opt/kanki-package/"',
-    "/bin/sh /opt/kanki-package/kanki-verify.sh /opt/kanki-package",
+    "CHROOT_PACKAGE=/mnt/us/extensions/kanki",
+    "CHROOT_REPORTS=/mnt/us/kanki_reports",
+    'cp -a "$EXT/." "$CHROOT$CHROOT_PACKAGE/"',
+    '/bin/sh "$CHROOT_PACKAGE/kanki-verify.sh" "$CHROOT_PACKAGE"',
     "package-verifier-pw6-busybox.txt",
     "package_verifier_pw6_busybox=pass",
+    '/bin/sh "$CHROOT_PACKAGE/kanki-report.sh"',
+    "KANKI_PRIVATE_SENTINEL_DO_NOT_BUNDLE",
+    'test "$(stat -c %a "$CHROOT$CHROOT_REPORTS")" = 700',
+    'test "$(stat -c %a "$REPORT_ARCHIVE")" = 600',
+    'grep -R -Fq "$REPORT_SENTINEL" "$REPORT_TREE"',
+    "redacted-report-privacy.txt",
+    "redacted_report_pw6_busybox=pass",
 ]:
     require(AUDIT, fragment, f"PW6 ABI evidence is missing: {fragment}")
 forbid(
