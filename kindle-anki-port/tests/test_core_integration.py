@@ -105,7 +105,15 @@ def exercise(lib: KapLibrary, apkg: Path, require_typed: bool, max_cards: int) -
         temp = Path(temp_text)
         collection, media, media_db = prepare_collection(apkg, temp)
         core = lib.new_core()
-        observed = {"question": False, "answer": False, "typed": False, "audio": False, "rated": False, "buried": 0}
+        observed = {
+            "question": False,
+            "answer": False,
+            "typed": False,
+            "audio": False,
+            "rated": False,
+            "buried": 0,
+            "duplicate_next_rejected": False,
+        }
         try:
             info = lib.call("kap_build_info_json")
             assert info["source_driven_port"] is True
@@ -139,6 +147,11 @@ def exercise(lib: KapLibrary, apkg: Path, require_typed: bool, max_cards: int) -
                 is_typed = bool((packet.get("typed") or {}).get("enabled"))
                 observed["typed"] = observed["typed"] or is_typed
 
+                duplicate = lib.read_json_ptr(lib.lib.kap_next_question_json(core))
+                assert duplicate.get("ok") is False, duplicate
+                assert "rated or buried" in str(duplicate.get("error", "")), duplicate
+                observed["duplicate_next_rejected"] = True
+
                 if is_typed or not observed["answer"]:
                     answer = lib.call("kap_reveal_answer_json", core, b"")
                     assert answer["kind"] == "answer"
@@ -165,6 +178,8 @@ def exercise(lib: KapLibrary, apkg: Path, require_typed: bool, max_cards: int) -
 
         if not observed["question"] or not observed["answer"] or not observed["rated"]:
             raise AssertionError(f"review lifecycle was not exercised: {observed}")
+        if not observed["duplicate_next_rejected"]:
+            raise AssertionError(f"active-card next-question guard was not exercised: {observed}")
         if require_typed and not observed["typed"]:
             raise AssertionError(f"no typed-answer card found within {max_cards} cards: {observed}")
         return observed
