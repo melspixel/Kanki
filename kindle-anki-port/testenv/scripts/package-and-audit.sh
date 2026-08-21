@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Package metadata must not depend on the caller's umask.
+umask 022
+
 PROJECT=${PROJECT:?set PROJECT}
 ARMHF=${ARMHF:?set ARMHF to the directory from run-armhf-gates.sh}
 DIST=${DIST:-$PROJECT/build/package-root}
@@ -24,9 +27,13 @@ case "$SOURCE_DATE_EPOCH" in
     exit 65
     ;;
 esac
-# ZIP timestamps cannot represent dates before 1980-01-01 UTC.
+# ZIP DOS timestamps cover 1980-01-01 through 2107-12-31 23:59:58 UTC.
 if [ "$SOURCE_DATE_EPOCH" -lt 315532800 ]; then
   echo "SOURCE_DATE_EPOCH predates the ZIP timestamp epoch: $SOURCE_DATE_EPOCH" >&2
+  exit 65
+fi
+if [ "$SOURCE_DATE_EPOCH" -gt 4354819198 ]; then
+  echo "SOURCE_DATE_EPOCH exceeds the ZIP timestamp range: $SOURCE_DATE_EPOCH" >&2
   exit 65
 fi
 
@@ -43,6 +50,11 @@ cp "$PROJECT/packaging/config.example.ini" "$EXT/config.example.ini"
 cp "$PROJECT/packaging/documents/"* "$DIST/documents/"
 cp "$PROJECT/LICENSE" "$EXT/"
 cp "$PROJECT/packaging/README-KINDLE.md" "$EXT/README.md"
+
+# Normalize every archived mode explicitly.  GNU/POSIX cp otherwise applies the
+# invoking umask when creating destination files, which changes ZIP external
+# attributes even when all file bytes and SOURCE_DATE_EPOCH are identical.
+find "$DIST" -type f -exec chmod 0644 {} +
 chmod 755 "$EXT/kap-app" "$EXT/kap-audio" "$EXT/kap-sync" \
   "$EXT/scripts/"*.sh "$DIST/documents/"*.sh
 printf '{"product":"Kindle Anki Port","version":"%s","build_commit":"%s","anki_commit":"%s","target":"armv7-unknown-linux-gnueabihf"}\n' \
@@ -73,6 +85,9 @@ PY
 ARCHIVE="$RELEASE/Kindle-Anki-Port-PW6-armhf.zip"
 (
   cd "$DIST"
+  # Info-ZIP serializes DOS timestamps in local civil time.  Pin UTC or the same
+  # SOURCE_DATE_EPOCH produces different archive bytes in different timezones.
+  export TZ=UTC
   # Feed an explicitly sorted file list so filesystem/readdir ordering cannot
   # perturb the central directory.  Controlled package paths never contain LF.
   find extensions documents -type f -print | LC_ALL=C sort | zip -X -q "$ARCHIVE" -@
