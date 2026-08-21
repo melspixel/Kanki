@@ -161,7 +161,10 @@ canonical package exists for the clean current `HEAD`. It authenticates the
 fixed official PW6 5.19.6 firmware, rootfs and TTS squashfs, checks ARMHF
 attributes/symbol versions/dependency closures, and executes loader-level
 UI/backend/audio probes plus the complete packaged install verifier through the
-PW6 BusyBox shell. It executes the shared operation-lock helper with the
+PW6 BusyBox shell. For TTS it runs the target's actual `gst-inspect-1.0`,
+requires writable `textsource`/`voicelang`/`speed`, rejects the unsupported
+historical property names, and executes the packaged ARMHF pipeline-construction
+probe. It executes the shared operation-lock helper with the
 firmware's actual `/usr/bin/flock`, including inherited-worker lifetime, and
 also runs the actual packaged redacted-report script with
 synthetic private sentinels and rejects non-private, incomplete or leaking

@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-22
-**Current fully recorded non-hardware candidate:** `47946f7b64b52124cfe3db8c1e32dcd85310d6d4`
+**Current fully recorded non-hardware candidate:** `1a1af41f23fbd20d0749788b0f82c7497f548ee3`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -26,7 +26,8 @@ The branch contains source-owned implementations for the major runtime paths:
 - source-owned GTK2/WebKit Kindle application;
 - Lab126/WebKit CSS-pixel/full-content-zoom feature path;
 - source-owned sync lifecycle;
-- source-owned loopback audio service and pinned `mixersink` player helper;
+- source-owned loopback audio service, typed fixed-PW6 `ttssrc` adapter and
+  pinned `mixersink` player helper;
 - typed bridge deck-config autoplay and answer-side question-replay fields, with bounded ordered reviewer/native sequence consumption and host fixtures;
 - delegated reviewer and native WebKit navigation guards that preserve the persistent reviewer and block external navigation without logging full URIs;
 - source-owned renderer diagnostics daemon on `127.0.0.1:17393`;
@@ -86,7 +87,18 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware candidate is recorded for exact SHA
-`47946f7b64b52124cfe3db8c1e32dcd85310d6d4`:
+`1a1af41f23fbd20d0749788b0f82c7497f548ee3`:
+
+The first real failure in this candidate category came from the authenticated
+PW6 5.19.6 runtime, not from a deck: its actual `gst-inspect-1.0 ttssrc`
+exposes writable `textsource`, `voicelang` and `speed`, but neither
+`content-texts` nor `text`. The inherited helper attempted the two absent
+properties and also discarded ordered TTS language/voice/speed metadata. The
+minimum fix owns the bounded typed protocol and dynamic GStreamer adapter in
+Kanki, preserves all semantic fields across the reviewer/native boundary, and
+sets only the three target-supported properties. PW6 exposes no voice-ID
+property, so preferred voice IDs remain preserved at the typed boundary but
+are not falsely claimed as selected at runtime.
 
 - host: macOS 26.4.1 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -119,7 +131,12 @@ The current clean local non-hardware candidate is recorded for exact SHA
   The native device lifecycle contract drives production `build_window()`
   through a fake GTK/WebKit ABI and proves the Lab126 CSS-pixel/density/zoom
   policy runs once after the persistent WebView exists, before any page load,
-  and is not repeated across deck/reviewer/sync transitions;
+  and is not repeated across deck/reviewer/sync transitions. Browser and native
+  audio protocol contracts prove bounded direct/ordered TTS metadata handling;
+  an executable fake GStreamer/GObject ABI drives the production TTS adapter
+  through target pipeline creation, `textsource`/`voicelang`/`speed` binding,
+  PLAYING, EOS and NULL cleanup without interpolating card text into a command
+  or pipeline;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
   native x86-64 typed library; a backend-created disposable nine-card
   collection passed queue counts, question/answer rendering, semantic
@@ -159,19 +176,21 @@ The current clean local non-hardware candidate is recorded for exact SHA
   Their complete package trees and ZIPs were byte-identical, as were
   `libanki-kanki.so`, `BUILD.json`, manifests, archive evidence and authenticated
   Anki-i18n normalization evidence. Both archives contain 1,299 sorted regular
-  files and use source date epoch `1787338692`;
+  files and use source date epoch `1787340595`;
 - package SHA-256:
-  `8ab0ac39cd9296729a0f2f07bc74ec93655ce932fd216bde295a3e8e278c2e89`;
+  `90b0afa330c8571d4aaffffe52c2bd747a3329225e8a3ac303e4e5c3133ad64d`;
 - byte-identical companion hashes are
   `f9eb906595dbd3edb7c63a3bda3a556b83f71c9c74d7c0558571a3257ba69e69`
   for the ARMHF backend,
-  `16c6db9c43ad8625806c7cc6a00d5e5526257000041f0192fa07674465159a08`
+  `d22ca5bee67219a22282163fd923256f9573def3bc7ba99ff3d24ce4d26830d1`
   for the native device executable,
-  `71f352dc4c550eda09b803a6fdb770b479877d57709d7a81ec1d9d9cd22aeb1e`
+  `6082781de2d19461806b85c0b928c9d0beefe1ebaba0530f70ace7a0cea40c38`
+  for the native audio executable,
+  `607a2565db9ffc845b8f66279e4930ec9b4ca4b5192faf7d72ec298f30040a15`
   for `BUILD.json`,
-  `09e8c912da7c451839f45a1cbd5742aab6a571d1505d046679c1b1d196b82b1c`
+  `81626657c21769d91d5f89d284058ff9571aa771bcb7112346f78988bea5f32f`
   for the 1,293-entry manifest,
-  `a21a1774e38c3a0282b430062da3e250e4cdfa1f06f85ff3ba518d0148a55690`
+  `5454ec245f9f8b3f67780400409e1a2923f46a585ee54c7b58e20523b7820573`
   for `archive-info.txt`, and
   `624e4be4d450a5d5d0bb7d4dc23c358a82f3286eff474d3ca809dedab0b6e92a`
   for `anki-i18n-info.txt`;
@@ -197,6 +216,13 @@ The current clean local non-hardware candidate is recorded for exact SHA
   GObject, WebKitGTK, X11 and the typed Anki backend, resolved all required UI
   symbols plus all four Lab126 CSS-pixel/zoom symbols, and instantiated
   `mixersink` and `ttssrc` after modeling the firmware's `/usr/lib/tts` mount.
+  Target `gst-inspect-1.0` then authenticated the three writable TTS properties
+  and absence of the two unsupported names; its evidence SHA-256 is
+  `392314f83c50474cf1f6437f0ad65356646b8725b46dfd51f2f23776bdb4c8ea`.
+  The packaged ARMHF `kanki-audio --tts-runtime-probe` created the fixed
+  `ttssrc`/`mixersink` pipeline through the real PW6 loader; its evidence
+  SHA-256 is
+  `9da8c5ca0d970a3a9676e1746add243c839129147a07e01072082467ee626633`.
   The UI/backend loader probe SHA-256 is
   `bbb06a68c39f92825a1a66492b9ed5f19381a8193069b9d37ef1b509cd87a1fb`.
   The packaged report script also ran under that target BusyBox against
@@ -204,11 +230,11 @@ The current clean local non-hardware candidate is recorded for exact SHA
   It published a 0700 report tree and 0600 archive atomically, retained the
   safe controls, excluded private inputs, leaked no sentinel and left no work
   or partial file. `redacted-report-privacy.txt` SHA-256 is
-  `d93aa5c1da0202b89bd100e40ffbce0ee37a9075595b2c3f8cea8aa557a0f9f1`.
+  `4ba85cb7a24a1b537be927ea86460fb59939d44c592244f98a8b6978695f6494`.
   Evidence is under ignored
-  `out/firmware/pw6-5.19.6/evidence/47946f7b64b52124cfe3db8c1e32dcd85310d6d4/`;
+  `out/firmware/pw6-5.19.6/evidence/1a1af41f23fbd20d0749788b0f82c7497f548ee3/`;
   its self-verifying `EVIDENCE.sha256` SHA-256 is
-  `e03d0d34bac99b379f4d03c1c3dc4b3476074e17f137ae2fd9d6965f29d3307c`;
+  `9a13af6e25ef0eddcbb910a8310a3148691d9ef24cd879f32a386be2f295e0f6`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -467,8 +493,8 @@ executable fake-UI-ABI contract with `CSS pixel policy was not configured once
 at WebView creation`. The persistent WebView initially loaded deck/sync pages
 without the Lab126 CSS-pixel/density/full-content-zoom policy, then configured
 that policy repeatedly on reviewer entry. Commit
-`47946f7b64b52124cfe3db8c1e32dcd85310d6d4` is the minimum fix and current
-formal candidate: configuration moved from reviewer-page loading to immediately
+`47946f7b64b52124cfe3db8c1e32dcd85310d6d4` is the minimum fix: configuration
+moved from reviewer-page loading to immediately
 after successful WebView creation. The contract executes production
 `build_window()` and multiple deck/reviewer/sync transitions, proving one
 configuration before the first document without inventing a viewport or global
@@ -477,6 +503,19 @@ builds, byte-identical package trees/ZIPs and official PW6 rootfs loader/ABI,
 lock and report audits all pass. The first open failure remains physical PW6
 launch and computed geometry (`hardware_execution=not_run`); no compiler, test,
 package, ABI or rootfs error remains in this category.
+
+The following fixed-runtime audio audit found the first real TTS failure:
+production attempted `content-texts` and then `text`, while the authenticated
+PW6 plugin exposes writable `textsource`, `voicelang` and `speed` only; ordered
+reviewer sequences also sent just the text. Commit
+`1a1af41f23fbd20d0749788b0f82c7497f548ee3` is the minimum fix and current
+formal candidate. It adds one bounded typed parser, a Kanki-owned dynamic
+GStreamer adapter and target-rootfs property/pipeline probes while leaving the
+ordinary sound/image/SVG path unchanged. Host, typed-Anki, two distinct
+empty-target ARMHF builds, byte-identical 1,299-file package trees/ZIPs and the
+official PW6 rootfs audits all pass on this SHA. The first open failure is
+audible native playback, language choice and Bluetooth routing on physical PW6
+(`hardware_execution=not_run`), not another compiler/test/package error.
 
 ### Baseline failure ledger
 
@@ -678,7 +717,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 1. Preserve candidate identity before device transfer with
    `shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip`; the expected value
-   is `8ab0ac39cd9296729a0f2f07bc74ec93655ce932fd216bde295a3e8e278c2e89`.
+   is `90b0afa330c8571d4aaffffe52c2bd747a3329225e8a3ac303e4e5c3133ad64d`.
 2. Obtain explicit local test access to original COCA and at least one
    unrelated representative APKG, then run the same privacy-reviewed path
    without modifying or committing the decks and without adding deck CSS.

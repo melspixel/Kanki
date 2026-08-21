@@ -106,8 +106,13 @@ does not equal `HEAD`. It checks every packaged ELF for ARMv7 hard-float,
 compares required GLIBC/GCC/LIBATOMIC symbol versions with the rootfs, resolves
 package plus GTK2/GObject/WebKitGTK/X11/GStreamer dependency closures with the
 PW6 loader, and executes the device UI/backend and audio capability probes via
-QEMU/chroot. It also executes the actual packaged install verifier over the
-complete package tree through the PW6 BusyBox shell. It then executes the
+QEMU/chroot. The audio audit runs the target's actual `gst-inspect-1.0 ttssrc`,
+requires writable `textsource`, `voicelang` and `speed`, rejects the unsupported
+historical `content-texts`/`text` properties, and executes the packaged ARMHF
+`kanki-audio --tts-runtime-probe` through the real loader. That probe proves
+pipeline construction, not audible output. The audit also executes the actual
+packaged install verifier over the complete package tree through the PW6
+BusyBox shell. It then executes the
 manifest-owned collection-operation helper with the firmware's actual
 util-linux `flock` and BusyBox shell, including a conflicting descriptor,
 exact launcher handoff and a worker that outlives its wrapper descriptor. It

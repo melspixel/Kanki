@@ -271,23 +271,29 @@ inside the canonical rootfs audit. Host, typed-Anki, two byte-identical package
 builds and the enhanced rootfs audit pass on that SHA.
 
 Those checkpoints are superseded by current formal candidate
-`47946f7b64b52124cfe3db8c1e32dcd85310d6d4`. It retains private atomic
-diagnostic publication, authenticated build-only `BTreeMap` normalization and
-kernel collection ownership. It also closes the next real native lifecycle
-failure: the persistent WebView previously loaded deck/sync pages before the
-Lab126 CSS-pixel/density/full-content-zoom policy and reconfigured the policy on
-each reviewer entry. Production `build_window()` now configures it once after
-successful WebView creation and before any document load. An executable fake
-UI-ABI contract proves deck/reviewer/sync transitions keep the same configured
-WebView. Two canonical builds using distinct, previously unused Cargo target
-volumes produced byte-identical 1,299-file package trees and ZIP SHA-256
-`8ab0ac39cd9296729a0f2f07bc74ec93655ce932fd216bde295a3e8e278c2e89`.
+`1a1af41f23fbd20d0749788b0f82c7497f548ee3`. It retains private atomic
+diagnostic publication, authenticated build-only `BTreeMap` normalization,
+kernel collection ownership and the once-before-first-load Lab126 CSS-pixel
+lifecycle. Its next real failure was fixed-runtime TTS: the authenticated PW6
+plugin exposes writable `textsource`, `voicelang` and `speed`, but the inherited
+path attempted unsupported `content-texts`/`text` properties and ordered
+sequences discarded TTS metadata. Kanki now owns one bounded typed parser and
+dynamic `ttssrc`/`mixersink` adapter; card text is never interpolated into a
+command or pipeline. Browser/native protocol and fake-runtime lifecycle tests
+pass, while the target rootfs's actual `gst-inspect-1.0` and packaged ARMHF
+runtime probe confirm the target property surface and pipeline construction.
+The plugin has no voice-ID property, so the typed bridge preserves preferred voices but
+does not claim to select them on PW6.
+
+Two canonical builds using distinct, previously unused Cargo target volumes
+produced byte-identical 1,299-file package trees and ZIP SHA-256
+`90b0afa330c8571d4aaffffe52c2bd747a3329225e8a3ac303e4e5c3133ad64d`.
 Host, typed-Anki review/APKG/sync, ARMHF package, report privacy and official
-PW6 5.19.6 rootfs/loader gates all pass on this same SHA. The target rootfs's
-actual `flock` 2.37.4 and BusyBox passed contention, launcher handoff,
-worker-lifetime and release probes. The first open evidence failure remains
-physical PW6 launch and computed geometry (`hardware_execution=not_run`); do
-not promote rootfs/QEMU evidence to hardware acceptance.
+PW6 5.19.6 rootfs/loader gates all pass on this same SHA. The first open
+evidence failure is audible playback, language selection and Bluetooth routing
+on physical PW6 (`hardware_execution=not_run`), followed by the remaining Gate
+E geometry/lifecycle work. Do not promote rootfs/QEMU evidence to hardware
+acceptance.
 
 ## 5. Recommended target layout
 
