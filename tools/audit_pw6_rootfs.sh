@@ -334,7 +334,28 @@ for key, provider in providers.items():
         raise SystemExit(f"{key} missing PW6 symbols: {', '.join(missing)}")
 
 raise_source = (root / "device/kanki_raise.c").read_text(encoding="utf-8")
-x11_requested = re.findall(r'LOAD_FN\(.*"([^"]+)"', raise_source)
+expected_x11 = {
+    "XOpenDisplay",
+    "XCloseDisplay",
+    "XDefaultRootWindow",
+    "XQueryTree",
+    "XFetchName",
+    "XFree",
+    "XMapRaised",
+    "XSetInputFocus",
+    "XFlush",
+}
+x11_requested: list[str] = []
+for source_line in raise_source.splitlines():
+    if "LOAD_FN(" not in source_line:
+        continue
+    match = re.search(r'LOAD_FN\([^\"]*"([^"]+)"', source_line)
+    if match:
+        x11_requested.append(match.group(1))
+if len(x11_requested) != len(expected_x11) or set(x11_requested) != expected_x11:
+    raise SystemExit(
+        "unexpected X11 source contract: " + ", ".join(x11_requested)
+    )
 x11_available = dynamic_symbols(rootfs / "usr/lib/libX11.so.6")
 x11_missing = [symbol for symbol in x11_requested if symbol not in x11_available]
 lines.append(

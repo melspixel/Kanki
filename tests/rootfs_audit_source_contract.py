@@ -89,6 +89,9 @@ for fragment in [
     "/lib/ld-linux-armhf.so.3",
     "required-symbol-versions.txt",
     "loader-resolution.txt",
+    "expected_x11 = {",
+    "for source_line in raise_source.splitlines():",
+    "set(x11_requested) != expected_x11",
     "--backend /opt/kanki-audit/libanki-kanki.so --abi-probe",
     "hardware_execution=not_run",
     "mktemp -d /tmp/kanki-pw6-chroot.XXXXXX",
@@ -99,6 +102,11 @@ forbid(
     AUDIT,
     'cp -al "$ROOTFS_TREE/."',
     "Docker Desktop bind mounts cannot provide a portable hard-link rootfs clone",
+)
+forbid(
+    AUDIT,
+    "re.findall(r'LOAD_FN\\(.*",
+    "X11 source extraction must not use a cross-line greedy regex",
 )
 
 forbidden_audit_paths = [
