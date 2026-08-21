@@ -76,7 +76,11 @@ if [ "${1:-}" = --version ]; then
   echo 'qemu-arm fixture 1.0'
   exit 0
 fi
-echo 'fixture qemu execution: PASS'
+case "$*" in
+  *kap-qemu-smoke*) echo 'qemu backend smoke: ok' ;;
+  *kap-audio*) echo 'kap-audio self-test: ok' ;;
+  *kap-sync*) echo 'kap-sync self-test: ok' ;;
+esac
 """,
         )
 
@@ -120,7 +124,11 @@ echo 'fixture qemu execution: PASS'
         provenance = (out / "QEMU-PROVENANCE.txt").read_text()
         self.assertIn(f"source_commit={env['BUILD_COMMIT']}\n", provenance)
         self.assertIn(f"anki_commit={ANKI_COMMIT}\n", provenance)
+        self.assertIn("rootfs_manifest_id=pw6-5.19.6-rootfs-manifest.json\n", provenance)
         self.assertIn("rootfs_manifest_sha256=", provenance)
+        self.assertIn("rootfs_verified=true\n", provenance)
+        self.assertNotIn(f"rootfs={rootfs}\n", provenance)
+        self.assertNotIn(str(rootfs), provenance)
         for name in ("libanki-kindle.so", "kap-app", "kap-audio", "kap-sync"):
             self.assertIn(f"{name}_sha256=", provenance)
 
