@@ -70,13 +70,14 @@ export KAP_OPERATION_LOCK_DIR="$TMP/ext/run/.kap-operation.lock"
 export KAP_SIGNAL_LOG="$TMP/signals"
 
 wait_for_pidfile() {
+    excluded=${1:-}
     attempts=0
     while [ "$attempts" -lt 200 ]; do
         if [ -s "$KAP_PID_FILE" ]; then
             pid=$(cat "$KAP_PID_FILE" 2>/dev/null || true)
             case "$pid" in
                 ''|*[!0-9]*) ;;
-                *) kill -0 "$pid" 2>/dev/null && { printf '%s\n' "$pid"; return 0; } ;;
+                *) [ "$pid" != "$excluded" ] && kill -0 "$pid" 2>/dev/null && { printf '%s\n' "$pid"; return 0; } ;;
             esac
         fi
         attempts=$((attempts + 1))
@@ -108,7 +109,7 @@ first=
 sleep 30 & unrelated=$!
 printf '%s\n' "$unrelated" >"$KAP_PID_FILE"
 sh "$PROJECT_ROOT/scripts/launch.sh" & wrapper2=$!
-second=$(wait_for_pidfile) || { echo "launcher did not replace foreign PID" >&2; exit 1; }
+second=$(wait_for_pidfile "$unrelated") || { echo "launcher did not replace foreign PID" >&2; exit 1; }
 [ "$second" != "$unrelated" ]
 kill -0 "$unrelated"
 [ "$(readlink "/proc/$second/exe" 2>/dev/null || true)" = "$(readlink -f "$KAP_APP_BIN")" ]
