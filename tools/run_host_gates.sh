@@ -40,6 +40,7 @@ python3 tools/check_policy.py
 python3 tests/anki_i18n_determinism_contract.py
 python3 tests/bridge_source_contract.py
 python3 tests/audio_source_contract.py
+python3 tests/operation_lock_source_contract.py
 python3 tests/rootfs_audit_source_contract.py
 
 printf '%s\n' '== native/source syntax =='
@@ -61,6 +62,7 @@ node --check tests/diagnostics_contract.test.cjs
 sh -n scripts/kanki-launch.sh
 sh -n scripts/kanki-sync.sh
 sh -n scripts/kanki-report.sh
+sh -n scripts/kanki-operation-lock.sh
 sh -n scripts/kanki-verify.sh
 sh -n tools/install_kindlehf_toolchain.sh
 sh -n tools/install_mathjax.sh
@@ -101,6 +103,7 @@ node tests/diagnostics_contract.test.cjs
 printf '%s\n' '== reproducible package archive contract =='
 python3 tests/reproducible_zip_contract.py
 sh tests/install_integrity_contract.sh
+sh tests/operation_lock_contract.sh
 python3 tests/runtime_preflight_contract.py
 python3 tests/report_privacy_contract.py
 

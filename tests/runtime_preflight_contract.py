@@ -23,7 +23,8 @@ def require_before(name: str, text: str, earlier: str, later: str) -> None:
 
 launch = (ROOT / "scripts/kanki-launch.sh").read_text(encoding="utf-8")
 launch_call = "\nverify_installation\n"
-require_before("launch", launch, launch_call, 'if ! mkdir "$LOCK"')
+require_before("launch", launch, launch_call, '. "$DIR/kanki-operation-lock.sh"')
+require_before("launch", launch, launch_call, "kanki_operation_lock_acquire launch")
 try:
     launch_verify_body = launch.split("verify_installation() {", 1)[1].split(
         "\n}\n\nverify_installation", 1
@@ -35,7 +36,8 @@ if '>>"$LOG"' in launch_verify_body:
 
 sync = (ROOT / "scripts/kanki-sync.sh").read_text(encoding="utf-8")
 sync_verify = 'if sh "$DIR/kanki-verify.sh" "$DIR"'
-require_before("sync", sync, sync_verify, 'if [ -d "$LOCK" ]')
+require_before("sync", sync, sync_verify, '. "$DIR/kanki-operation-lock.sh"')
+require_before("sync", sync, sync_verify, "kanki_operation_lock_acquire sync")
 require_before("sync", sync, sync_verify, '>>"$LOG"')
 
 report = (ROOT / "scripts/kanki-report.sh").read_text(encoding="utf-8")

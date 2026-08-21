@@ -110,6 +110,27 @@ for caller_name in ["kanki-launch.sh", "kanki-sync.sh", "kanki-report.sh"]:
 if "scripts/kanki-verify.sh" not in (ROOT / "tools/build_kindle_package.sh").read_text(encoding="utf-8"):
     errors.append("canonical package recipe must install the shared install verifier")
 
+# Reviewer and sync collection ownership is one kernel lock on the fixed PW6
+# flock implementation. Path-existence checks and PID-directed stale deletion
+# are not mutual exclusion and must not return.
+operation_lock = (ROOT / "scripts/kanki-operation-lock.sh").read_text(
+    encoding="utf-8"
+)
+for required in [
+    'exec 9<>"$KANKI_OPERATION_LOCK_FILE"',
+    '"${KANKI_FLOCK:-/usr/bin/flock}" -n -E 74 9',
+    "kanki_operation_lock_validate_inherited",
+]:
+    if required not in operation_lock:
+        errors.append(f"collection operation lock contract missing: {required}")
+sync_script = (ROOT / "scripts/kanki-sync.sh").read_text(encoding="utf-8")
+if 'if [ -d "$LOCK" ]' in sync_script:
+    errors.append("standalone sync must acquire the collection lock, not inspect its path")
+if "kanki_operation_lock_acquire sync" not in sync_script:
+    errors.append("standalone sync does not acquire the shared collection lock")
+if "kanki_operation_lock_acquire launch" not in launch:
+    errors.append("launcher does not acquire the shared collection lock")
+
 # Release reproducibility: KindleHF is checksum pinned and no workflow may
 # silently float to a new 'latest' cross toolchain.
 toolchain = (ROOT / "tools/install_kindlehf_toolchain.sh").read_text(encoding="utf-8")
@@ -127,6 +148,12 @@ if "VERSION=2.7.9" not in mathjax_installer:
 if "7131e739848edc14aa661a5516995866b81a477fab8b039d7cc324930e71f786" not in mathjax_installer:
     errors.append("MathJax renderer checksum is not pinned")
 package_recipe = (ROOT / "tools/build_kindle_package.sh").read_text(encoding="utf-8")
+for required in [
+    "scripts/kanki-operation-lock.sh",
+    'packaging/kanki.operation.lock "$EXT/.kanki.operation.lock"',
+]:
+    if required not in package_recipe:
+        errors.append(f"canonical package recipe lacks collection lock input: {required}")
 for required in [
     "sh tools/install_mathjax.sh",
     "assets/vendor/mathjax-$MATHJAX_VERSION",

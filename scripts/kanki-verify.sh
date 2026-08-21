@@ -54,7 +54,7 @@ cut -c 67- "$MANIFEST" | sort >"$EXPECTED"
 while IFS= read -r FILE; do
     case "$FILE" in
         ./MANIFEST.sha256|./config.ini|./kanki.log|./enable-render-capture|\
-        ./.audio.pid|./.diag.pid|./.kanki.lock/pid|\
+        ./.audio.pid|./.diag.pid|./.kanki.lock/pid|./.kanki.lock/mode|\
         ./render-debug/*|./render-debug.previous/*)
             continue
             ;;

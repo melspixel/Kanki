@@ -220,8 +220,9 @@ cp assets/reviewer/reviewer.css assets/reviewer/reviewer.js \
    "$EXT/assets/reviewer/"
 cp -R "$MATHJAX_SOURCE/." "$MATHJAX_DEST/"
 cp scripts/kanki-launch.sh scripts/kanki-sync.sh scripts/kanki-report.sh \
-   scripts/kanki-verify.sh "$EXT/"
+   scripts/kanki-operation-lock.sh scripts/kanki-verify.sh "$EXT/"
 cp packaging/config.example.ini "$EXT/"
+cp packaging/kanki.operation.lock "$EXT/.kanki.operation.lock"
 cp THIRD_PARTY_NOTICES.md docs/INSTALL.md "$EXT/"
 cp packaging/documents/* "$ROOT_PACKAGE/documents/"
 cat > "$EXT/BUILD.json" <<EOF
@@ -251,7 +252,8 @@ find "$ROOT_PACKAGE" -type d -exec chmod 755 {} +
 find "$ROOT_PACKAGE" -type f -exec chmod 644 {} +
 chmod 755 "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-diag" "$EXT/kanki-raise" \
           "$EXT/kanki-audio" "$EXT/kanki-gst-play" "$EXT/kanki-launch.sh" \
-          "$EXT/kanki-sync.sh" "$EXT/kanki-report.sh" "$EXT/kanki-verify.sh" \
+          "$EXT/kanki-sync.sh" "$EXT/kanki-report.sh" \
+          "$EXT/kanki-operation-lock.sh" "$EXT/kanki-verify.sh" \
           "$ROOT_PACKAGE/documents/"*.sh
 (cd "$EXT" && find . -type f ! -name MANIFEST.sha256 ! -name config.ini ! -name kanki.log -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256)
 python3 tools/create_reproducible_zip.py \
@@ -263,7 +265,9 @@ printf '%s\n' '== package and ABI gates =='
 test -x "$EXT/kanki-raise"
 test -x "$EXT/kanki-diag"
 test -x "$EXT/kanki-report.sh"
+test -x "$EXT/kanki-operation-lock.sh"
 test -x "$EXT/kanki-verify.sh"
+test -f "$EXT/.kanki.operation.lock"
 test -f "$EXT/assets/reviewer/css_compat.js"
 test -f "$EXT/assets/reviewer/css_runtime.js"
 test -f "$EXT/assets/reviewer/mathjax_runtime.js"
@@ -284,6 +288,9 @@ grep -q 'kanki://sync/run?mode=download' "$EXT/assets/device/sync.html"
 grep -q 'DISPLAY="${DISPLAY:-:0}"' "$EXT/kanki-launch.sh"
 grep -q 'render-debug' "$EXT/kanki-launch.sh"
 grep -q 'kanki-verify.sh' "$EXT/kanki-launch.sh"
+grep -q 'kanki_operation_lock_acquire launch' "$EXT/kanki-launch.sh"
+grep -q 'kanki_operation_lock_acquire sync' "$EXT/kanki-sync.sh"
+grep -q '/usr/bin/flock' "$EXT/kanki-operation-lock.sh"
 grep -q 'unexpected file outside package manifest' "$EXT/kanki-verify.sh"
 grep -q 'enable-render-capture' "$EXT/kanki-diag"
 grep -q "\"koxtoolchain_version\": \"$KOX_VERSION\"" "$EXT/BUILD.json"

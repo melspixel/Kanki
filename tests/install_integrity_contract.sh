@@ -33,6 +33,8 @@ mkdir -p "$PACKAGE/assets"
 printf '%s\n' '{"kanki_commit":"fixture"}' >"$PACKAGE/BUILD.json"
 printf '%s\n' 'fixture executable' >"$PACKAGE/kanki-device"
 printf '%s\n' 'fixture asset' >"$PACKAGE/assets/reviewer.js"
+printf '%s\n' 'fixture collection operation lock' \
+    >"$PACKAGE/.kanki.operation.lock"
 (cd "$PACKAGE" && find . -type f ! -name MANIFEST.sha256 -print0 \
     | sort -z | xargs -0 sha256sum >MANIFEST.sha256)
 
@@ -48,6 +50,7 @@ printf '%s\n' 'runtime log' >"$PACKAGE/kanki.log"
 printf '%s\n' '100' >"$PACKAGE/.audio.pid"
 printf '%s\n' '101' >"$PACKAGE/.diag.pid"
 printf '%s\n' '102' >"$PACKAGE/.kanki.lock/pid"
+printf '%s\n' 'launch' >"$PACKAGE/.kanki.lock/mode"
 printf '%s\n' 'metrics' >"$PACKAGE/render-debug/metrics.log"
 printf '%s\n' 'raw bounded fixture' >"$PACKAGE/render-debug/card-1.json"
 printf '%s\n' 'old metrics' >"$PACKAGE/render-debug.previous/metrics.log"

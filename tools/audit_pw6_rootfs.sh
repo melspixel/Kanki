@@ -279,6 +279,88 @@ grep -Fxq 'kanki-install-integrity=pass' \
     "$EVIDENCE/package-verifier-pw6-busybox.txt" ||
     fail "PW6 BusyBox verifier evidence lacks the success marker"
 
+printf '%s\n' '== execute collection operation lock under PW6 flock/BusyBox =='
+cat > "$CHROOT/opt/kanki-audit/operation-lock-probe.sh" <<'SH'
+#!/bin/sh
+set -eu
+
+LOCK_ROOT=/var/tmp/kanki-operation-lock-probe
+HELPER=/mnt/us/extensions/kanki/kanki-operation-lock.sh
+rm -rf "$LOCK_ROOT"
+mkdir "$LOCK_ROOT"
+cp /mnt/us/extensions/kanki/.kanki.operation.lock \
+    "$LOCK_ROOT/.kanki.operation.lock"
+
+export KANKI_OPERATION_ROOT=$LOCK_ROOT
+export KANKI_OPERATION_LOCK_FILE="$LOCK_ROOT/.kanki.operation.lock"
+export KANKI_OPERATION_STATE_DIR="$LOCK_ROOT/.kanki.lock"
+export KANKI_FLOCK=/usr/bin/flock
+export KANKI_LOCK_HELPER=$HELPER
+
+expect_busy() {
+    if /bin/sh -c '
+        exec 9>&-
+        . "$KANKI_LOCK_HELPER"
+        kanki_operation_lock_acquire sync
+    '; then
+        echo 'PW6 operation-lock probe: contender unexpectedly acquired' >&2
+        exit 1
+    else
+        STATUS=$?
+    fi
+    test "$STATUS" -eq 74
+}
+
+/usr/bin/flock --version
+. "$HELPER"
+kanki_operation_lock_acquire launch
+test "$(cat "$KANKI_OPERATION_STATE_DIR/pid")" = "$$"
+test "$(cat "$KANKI_OPERATION_STATE_DIR/mode")" = launch
+expect_busy
+
+KANKI_EXPECTED_OWNER=$$
+export KANKI_EXPECTED_OWNER
+/bin/sh -c '
+    . "$KANKI_LOCK_HELPER"
+    kanki_operation_lock_validate_inherited "$KANKI_EXPECTED_OWNER" launch
+'
+echo 'inherited_launcher_handoff=pass'
+
+# Closing or killing the wrapper cannot release the lock while a collection
+# worker still holds the inherited open file description.
+/bin/sleep 1 &
+WORKER_PID=$!
+exec 9>&-
+KANKI_OPERATION_LOCK_HELD=0
+expect_busy
+wait "$WORKER_PID"
+
+/bin/sh -c '
+    exec 9>&-
+    . "$KANKI_LOCK_HELPER"
+    kanki_operation_lock_acquire sync
+    kanki_operation_lock_cleanup
+'
+test ! -d "$KANKI_OPERATION_STATE_DIR"
+echo 'worker_inherited_lock_lifetime=pass'
+echo 'collection_operation_lock=pass'
+SH
+chmod 0755 "$CHROOT/opt/kanki-audit/operation-lock-probe.sh"
+if ! env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    /usr/sbin/chroot "$CHROOT" /usr/bin/qemu-arm-static \
+    /bin/sh /opt/kanki-audit/operation-lock-probe.sh \
+    > "$EVIDENCE/operation-lock-pw6-busybox.txt" 2>&1; then
+    cat "$EVIDENCE/operation-lock-pw6-busybox.txt" >&2
+    fail "collection operation lock failed under PW6 flock/BusyBox"
+fi
+for expected in \
+    inherited_launcher_handoff=pass \
+    worker_inherited_lock_lifetime=pass \
+    collection_operation_lock=pass; do
+    grep -Fxq "$expected" "$EVIDENCE/operation-lock-pw6-busybox.txt" ||
+        fail "PW6 operation-lock evidence lacks $expected"
+done
+
 printf '%s\n' '== execute privacy-redacted report under PW6 BusyBox =='
 REPORT_SENTINEL=KANKI_PRIVATE_SENTINEL_DO_NOT_BUNDLE
 REPORT_SAFE_LOG=KANKI_SAFE_LOG_MARKER
@@ -617,6 +699,7 @@ grep -Fq 'gst-play: preloaded /usr/lib/tts/libIvonaEInkCommon.so.1.0' \
     printf 'tts_sqsh_sha256=%s\n' "$TTS_SQSH_SHA256"
     printf 'package_manifest=pass\n'
     printf 'package_verifier_pw6_busybox=pass\n'
+    printf 'collection_operation_lock_pw6_busybox=pass\n'
     printf 'redacted_report_pw6_busybox=pass\n'
     printf 'armv7_hard_float=pass\n'
     printf 'loader_resolution=pass\n'

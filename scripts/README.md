@@ -4,6 +4,9 @@ Scripts here are copied into `/mnt/us/extensions/kanki` and execute on the Kindl
 
 - `kanki-launch.sh` — package identity/manifest checks and component lifecycle startup.
 - `kanki-sync.sh` — collection-exclusive sync lifecycle.
+- `kanki-operation-lock.sh` — shared PW6 `flock` ownership helper; the
+  reviewer or sync worker inherits the locked descriptor while audio and
+  diagnostics explicitly do not.
 - `kanki-report.sh` — redacted diagnostic bundle creation.
 - `kanki-verify.sh` — read-only manifest, symlink and mixed-install verifier
   shared by launch, sync and diagnostic reporting.

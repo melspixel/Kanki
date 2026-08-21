@@ -22,6 +22,10 @@ Tests in this directory are cross-layer contracts for the rewrite. They are inte
   state allowlist, and rejects tampering, stale files and symlinks;
 - `runtime_preflight_contract.py` keeps log, lock and report paths behind the
   authenticated install verifier;
+- `operation_lock_contract.sh` executes collection-lock contention, exact
+  launcher handoff and inherited-worker lifetime behavior; its source contract
+  also requires the same helper to execute under the fixed PW6 BusyBox/flock
+  rootfs audit;
 - `report_privacy_contract.py` keeps redacted-report staging private, unique,
   failure-cleaned and atomically published without raw capture/user data;
 - `reproducible_zip_contract.py` checks deterministic archive mechanics; two
