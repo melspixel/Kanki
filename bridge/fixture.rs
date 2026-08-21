@@ -9,11 +9,12 @@ use std::path::PathBuf;
 use anki::collection::CollectionBuilder;
 use anki::deckconfig::UpdateDeckConfigsRequest;
 use anki::decks::{FilteredSearchOrder, FilteredSearchTerm};
-use anki::prelude::{DeckConfigId, DeckId};
+use anki::prelude::{DeckConfigId, DeckId, NotetypeId};
 use anki_proto::deck_config::UpdateDeckConfigsMode;
 
 const DISABLED_DECK_NAME: &str = "Kanki playback disabled";
 const FILTERED_DECK_NAME: &str = "Kanki filtered playback";
+const TYPE_EDGE_DECK_NAME: &str = "Kanki typed answer edge cases";
 
 fn argument(name: &str, value: Option<String>) -> Result<PathBuf, Box<dyn Error>> {
     value.map(PathBuf::from).ok_or_else(|| {
@@ -115,12 +116,84 @@ fn main() -> Result<(), Box<dyn Error>> {
         order: FilteredSearchOrder::Added as i32,
     }];
     let filtered_deck_id = collection.add_or_update_filtered_deck(filtered)?.output;
+
+    let type_edge_deck = collection.get_or_create_normal_deck(TYPE_EDGE_DECK_NAME)?;
+
+    let mut cloze_notetype = collection
+        .get_notetype_by_name("Cloze")?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Cloze notetype is missing"))?
+        .as_ref()
+        .clone();
+    cloze_notetype.id = NotetypeId(0);
+    cloze_notetype.name = "Kanki host cloze typed answer".to_string();
+    cloze_notetype.templates[0].config.q_format = concat!(
+        "<section data-kanki-fixture=cloze>{{cloze:Text}}</section>",
+        "{{type:cloze:Text}}"
+    )
+    .to_string();
+    cloze_notetype.templates[0].config.a_format = concat!(
+        "{{cloze:Text}}<br>{{Back Extra}}<hr id=answer>",
+        "{{type:cloze:Text}}"
+    )
+    .to_string();
+    let _ = collection.add_notetype(&mut cloze_notetype, false)?;
+    let mut cloze_note = cloze_notetype.new_note();
+    cloze_note.set_field(
+        0,
+        "The {{c1::capital::role}} of France is Paris.".to_string(),
+    )?;
+    cloze_note.set_field(1, "Cloze typed-answer fixture".to_string())?;
+    let _ = collection.add_note(&mut cloze_note, type_edge_deck.id)?;
+
+    let mut empty_notetype = notetype.clone();
+    empty_notetype.id = NotetypeId(0);
+    empty_notetype.name = "Kanki host empty typed answer".to_string();
+    empty_notetype.templates[0].config.q_format = concat!(
+        "<section data-kanki-fixture=empty>{{Front}}</section>",
+        "{{type:Back}}"
+    )
+    .to_string();
+    empty_notetype.templates[0].config.a_format = concat!(
+        "{{FrontSide}}<hr id=answer>",
+        "<section data-kanki-answer=empty>Known field has an empty value.</section>",
+        "{{type:Back}}"
+    )
+    .to_string();
+    let _ = collection.add_notetype(&mut empty_notetype, false)?;
+    let mut empty_note = empty_notetype.new_note();
+    empty_note.set_field(0, "Empty typed-answer value".to_string())?;
+    empty_note.set_field(1, String::new())?;
+    let _ = collection.add_note(&mut empty_note, type_edge_deck.id)?;
+
+    let mut unknown_notetype = notetype.clone();
+    unknown_notetype.id = NotetypeId(0);
+    unknown_notetype.name = "Kanki host unknown typed answer".to_string();
+    // A literal marker models a stale rendered marker after the referenced
+    // field has disappeared. Valid current templates with an unknown field are
+    // rejected earlier by the pinned backend's template validator.
+    unknown_notetype.templates[0].config.q_format = concat!(
+        "<section data-kanki-fixture=unknown>{{Front}}</section>",
+        "[[type:MissingField]]"
+    )
+    .to_string();
+    unknown_notetype.templates[0].config.a_format = concat!(
+        "{{FrontSide}}<hr id=answer>",
+        "<section data-kanki-answer=unknown>{{Back}}</section>",
+        "[[type:MissingField]]"
+    )
+    .to_string();
+    let _ = collection.add_notetype(&mut unknown_notetype, false)?;
+    let mut unknown_note = unknown_notetype.new_note();
+    unknown_note.set_field(0, "Unknown typed-answer field".to_string())?;
+    unknown_note.set_field(1, "Unknown field fixture answer".to_string())?;
+    let _ = collection.add_note(&mut unknown_note, type_edge_deck.id)?;
+
     let _ = collection.set_current_deck(DeckId(1))?;
 
     collection.close(None)?;
     println!(
-        "seeded_notes=6 disabled_deck={} filtered_deck={}",
-        disabled_deck.id.0, filtered_deck_id.0
+        "seeded_notes=9 disabled_deck={} filtered_deck={} type_edge_deck={}",
+        disabled_deck.id.0, filtered_deck_id.0, type_edge_deck.id.0
     );
     Ok(())
 }

@@ -249,4 +249,96 @@ print(
     )
 )
 
+edge_core = new_core()
+observed_edges = set()
+try:
+    open_collection(edge_core, "edge_open")
+    edge_tree = owned_json("edge_decks", "kanki_deck_tree_json", edge_core)
+    edge_deck = find_deck(edge_tree, name="Kanki typed answer edge cases")
+    require(edge_deck is not None, "typed-answer edge deck was not persisted")
+    require(edge_deck["counts"]["new"] == 3, "typed-answer edge deck must expose three cards")
+    owned_json(
+        "select_type_edges",
+        "kanki_set_current_deck_json",
+        edge_core,
+        int(edge_deck["id"]),
+    )
+
+    for edge_index in range(3):
+        card = owned_json(f"edge_queue_{edge_index}", "kanki_next_card_json", edge_core)
+        require(card.get("finished") is False, "typed-answer edge fixture returned no card")
+        question = card.get("question_html", "")
+        raw_answer = card.get("answer_html", "")
+        require("[[type:" in raw_answer, "typed-answer edge answer marker is missing")
+
+        if "data-kanki-fixture=cloze" in question:
+            fixture = "cloze"
+            require(card.get("type_answer") is True, "cloze type state was not prepared")
+            require('id="typeans"' in question, "cloze type input is missing")
+            require("[[type:" not in question, "cloze type marker was not replaced")
+            prepared = owned_json(
+                "edge_prepare_cloze",
+                "kanki_prepare_answer_json",
+                edge_core,
+                b"capital",
+            )
+            require("class=typeGood" in prepared["html"], "cloze answer did not compare correctly")
+            require("[[type:" not in prepared["html"], "cloze answer marker remained")
+        elif "data-kanki-fixture=empty" in question:
+            fixture = "empty"
+            require(card.get("type_answer") is False, "empty field created a type state")
+            require('id="typeans"' not in question, "empty field created an input")
+            require("kanki-type-warning" not in question, "empty field emitted a warning")
+            require("[[type:" not in question, "empty-field type marker remained")
+            prepared = owned_json(
+                "edge_prepare_empty",
+                "kanki_prepare_answer_json",
+                edge_core,
+                b"ignored",
+            )
+            require("data-kanki-answer=empty" in prepared["html"], "empty answer content changed")
+            require("class=typeGood" not in prepared["html"], "empty field was compared")
+            require("[[type:" not in prepared["html"], "empty answer marker remained")
+        elif "data-kanki-fixture=unknown" in question:
+            fixture = "unknown"
+            require(card.get("type_answer") is False, "unknown field created a type state")
+            require('id="typeans"' not in question, "unknown field created an input")
+            require("kanki-type-warning" in question, "unknown field warning is missing")
+            require("MissingField" in question, "unknown field warning lost its field name")
+            require("[[type:" not in question, "unknown-field type marker remained")
+            prepared = owned_json(
+                "edge_prepare_unknown",
+                "kanki_prepare_answer_json",
+                edge_core,
+                b"ignored",
+            )
+            require("data-kanki-answer=unknown" in prepared["html"], "unknown answer content changed")
+            require("class=typeGood" not in prepared["html"], "unknown field was compared")
+            require("[[type:" not in prepared["html"], "unknown answer marker remained")
+        else:
+            raise AssertionError(f"unrecognized typed-answer edge fixture: {question}")
+
+        require(fixture not in observed_edges, f"duplicate typed-answer edge fixture: {fixture}")
+        observed_edges.add(fixture)
+        result = owned_json(
+            f"edge_answer_{fixture}", "kanki_answer_json", edge_core, 3, 1500 + edge_index
+        )
+        require(int(result["rating"]) == 3, f"{fixture} fixture rating changed")
+
+    require(
+        observed_edges == {"cloze", "empty", "unknown"},
+        f"typed-answer edge coverage changed: {sorted(observed_edges)}",
+    )
+    owned_json("edge_close", "kanki_close_collection_json", edge_core)
+finally:
+    library.kanki_core_free(edge_core)
+
+print(
+    "typed_answer_edges="
+    + json.dumps(
+        {"cloze": True, "empty": True, "unknown": True},
+        separators=(",", ":"),
+    )
+)
+
 print("anki bridge integration: pass")
