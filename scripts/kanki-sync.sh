@@ -16,6 +16,15 @@ if [ -d "$LOCK" ] && [ "${KANKI_SYNC_FROM_LAUNCHER:-0}" != "1" ]; then
     exit 74
 fi
 
+if [ ! -r "$DIR/BUILD.json" ] || [ ! -r "$DIR/MANIFEST.sha256" ]; then
+    printf '%s sync refused: build identity or package manifest missing\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+    exit 70
+fi
+(cd "$DIR" && sha256sum -c MANIFEST.sha256) >>"$LOG" 2>&1 || {
+    printf '%s sync refused: package manifest verification failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+    exit 71
+}
+
 if [ ! -f "$CONFIG" ] && [ -r "$OLD_CONFIG" ]; then
     HKEY=$(sed -n 's/^[[:space:]]*hkey[[:space:]]*=[[:space:]]*//p' "$OLD_CONFIG" | tail -n 1)
     ENDPOINT=$(sed -n 's/^[[:space:]]*endpoint[[:space:]]*=[[:space:]]*//p' "$OLD_CONFIG" | tail -n 1)
@@ -27,10 +36,6 @@ if [ ! -f "$CONFIG" ] && [ -r "$OLD_CONFIG" ]; then
         } >"$CONFIG"
     fi
     unset HKEY ENDPOINT
-fi
-
-if [ -f "$DIR/MANIFEST.sha256" ]; then
-    (cd "$DIR" && sha256sum -c MANIFEST.sha256) >>"$LOG" 2>&1 || exit 71
 fi
 
 chmod 755 "$DIR/kanki-sync" 2>/dev/null || true
