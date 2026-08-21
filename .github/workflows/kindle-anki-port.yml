@@ -38,8 +38,6 @@ jobs:
         run: |
           set -euo pipefail
           make static-test
-          make qemu-host-sanity \
-            TOOLCHAIN_BIN=/tmp/not-installed-yet 2>/dev/null || true
 
       - name: Fetch exact official Anki source and Fluent repositories
         run: |
