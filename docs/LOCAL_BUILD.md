@@ -74,14 +74,17 @@ tools/run_anki_bridge_host.sh
 
 It builds the pinned Anki backend as a native `libanki.so`, injects a host-only
 fixture binary into the pinned source checkout for the duration of the build,
-and creates a six-card collection under a `mktemp` directory using Anki's own
+and creates a nine-card collection under a `mktemp` directory using Anki's own
 typed APIs. Five default-deck cards exercise queue counts, question/answer
 rendering, separate question/answer sound and TTS extraction, `{{FrontSide}}`,
 basic typed-answer comparison, Again/Hard/Good/Easy persistence, user bury,
 close/reopen and health checks. A sixth card is created in a normal deck with
 both playback settings disabled and gathered into a filtered deck; the
 production bridge must preserve the original-deck `false` values in question
-and prepared-answer packets.
+and prepared-answer packets. Three cards in a separate deck exercise cloze
+answer extraction/comparison, known fields with empty values, and unknown-field
+warning/marker removal. These are host-only generic fixtures; they do not add
+note-type-specific behavior to the production bridge.
 
 The recipe also starts the pinned Anki sync server on a Docker-local loopback
 port with a scratch base directory and synthetic credentials. Two independent

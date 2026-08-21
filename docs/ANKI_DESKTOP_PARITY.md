@@ -41,8 +41,8 @@ Kanki equivalents:
 | Platform scaling | Desktop Qt/WebEngine uses CSS pixels/device scale | Lab126 WebKit native CSS-pixel/pixel-density/full-content-zoom path | Implemented feature path; initial-view lifecycle audit below |
 | AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` after partial render and semantic `FrontSide` expansion | Synthetic sound/TTS integration passes; original APKG/PW6 evidence pending |
 | Replay button | Reviewer-owned semantic control | Reviewer-owned 40px semantic control | Implemented; unrelated SVG must stay untouched |
-| Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Basic field disposable fixture passes; cloze/edge cases pending |
-| Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` and replaces marker in place | Basic comparison fixture passes; cloze/edge cases pending |
+| Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Basic/cloze plus known-empty/unknown-field disposable fixtures pass; PW6 pending |
+| Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` and replaces marker in place | Basic and backend-extracted cloze comparisons pass; PW6 pending |
 | Answer separator with FrontSide | Remove `<hr id=answer>` temporarily, then place it immediately before comparison at `[[type:...]]` replacement | Bridge appends separator to the marker-local replacement before `replace_type_markers()` | Source contract and executable basic `FrontSide` fixture pass |
 | Autoplay | `Card.autoplay()` is deck-config driven | Typed effective-deck boolean controls one bounded ordered AV sequence | Enabled/disabled and filtered original-deck integration pass; PW6 pending |
 | Answer-side question replay | `Card.replay_question_audio_on_answer_side()` is deck-config driven | Prepared answer conditionally queues question tags before answer tags | Enabled/disabled and filtered original-deck integration pass; PW6 pending |
@@ -89,15 +89,17 @@ Kanki's `render_type_answer()` follows the same structural order: it removes the
 
 `tests/bridge_source_contract.py` now guards this property so a later refactor cannot accidentally reintroduce the earlier suspected bug.
 
-At `dc53cc89603428b5b41bc9b223dc07a6222c2f65`, a disposable basic-field
-fixture exercises the input, comparison, `{{FrontSide}}` placement and
-close/reopen path through the production bridge.
+At `c2a513f1acdcc1cf778515374e2aef58d9099eb2`, disposable fixtures exercise
+basic and cloze input/comparison, `{{FrontSide}}` placement, a known field with
+an empty value, an unknown-field marker, rating and close/reopen through the
+production bridge. The cloze expected value comes from pinned Anki's
+`extract_cloze_for_typing()`; the bridge does not reproduce cloze parsing.
+The unknown-field fixture uses a stale rendered marker because valid current
+templates referencing an unknown field are rejected earlier by the pinned
+backend.
 
-Still required before the parity gate closes:
-
-- cloze type answer;
-- unknown/empty field behavior;
-- answer scroll target on real Kindle WebKit.
+Still required before the parity gate closes: input focus/keyboard behavior and
+the answer scroll target on real Kindle WebKit.
 
 ### 4. Autoplay must be data-driven
 
