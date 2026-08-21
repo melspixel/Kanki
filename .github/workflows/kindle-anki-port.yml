@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [kindle-anki-port]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
