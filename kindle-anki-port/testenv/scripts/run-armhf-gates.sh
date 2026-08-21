@@ -9,16 +9,41 @@ TOOLCHAIN_BIN=${TOOLCHAIN_BIN:?set TOOLCHAIN_BIN to KindleHF bin directory}
 RUST_TARGET=${KAP_RUST_TARGET:-armv7-unknown-linux-gnueabihf}
 OUT=${OUT:-$PROJECT/build/armhf}
 TRIPLE=${KAP_TOOLCHAIN_TRIPLE:-arm-kindlehf-linux-gnueabihf}
-GLIBC_CEILING=${GLIBC_CEILING:-2.35}
 BUILD_COMMIT=${BUILD_COMMIT:-$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null || printf unknown)}
 ANKI_COMMIT=${ANKI_COMMIT:-$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$PROJECT/upstream.lock.json")}
 
 export PATH="$TOOLCHAIN_BIN:$PATH"
 export CARGO_HOME PROTOC CARGO_NET_OFFLINE=true
+if [ -z "${PROTOC_LIBDIR:-}" ]; then
+  protoc_root=$(dirname "$(dirname "$PROTOC")")
+  for candidate in "$protoc_root/runlib" "$protoc_root/minlib" "$protoc_root/lib"; do
+    if [ -d "$candidate" ] && [ ! -e "$candidate/libc.so.6" ]; then
+      PROTOC_LIBDIR=$candidate
+      break
+    fi
+  done
+fi
+if [ -n "${PROTOC_LIBDIR:-}" ] && [ -d "$PROTOC_LIBDIR" ]; then
+  export LD_LIBRARY_PATH="$PROTOC_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER="$TRIPLE-gcc"
 export CC_armv7_unknown_linux_gnueabihf="$TRIPLE-gcc"
 export CXX_armv7_unknown_linux_gnueabihf="$TRIPLE-g++"
 export AR_armv7_unknown_linux_gnueabihf="$TRIPLE-ar"
+
+# The compatibility ceiling must come from the target sysroot, not from the
+# build host.  A stale hard-coded ceiling can silently accept a binary that
+# links on the cross toolchain but will not load on the Kindle userspace.
+SYSROOT=${SYSROOT:-$("$TRIPLE-gcc" --print-sysroot)}
+if [ -z "${GLIBC_CEILING:-}" ]; then
+  libc="$SYSROOT/lib/libc.so.6"
+  [ -r "$libc" ] || libc="$SYSROOT/lib/arm-linux-gnueabihf/libc.so.6"
+  [ -r "$libc" ] || { echo "unable to locate target libc in sysroot: $SYSROOT" >&2; exit 94; }
+  GLIBC_CEILING=$(
+    strings "$libc" | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sed 's/GLIBC_//' | sort -Vu | tail -1
+  )
+  [ -n "$GLIBC_CEILING" ] || { echo "unable to derive GLIBC ceiling from $libc" >&2; exit 94; }
+fi
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -68,6 +93,7 @@ done
   printf 'anki_commit=%s\n' "$ANKI_COMMIT"
   printf 'rust_target=%s\n' "$RUST_TARGET"
   printf 'toolchain_triple=%s\n' "$TRIPLE"
+  printf 'sysroot=%s\n' "$SYSROOT"
   printf 'glibc_ceiling=%s\n' "$GLIBC_CEILING"
   "$TRIPLE-gcc" --version | head -1 | sed 's/^/compiler=/'
   cargo --version | sed 's/^/cargo=/'
