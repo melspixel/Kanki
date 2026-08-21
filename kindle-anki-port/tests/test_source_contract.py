@@ -90,6 +90,10 @@ def main() -> int:
     require("crate::services::kap_bridge" in port, "semantic port bypasses the bridge module")
     require("run_backend_" not in port, "port must not call generated numeric dispatch")
     require("anki_backend_command" not in port, "port must not expose generic numeric backend calls")
+    require("core.phase != Phase::Idle || core.current.is_some()" in port,
+            "next-question ABI must reject advancing while any reviewer card is active")
+    require("current card must be rated or buried before advancing" in port,
+            "next-question ABI must expose the active-card state-machine failure")
 
     require(reviewer_html.count('id="qa"') == 1, "reviewer must have exactly one persistent #qa root")
     require("qa.innerHTML" in reviewer_js, "reviewer does not update the persistent #qa root")
