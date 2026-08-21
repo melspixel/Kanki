@@ -34,7 +34,7 @@ As written, even `--print-sources` would fail while indexing a non-existent JSON
 
 ### 2. The new test invoked a non-executable file directly
 
-The helper was added to GitHub with mode `100644`, while `test_rootfs_prepare_script.py` attempted to execute it as a program. The test now invokes it explicitly with `sh`, matching the repository mode and avoiding an invalid dependency on executable-bit preservation.
+The helper was initially added to GitHub with mode `100644`, while `test_rootfs_prepare_script.py` attempted to execute it as a program. The test now invokes it explicitly with `sh`, so the regression does not depend on mode preservation. The repository helper itself was then corrected to mode `100755` in a tree-level commit so normal direct invocation also works.
 
 ### 3. Shell helper did not verify the pinned firmware MD5
 
@@ -59,12 +59,13 @@ Canonical commits:
 cea5f6ae0be998f0426292a2da0f38a706d9fb2d  fix: correct pinned PW6 firmware helper verification
 1c59968cd8af1fc4182a51c59e6c31562dc94597  test: enforce PW6 helper hashes and shell invocation
 b1ed8a74d289ee0cf37005d924392a0352ebe8c6  test: gate PW6 firmware helper validation
+335817498abaebe8f14a6454ffcf4e7f303e5be5  testenv: mark PW6 rootfs helper executable
 ```
 
-Canonical Git blobs after the changes:
+Canonical Git blobs after the content changes:
 
 ```text
-testenv/scripts/prepare-pw6-rootfs.sh  d01b1d02ced887592926deb5de586b6f40a0a3f0
+testenv/scripts/prepare-pw6-rootfs.sh  d01b1d02ced887592926deb5de586b6f40a0a3f0  mode 100755
 tests/test_rootfs_prepare_script.py    d7399aa70688b6128c61a916ff9dd8e758de94f3
 testenv/scripts/run-static-gates.sh    0c79c69f57f9506d6a2239e76cb4ee767476fcec
 ```
@@ -94,12 +95,12 @@ The tests cover:
 - absence of an automatic community-mirror fallback;
 - SHA-256 rejection before KindleTool/debugfs;
 - MD5 rejection before KindleTool/debugfs;
-- invocation through `sh` despite repository mode `100644`.
+- invocation through `sh`, while the repository also preserves executable mode for normal use.
 
 Content SHA-256 values of the tested reconstruction:
 
 ```text
-prepare-pw6-rootfs.sh       ca191215e97cc75d3945531c370e47d769ede74513fa44caf3a140d0744829bc
+prepare-pw6-rootfs.sh         ca191215e97cc75d3945531c370e47d769ede74513fa44caf3a140d0744829bc
 test_rootfs_prepare_script.py c5cdfc42e7de248ba90f0ffda1a71cfbb93df14c1894ed4068bb021b05e18500
 ```
 
