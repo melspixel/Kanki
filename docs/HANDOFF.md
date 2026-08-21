@@ -1,6 +1,6 @@
 # Maintainer handoff
 
-A maintainer must be able to reproduce, diagnose, test and release Kanki without reconstructing chat history.
+A maintainer must be able to reproduce, diagnose, test and release Kanki without reconstructing chat history or depending on one hosted CI provider.
 
 **Start here when taking over:** `docs/RESUME.md`.
 
@@ -8,7 +8,7 @@ A maintainer must be able to reproduce, diagnose, test and release Kanki without
 
 ## Handoff source of truth
 
-The repository, PR #10, issue #11, committed documentation and CI artifacts are authoritative. Chat logs, local scratch directories and manually assembled ZIPs are not.
+The repository, PR #10, issue #11, committed documentation and recorded build/test artifacts are authoritative. Chat logs, local scratch directories and undocumented manually assembled ZIPs are not.
 
 Current implementation line:
 
@@ -22,10 +22,12 @@ Before taking over, read in order:
 1. `docs/RESUME.md`
 2. `docs/STATUS.md`
 3. `docs/ARCHITECTURE.md`
-4. `docs/TESTING.md`
-5. `docs/INSTALL.md`
-6. ADRs under `docs/adr/`
-7. issue #11 and PR #10 history
+4. `docs/ANKI_DESKTOP_PARITY.md`
+5. `docs/TESTING.md`
+6. `docs/LOCAL_BUILD.md`
+7. `docs/INSTALL.md`
+8. ADRs under `docs/adr/`
+9. issue #11 and PR #10 history
 
 ## Source-of-truth pins
 
@@ -75,19 +77,57 @@ Every installable package must contain and expose:
 
 The launcher must log these values before opening the collection and must refuse to run when component build IDs disagree.
 
-The package workflow is the canonical definition of package layout and ABI checks. A developer-created ZIP is never a release artifact.
+## Canonical build ownership
+
+The canonical package recipe is **not GitHub Actions YAML**. It is:
+
+```text
+tools/build_kindle_package.sh
+```
+
+Both hosted CI and local builds must invoke that exact script. This removes GitHub-hosted runners as a single point of failure and prevents a hidden second build recipe from drifting.
+
+Executors:
+
+- `.github/workflows/package.yml` — hosted Ubuntu executor and artifact uploader;
+- `tools/local_package_docker.sh` — local macOS/Linux executor using `tools/local-builder.Dockerfile`;
+- direct Ubuntu 24.04 x86-64 — may invoke `bash tools/build_kindle_package.sh` when its prerequisites match `docs/LOCAL_BUILD.md`.
+
+A local package built from a **clean checkout**, with the pinned builder/toolchain, full manifest/ABI/GLIBC gates and recorded SHA-256 is valid build evidence. It is not automatically hardware acceptance. If hosted Actions are unavailable, release engineering may proceed with the local canonical builder rather than waiting indefinitely for GitHub, provided all remaining issue #11 gates are satisfied and the artifact identity/evidence are recorded.
+
+A manually assembled ZIP that bypasses `tools/build_kindle_package.sh` is never release evidence.
 
 ## Build and CI ownership map
 
+- `.github/workflows/actions-probe.yml` — hosted runner/account execution probe only
 - `.github/workflows/ci.yml` — host workspace, policy, reviewer contract, self-test, ARM scaffold
 - `.github/workflows/anki-bridge.yml` — typed Anki host integration
 - `.github/workflows/anki-bridge-arm.yml` — typed Anki ARMHF build and ABI
 - `.github/workflows/device.yml` — Kindle GTK/WebKit native shell
 - `.github/workflows/audio.yml` — loopback audio service and native player
 - `.github/workflows/css-compat.yml` — old-WebKit generic CSS compatibility
-- `.github/workflows/package.yml` — final self-identifying installable package
+- `.github/workflows/package.yml` — hosted executor for the canonical package script
+- `tools/run_host_gates.sh` — local host gate entry point
+- `tools/build_kindle_package.sh` — canonical ARMHF package/ABI recipe
+- `tools/local_package_docker.sh` — local Docker wrapper for macOS/Linux
 
-If CI and documentation disagree, fix one immediately; do not create a hidden alternative build recipe.
+If a workflow and the canonical script disagree, the workflow must be reduced to invoking the script; do not create another embedded copy of the package recipe.
+
+## Local build evidence
+
+When GitHub Actions is unavailable or untrusted, record at minimum:
+
+- exact Kanki commit SHA and confirmation that the root checkout was clean before build;
+- host OS/architecture and Docker/VM engine version;
+- builder platform (`linux/amd64` by default on Apple Silicon);
+- Rust version (`1.92.0` for this line);
+- `toolchain-info.txt` including koxtoolchain version/checksum;
+- generated ZIP SHA-256;
+- `package-exports.txt` and GLIBC evidence;
+- package manifest verification result;
+- any warnings or emulation limitations.
+
+Where practical, perform a second clean rebuild before declaring a release candidate and compare package contents/manifest. Bit-for-bit reproducibility is a separate property to verify, not something to assume.
 
 ## Diagnostic bundle
 
@@ -98,11 +138,13 @@ A single command must create a redacted ZIP containing enough information to dia
 - application and component startup logs;
 - Lab126/WebKit capability and pixel-density report;
 - bounded reviewer/render metrics;
-- backend-rendered card HTML and final reviewer packet for a bounded number of cards;
+- privacy-safe renderer structure data by default;
 - audio pipeline capability/result data;
 - sync state/error category without credentials.
 
-It must not contain:
+Raw card HTML/CSS capture is explicit opt-in, bounded, and never automatically included in the standard report.
+
+The default bundle must not contain:
 
 - AnkiWeb auth tokens;
 - account identifiers;
@@ -114,12 +156,12 @@ Diagnostic directory/bundle creation failure is an explicit error. It must never
 
 ## Test evidence and closure
 
-`docs/TESTING.md` defines Gates A-E. Issue #11 records closure. A checkbox may only close with evidence from the same candidate commit or with an explicit reason why a commit-independent hardware fact applies.
+`docs/TESTING.md` defines the gates. Issue #11 records closure. A checkbox may only close with evidence from the same candidate commit or with an explicit reason why a commit-independent hardware fact applies.
 
 Evidence records should include:
 
 - Kanki commit SHA;
-- workflow/run or hardware test identifier;
+- executor/test identifier (GitHub run, local canonical build, or hardware test);
 - architecture/device firmware;
 - exact test/fixture;
 - artifact/log location;
@@ -133,7 +175,7 @@ A green build is not hardware acceptance. A device screenshot is not backend/syn
 - `rewrite-v1`: active replacement until issue #11 closes.
 - feature branches: focused changes with matching tests/ADR updates.
 - tags: accepted source points only.
-- generated ZIPs: CI/package workflow only.
+- generated ZIPs: only the canonical package script may create release candidates; the executor may be hosted CI or the documented local builder.
 
 PR #10 stays Draft until host, Anki bridge, ARMHF, renderer/package and PW6 acceptance evidence all belong to the release candidate.
 
@@ -144,10 +186,11 @@ Before handing the project to another maintainer or ending a substantial impleme
 1. update `docs/STATUS.md` with implemented/verified/failing/next state;
 2. update issue #11 with new evidence or reopened gates;
 3. update `docs/RESUME.md` if the current blocker or next action changed;
-4. add/update an ADR for architecture changes;
-5. ensure the active branch has no important uncommitted-only instructions;
-6. link the exact failing workflow/run rather than saying only "CI is red";
-7. do not claim an installable package exists unless its manifest/ABI package workflow succeeded.
+4. update `docs/LOCAL_BUILD.md` if local build prerequisites/commands changed;
+5. add/update an ADR for architecture changes;
+6. ensure the active branch has no important uncommitted-only instructions;
+7. link the exact failing workflow/run or local command/output rather than saying only "CI is red";
+8. do not claim an installable package is accepted unless its manifest/ABI gates and target hardware gates succeeded.
 
 ## Definition of handoff-ready
 
@@ -157,11 +200,12 @@ The project is continuously handoff-ready when all of the following are true, ev
 - `STATUS.md` matches the current branch rather than the first bootstrap commit;
 - no critical knowledge exists only in chat;
 - dependencies and source pins are visible;
-- build/test commands live in repository workflows/docs;
+- build/test commands live in repository scripts/workflows/docs;
+- the project can be built without depending on GitHub-hosted runners;
 - architecture decisions and forbidden shortcuts are recorded;
 - active blockers are explicit;
 - device rollback and data boundaries are documented;
 - test corpus and expected behavior are committed;
 - known limitations are listed, not hidden in logs.
 
-Release-ready additionally requires issue #11/Gate E completion on the target PW6.
+Release-ready additionally requires issue #11 completion on the target PW6 against the exact candidate artifact.
