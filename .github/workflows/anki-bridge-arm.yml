@@ -87,7 +87,8 @@ jobs:
           file libanki-kanki.so
           readelf -h libanki-kanki.so | tee backend-elf.txt
           readelf -d libanki-kanki.so | tee backend-dynamic.txt
-          nm -D libanki-kanki.so | grep -E ' kanki_(build_info_json|core_new|open_collection_json|deck_tree_json|next_card_json|answer_json|bury_current_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee backend-exports.txt
+          nm -D libanki-kanki.so | grep -E ' kanki_(build_info_json|core_new|open_collection_json|deck_tree_json|next_card_json|prepare_answer_json|answer_json|bury_current_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee backend-exports.txt
+          grep -q ' kanki_prepare_answer_json$' backend-exports.txt
           readelf --version-info libanki-kanki.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee backend-glibc.txt || true
           LIBC=$(find "$KHF_SYSROOT" -name libc.so.6 | head -1)
           readelf --version-info "$LIBC" | grep -oE 'GLIBC_[0-9.]+' | sort -Vu > sysroot-glibc.txt
