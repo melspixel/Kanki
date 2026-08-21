@@ -1,4 +1,4 @@
-name: Rewrite CI
+name: Rewrite host gates
 
 on:
   push:
@@ -13,6 +13,7 @@ permissions:
 jobs:
   host:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,114 +22,29 @@ jobs:
         with:
           toolchain: 1.92.0
           components: rustfmt,clippy
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Source pins
-        run: |
-          test "$(git -C third_party/anki rev-parse HEAD)" = e5a6fbe27fdd4d57d5f712191b4a753032e57853
-          test "$(git -C third_party/ranki-reference rev-parse HEAD)" = d671ee657f0c411474d2afff3bf9cbb49be2fb44
-          test "$(git -C third_party/kindle-sdk rev-parse HEAD)" = b4a6c99d718a7cf74935f36105c62491b4336a61
-          test "$(git -C third_party/audiobook-koplugin rev-parse HEAD)" = 62edf76feb1b7f4af2f01754957e8d57eb3e7d67
-      - name: Rustfmt gate
-        run: cargo fmt --all -- --check
-      - name: Clippy gate
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Renderer/source policy
-        run: |
-          python3 tools/check_policy.py
-          python3 tests/bridge_source_contract.py
-          node --check assets/reviewer/reviewer.js
-          node --check assets/reviewer/css_compat.js
-          node --check assets/reviewer/css_runtime.js
-          node --check assets/reviewer/diagnostics.js
-          node --check assets/device/decks.js
-          node --check tests/renderer_contract.test.cjs
-          node --check tests/css_compat.test.cjs
-          node --check tests/diagnostics_contract.test.cjs
-          sh -n tools/install_kindlehf_toolchain.sh
-          sh -n scripts/kanki-launch.sh
-          sh -n scripts/kanki-report.sh
-      - name: Host tests, reviewer contracts and self-test
-        run: |
-          set +e
-          cargo test --workspace >cargo-test.log 2>&1
-          CARGO_STATUS=$?
-          npm install --no-save --ignore-scripts jsdom@24.1.3 >npm-install.log 2>&1
-          NPM_STATUS=$?
-          node tests/renderer_contract.test.cjs >renderer-contract.txt 2>&1
-          RENDER_STATUS=$?
-          node tests/css_compat.test.cjs >css-contract.txt 2>&1
-          CSS_STATUS=$?
-          node tests/diagnostics_contract.test.cjs >diagnostics-contract.txt 2>&1
-          DIAG_STATUS=$?
-          cargo run -p kanki-app -- --self-test >self-test.json 2>self-test.stderr
-          SELF_STATUS=$?
-          set -e
-          cat cargo-test.log
-          cat npm-install.log
-          cat renderer-contract.txt
-          cat css-contract.txt
-          cat diagnostics-contract.txt
-          cat self-test.stderr
-          cat self-test.json
-          test "$CARGO_STATUS" -eq 0
-          test "$NPM_STATUS" -eq 0
-          test "$RENDER_STATUS" -eq 0
-          grep -q 'renderer contract: pass' renderer-contract.txt
-          test "$CSS_STATUS" -eq 0
-          grep -q 'css compatibility contract: pass' css-contract.txt
-          test "$DIAG_STATUS" -eq 0
-          grep -q 'renderer diagnostics contract: pass' diagnostics-contract.txt
-          test "$SELF_STATUS" -eq 0
-          grep -q '"result": "pass"' self-test.json
-      - name: Source handoff artifact
-        run: |
-          mkdir -p out
-          git archive --format=tar.gz -o out/kanki-rewrite-source.tar.gz HEAD
-          sha256sum out/kanki-rewrite-source.tar.gz > out/kanki-rewrite-source.tar.gz.sha256
+      - name: Run canonical host gates
+        run: sh tools/run_host_gates.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rewrite-host-evidence
+          name: rewrite-host-evidence-${{ github.sha }}
           path: |
-            cargo-test.log
-            npm-install.log
-            self-test.json
-            self-test.stderr
-            renderer-contract.txt
-            css-contract.txt
-            diagnostics-contract.txt
-            out/
+            out/host-mathjax/install.txt
+            out/host-mathjax/vendor-contract.txt
           if-no-files-found: warn
 
-  arm-skeleton:
+  typed-anki-host:
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: 1.92.0
-          target: armv7-unknown-linux-gnueabihf
-      - name: Install pinned KindleHF toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zstd
-          bash tools/install_kindlehf_toolchain.sh
-          echo "$HOME/x-tools/arm-kindlehf-linux-gnueabihf/bin" >> "$GITHUB_PATH"
-      - name: Cross-build source-owned executable scaffold
-        env:
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-kindlehf-linux-gnueabihf-gcc
-          RUSTFLAGS: -C target-cpu=cortex-a7 -C link-arg=-Wl,--as-needed
-        run: |
-          cargo build --release -p kanki-app --target armv7-unknown-linux-gnueabihf
-          file target/armv7-unknown-linux-gnueabihf/release/kanki-app
-          readelf -h target/armv7-unknown-linux-gnueabihf/release/kanki-app | tee arm-elf.txt
-          readelf --version-info target/armv7-unknown-linux-gnueabihf/release/kanki-app | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee arm-glibc.txt || true
+          submodules: true
+      - name: Run canonical typed-Anki Docker gate
+        run: sh tools/local_anki_bridge_docker.sh
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: rewrite-arm-skeleton
-          path: |
-            target/armv7-unknown-linux-gnueabihf/release/kanki-app
-            arm-elf.txt
-            arm-glibc.txt
+          name: typed-anki-host-evidence-${{ github.sha }}
+          path: out/host-anki/
+          if-no-files-found: warn
