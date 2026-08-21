@@ -24,13 +24,31 @@ def main() -> int:
         '"hardware_acceptance": "not-run"',
         'len(unique_apkgs) < 5',
         '"non-hardware-release-gates-passed"',
+        '"armhf-checkpoint-passed"',
+        '"qemu-package-checkpoint-passed"',
+        '"QEMU": str(qemu_exact)',
+        '"BUILD_COMMIT": build_commit',
+        'qemu_exact / "QEMU-PROVENANCE.txt"',
     )
     for needle in required:
         assert needle in text, f"vm-advance missing canonical contract: {needle}"
 
+    # Exact-rootfs QEMU must execute before package construction. Missing private
+    # rootfs bytes must return an ARMHF checkpoint without invoking packaging.
+    qemu_gate = text.index('"qemu-exact-rootfs"')
+    package_gate = text.index('"package-audit"')
+    assert qemu_gate < package_gate, "vm-advance packages before exact-rootfs QEMU"
+
+    no_rootfs = text.index("if not args.rootfs:")
+    armhf_checkpoint = text.index('report["result"] = "armhf-checkpoint-passed"')
+    assert no_rootfs < armhf_checkpoint < qemu_gate, (
+        "vm-advance must terminate at an ARMHF checkpoint when rootfs is absent"
+    )
+
     forbidden = (
         "kap_port::tests",
         '"software-build-gates-passed"',
+        '"armhf-package-checkpoint-passed"',
         '("cargo-check",',
         '("cargo-test",',
         '("cargo-release",',
