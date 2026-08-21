@@ -3,10 +3,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import os
 import re
 import stat
-import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -21,9 +19,15 @@ REQUIRED = {
     "documents/Kindle Anki Sync.sh",
 }
 FORBIDDEN_BASENAMES = {
-    "collection.anki2", "media.db2", "config.ini", ".kap.pid",
+    "collection.anki2",
+    "media.db2",
+    "config.ini",
+    ".kap.pid",
+    ".sync-request",
+    ".opened-build",
     "kindle-anki-port.log",
 }
+FORBIDDEN_SUFFIXES = (".log", ".pid", ".anki2")
 FORBIDDEN_TEXT = [
     re.compile(pattern, re.I)
     for pattern in [r"\bRAnki\b", r"rewrite-v1", r"LD_PRELOAD", r"COCA-English"]
@@ -39,6 +43,20 @@ def safe_path(name: str) -> bool:
     return not path.is_absolute() and ".." not in path.parts and "" not in path.parts
 
 
+def runtime_state_path(path: PurePosixPath) -> bool:
+    lower_parts = tuple(part.lower() for part in path.parts)
+    basename = path.name.lower()
+    if basename in FORBIDDEN_BASENAMES or basename.endswith(FORBIDDEN_SUFFIXES):
+        return True
+    if "collection.media" in lower_parts:
+        return True
+    if ".kap-operation.lock" in lower_parts:
+        return True
+    if basename.startswith(".kap-operation.lock.pid."):
+        return True
+    return False
+
+
 def audit_zip(path: Path) -> list[str]:
     errors: list[str] = []
     with zipfile.ZipFile(path) as archive:
@@ -50,12 +68,13 @@ def audit_zip(path: Path) -> list[str]:
             if not safe_path(name):
                 errors.append(f"unsafe path: {name}")
                 continue
+            posix_path = PurePosixPath(name)
             mode = (info.external_attr >> 16) & 0xFFFF
             if stat.S_ISLNK(mode):
                 errors.append(f"symlink is forbidden: {name}")
-            if PurePosixPath(name).name in FORBIDDEN_BASENAMES:
+            if runtime_state_path(posix_path):
                 errors.append(f"forbidden user/runtime file: {name}")
-            if PurePosixPath(name).suffix.lower() in TEXT_SUFFIXES and info.file_size <= 2_000_000:
+            if posix_path.suffix.lower() in TEXT_SUFFIXES and info.file_size <= 2_000_000:
                 text = archive.read(info).decode("utf-8", "replace")
                 for pattern in FORBIDDEN_TEXT:
                     if pattern.search(text):
