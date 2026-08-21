@@ -111,7 +111,7 @@ jobs:
           cp packaging/documents/* "$ROOT/documents/"
           cat > "$EXT/BUILD.json" <<EOF
           {
-            "version": "0.1.0-hw1",
+            "version": "0.1.0-hw2",
             "kanki_commit": "$GITHUB_SHA",
             "anki_commit": "$ANKI_COMMIT",
             "kindle_sdk_commit": "$KINDLE_SDK_COMMIT",
@@ -124,19 +124,23 @@ jobs:
           EOF
           chmod 755 "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-audio" "$EXT/kanki-gst-play" "$EXT/kanki-launch.sh" "$EXT/kanki-sync.sh" "$ROOT/documents/"*.sh
           (cd "$EXT" && find . -type f ! -name MANIFEST.sha256 ! -name config.ini ! -name kanki.log -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256)
-          (cd "$ROOT" && zip -qr ../Kanki-rewrite-hw1.zip extensions documents)
-          sha256sum Kanki-rewrite-hw1.zip > Kanki-rewrite-hw1.zip.sha256
+          (cd "$ROOT" && zip -qr ../Kanki-rewrite-hw2.zip extensions documents)
+          sha256sum Kanki-rewrite-hw2.zip > Kanki-rewrite-hw2.zip.sha256
       - name: Package and ABI gates
         run: |
           EXT=package/extensions/kanki
           test -f "$EXT/assets/reviewer/css_compat.js"
           test -f "$EXT/assets/reviewer/css_runtime.js"
+          test -f "$EXT/assets/device/sync.html"
           grep -q 'css_compat.js' "$EXT/assets/device/reviewer-shell.html"
           grep -q 'css_runtime.js' "$EXT/assets/device/reviewer-shell.html"
+          grep -q 'kanki://sync/run?mode=normal' "$EXT/assets/device/sync.html"
+          grep -q 'kanki://sync/run?mode=upload' "$EXT/assets/device/sync.html"
+          grep -q 'kanki://sync/run?mode=download' "$EXT/assets/device/sync.html"
           (cd "$EXT" && sha256sum -c MANIFEST.sha256)
-          unzip -l Kanki-rewrite-hw1.zip | tee package-contents.txt
-          ! unzip -l Kanki-rewrite-hw1.zip | grep -E 'extensions/ranki|LD_PRELOAD|collection\.anki2|config\.ini$'
-          nm -D "$EXT/libanki-kanki.so" | grep -E ' kanki_(core_new|next_card_json|sync_core_new|sync_collection_json)$' | tee package-exports.txt
+          unzip -l Kanki-rewrite-hw2.zip | tee package-contents.txt
+          ! unzip -l Kanki-rewrite-hw2.zip | grep -E 'extensions/ranki|LD_PRELOAD|collection\.anki2|config\.ini$'
+          nm -D "$EXT/libanki-kanki.so" | grep -E ' kanki_(core_new|open_collection_json|next_card_json|prepare_answer_json|answer_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee package-exports.txt
           for file in "$EXT/libanki-kanki.so" "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-audio" "$EXT/kanki-gst-play"; do
             readelf --version-info "$file" | grep -oE 'GLIBC_[0-9.]+' || true
           done | sort -Vu | tee package-glibc.txt
@@ -152,10 +156,10 @@ jobs:
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: kanki-rewrite-hw1
+          name: kanki-rewrite-hw2
           path: |
-            Kanki-rewrite-hw1.zip
-            Kanki-rewrite-hw1.zip.sha256
+            Kanki-rewrite-hw2.zip
+            Kanki-rewrite-hw2.zip.sha256
             package-contents.txt
             package-exports.txt
             package-glibc.txt
