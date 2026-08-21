@@ -56,10 +56,13 @@ The permanent invariants are enumerated in `docs/RESUME.md`. In particular:
 - deck-agnostic renderer compatibility only;
 - explicit collection ownership across review/sync;
 - `anki_data` is never part of install/upgrade/rollback mutation;
-- release components must refuse mixed build identities.
+- release components must refuse mixed build identities;
 - launch, standalone sync and diagnostic reports share the packaged read-only
   install verifier; manifest-external package files and symlinks are rejected,
-  while the documented bounded runtime-state allowlist remains valid.
+  while the documented bounded runtime-state allowlist remains valid;
+- verifier preflight completes before callers open logs, inspect locks or copy
+  report inputs. Until trust is established, failures go only to stderr; the
+  verifier rejects links before reading identity/manifest-owned paths.
 
 Architecture changes require an ADR before or with the implementation change.
 
@@ -219,6 +222,8 @@ The default bundle must not contain:
 - Wi-Fi credentials or device serial identifiers.
 
 Diagnostic directory/bundle creation failure is an explicit error. It must never be swallowed with `|| true` and then reported as enabled.
+An install-integrity preflight failure is likewise fatal: do not build a
+diagnostic bundle by following log/metrics paths from an unverified tree.
 
 ## Test evidence and closure
 

@@ -27,6 +27,17 @@ esac
 if [ ! -d "$DIR" ] || [ -L "$DIR" ]; then
     fail 70 "installation directory missing or symbolic: $DIR"
 fi
+
+# Refuse links before reading BUILD.json, the manifest, or any manifest-owned
+# path. Callers likewise authenticate this verifier before touching runtime
+# logs, locks or report inputs.
+if ! (cd "$DIR" && find . -type l -print | sort) >"$LINKS"; then
+    fail 70 'unable to scan installation tree for symbolic links'
+fi
+if [ -s "$LINKS" ]; then
+    FIRST_LINK=$(sed -n '1p' "$LINKS")
+    fail 72 "symbolic link is not allowed: $FIRST_LINK"
+fi
 if [ ! -r "$DIR/BUILD.json" ]; then
     fail 70 'build identity missing: BUILD.json'
 fi
@@ -36,15 +47,6 @@ fi
 
 if ! (cd "$DIR" && sha256sum -c MANIFEST.sha256); then
     fail 71 'package manifest verification failed'
-fi
-
-# The release ZIP contains regular files only. A symlink can redirect a
-# manifest path outside this build identity even when its target happens to
-# hash correctly, so reject links rather than following them.
-(cd "$DIR" && find . -type l -print | sort) >"$LINKS"
-if [ -s "$LINKS" ]; then
-    FIRST_LINK=$(sed -n '1p' "$LINKS")
-    fail 72 "symbolic link is not allowed: $FIRST_LINK"
 fi
 
 cut -c 67- "$MANIFEST" | sort >"$EXPECTED"

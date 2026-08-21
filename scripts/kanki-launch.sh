@@ -13,7 +13,58 @@ DIAG_PID=
 START_SYNC_PAGE=0
 LAST_SYNC_STATUS=0
 
-mkdir -p "$DIR"
+verify_installation() {
+    if [ ! -f "$DIR/MANIFEST.sha256" ] || \
+        [ -L "$DIR/MANIFEST.sha256" ]; then
+        printf '%s package manifest missing or symbolic: MANIFEST.sha256\n' \
+            "$(date '+%Y-%m-%d %H:%M:%S')" >&2
+        return 71
+    fi
+    if [ ! -f "$DIR/kanki-verify.sh" ] || \
+        [ -L "$DIR/kanki-verify.sh" ]; then
+        printf '%s install verifier missing or symbolic\n' \
+            "$(date '+%Y-%m-%d %H:%M:%S')" >&2
+        return 73
+    fi
+    VERIFY_RECORD=$(grep -E '^[0-9a-fA-F]{64}  \./kanki-verify\.sh$' \
+        "$DIR/MANIFEST.sha256" 2>/dev/null || true)
+    if [ -z "$VERIFY_RECORD" ] || \
+        ! printf '%s\n' "$VERIFY_RECORD" | (cd "$DIR" && sha256sum -c -) \
+            >/dev/null 2>&1; then
+        printf '%s install verifier does not match manifest\n' \
+            "$(date '+%Y-%m-%d %H:%M:%S')" >&2
+        return 73
+    fi
+    if sh "$DIR/kanki-verify.sh" "$DIR" >/dev/null; then
+        :
+    else
+        STATUS=$?
+        printf '%s installation integrity verification failed status=%s\n' \
+            "$(date '+%Y-%m-%d %H:%M:%S')" "$STATUS" >&2
+        return "$STATUS"
+    fi
+    for REQUIRED in \
+        './BUILD.json' \
+        './libanki-kanki.so' \
+        './kanki-device' \
+        './kanki-sync' \
+        './kanki-diag' \
+        './kanki-audio' \
+        './kanki-gst-play' \
+        './kanki-verify.sh' \
+        './assets/device/reviewer-shell.html' \
+        './assets/reviewer/reviewer.js' \
+        './assets/reviewer/diagnostics.js'; do
+        if ! grep -F "  $REQUIRED" "$DIR/MANIFEST.sha256" >/dev/null 2>&1; then
+            printf '%s package manifest missing required component=%s\n' \
+                "$(date '+%Y-%m-%d %H:%M:%S')" "$REQUIRED" >&2
+            return 72
+        fi
+    done
+}
+
+verify_installation
+
 if ! mkdir "$LOCK" 2>/dev/null; then
     PID=$(cat "$LOCK/pid" 2>/dev/null || true)
     if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
@@ -28,6 +79,11 @@ if ! mkdir "$LOCK" 2>/dev/null; then
     mkdir "$LOCK"
 fi
 printf '%s\n' "$$" >"$LOCK/pid"
+printf '%s installation integrity verification passed\n' \
+    "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+printf '%s build identity: ' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+tr '\n' ' ' <"$DIR/BUILD.json" >>"$LOG"
+printf '\n' >>"$LOG"
 
 stop_audio() {
     if [ -n "${AUDIO_PID:-}" ]; then
@@ -53,56 +109,6 @@ cleanup() {
     rm -rf "$LOCK"
 }
 trap cleanup EXIT INT TERM
-
-verify_installation() {
-    if [ ! -r "$DIR/BUILD.json" ]; then
-        printf '%s build identity missing: BUILD.json\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
-        return 70
-    fi
-    if [ ! -r "$DIR/MANIFEST.sha256" ]; then
-        printf '%s package manifest missing: MANIFEST.sha256\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
-        return 71
-    fi
-    for REQUIRED in \
-        './BUILD.json' \
-        './libanki-kanki.so' \
-        './kanki-device' \
-        './kanki-sync' \
-        './kanki-diag' \
-        './kanki-audio' \
-        './kanki-gst-play' \
-        './kanki-verify.sh' \
-        './assets/device/reviewer-shell.html' \
-        './assets/reviewer/reviewer.js' \
-        './assets/reviewer/diagnostics.js'; do
-        if ! grep -F "  $REQUIRED" "$DIR/MANIFEST.sha256" >/dev/null 2>&1; then
-            printf '%s package manifest missing required component=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$REQUIRED" >>"$LOG"
-            return 72
-        fi
-    done
-    VERIFY_RECORD=$(grep -E '^[0-9a-fA-F]{64}  \./kanki-verify\.sh$' \
-        "$DIR/MANIFEST.sha256" 2>/dev/null || true)
-    if [ -z "$VERIFY_RECORD" ] || \
-        ! printf '%s\n' "$VERIFY_RECORD" | (cd "$DIR" && sha256sum -c -) \
-            >>"$LOG" 2>&1; then
-        printf '%s install verifier is missing or does not match manifest\n' \
-            "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
-        return 73
-    fi
-    if sh "$DIR/kanki-verify.sh" "$DIR" >>"$LOG" 2>&1; then
-        :
-    else
-        STATUS=$?
-        printf '%s installation integrity verification failed status=%s\n' \
-            "$(date '+%Y-%m-%d %H:%M:%S')" "$STATUS" >>"$LOG"
-        return "$STATUS"
-    fi
-    printf '%s build identity: ' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
-    tr '\n' ' ' <"$DIR/BUILD.json" >>"$LOG"
-    printf '\n' >>"$LOG"
-}
-
-verify_installation
 
 export KANKI_MEDIA_DIR=/mnt/us/anki_data/collection.media
 export KANKI_GST_PLAYER="$DIR/kanki-gst-play"

@@ -108,6 +108,9 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
   actual assembled tree: clean and explicitly permitted runtime state pass;
   extra stale regular files, symlinks, tampering, missing manifest-owned files
   and a missing manifest fail;
+- verify links are rejected before manifest-owned paths are hashed and launch,
+  standalone sync and report generation do not access log, lock or report
+  inputs before verifier success;
 - verify package includes diagnostic/report runtime and does not include `extensions/ranki`, `collection.anki2` or user `config.ini`;
 - package contains no Amazon firmware or proprietary library bytes.
 

@@ -73,4 +73,8 @@ and stale files left by a mixed-version copy. Only Kanki's bounded runtime
 state is allowed outside the manifest: `config.ini`, `kanki.log`, the capture
 sentinel, launcher/audio/diagnostic PID state, and files below
 `render-debug/` or `render-debug.previous/`. The redacted report runs the same
-read-only verifier and records its result.
+read-only verifier and records its result. Launch, standalone sync and report
+generation complete that verification before opening `kanki.log`, inspecting
+the launcher lock or copying any report input. A preflight failure is written
+to stderr, not to an untrusted runtime path; report generation stops without
+creating a bundle from an unverified tree.

@@ -10,6 +10,28 @@ LOG="$DIR/kanki.log"
 RENDER_DEBUG="$DIR/render-debug"
 RENDER_PREVIOUS="$DIR/render-debug.previous"
 
+if [ ! -f "$DIR/MANIFEST.sha256" ] || [ -L "$DIR/MANIFEST.sha256" ] || \
+    [ ! -f "$DIR/kanki-verify.sh" ] || [ -L "$DIR/kanki-verify.sh" ]; then
+    printf '%s\n' 'kanki-report: manifest or install verifier missing/symbolic' >&2
+    exit 70
+fi
+VERIFY_RECORD=$(grep -E '^[0-9a-fA-F]{64}  \./kanki-verify\.sh$' \
+    "$DIR/MANIFEST.sha256" 2>/dev/null || true)
+if [ -z "$VERIFY_RECORD" ] || \
+    ! printf '%s\n' "$VERIFY_RECORD" | (cd "$DIR" && sha256sum -c -) \
+        >/dev/null 2>&1; then
+    printf '%s\n' 'kanki-report: install verifier does not match manifest' >&2
+    exit 71
+fi
+if sh "$DIR/kanki-verify.sh" "$DIR" >/dev/null; then
+    :
+else
+    STATUS=$?
+    printf 'kanki-report: installation integrity verification failed status=%s\n' \
+        "$STATUS" >&2
+    exit "$STATUS"
+fi
+
 mkdir -p "$WORK"
 
 copy_if_readable() {

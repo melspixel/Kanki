@@ -11,3 +11,6 @@ Scripts here are copied into `/mnt/us/extensions/kanki` and execute on the Kindl
 Developer/build scripts belong in `tools/` instead.
 
 Runtime scripts must preserve the `/mnt/us/anki_data` safety boundary, fail explicitly on missing required components/diagnostics, and refuse mixed package identities rather than silently continuing.
+They must complete verifier preflight before opening runtime logs, inspecting
+locks or copying diagnostic inputs; preflight failures use stderr because the
+runtime paths are not trusted yet.

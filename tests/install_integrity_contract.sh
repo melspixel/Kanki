@@ -67,6 +67,9 @@ mv "$WORK/kanki-device" "$PACKAGE/kanki-device"
 
 ln -s kanki-device "$PACKAGE/legacy-device-link"
 expect_status 72 sh "$ROOT/scripts/kanki-verify.sh" "$PACKAGE"
+if grep -q ': OK$' "$WORK/failure.log"; then
+    fail 'manifest paths were hashed before symbolic-link refusal'
+fi
 rm -f "$PACKAGE/legacy-device-link"
 
 mv "$PACKAGE/MANIFEST.sha256" "$WORK/MANIFEST.sha256"
