@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-21
-**Last fully recorded non-hardware baseline:** `d35962a0fd00beb511f29118acc3855f925d5089`
+**Last fully recorded non-hardware baseline:** `512cb803c01cc6a9b2c94c99cd0c7ad908378c3e`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -25,7 +25,7 @@ The branch contains source-owned implementations for the major runtime paths:
 - Lab126/WebKit CSS-pixel/full-content-zoom feature path;
 - source-owned sync lifecycle;
 - source-owned loopback audio service and pinned `mixersink` player helper;
-- typed bridge deck-config autoplay and answer-side question-replay fields; reviewer sequence consumption and fixtures remain open;
+- typed bridge deck-config autoplay and answer-side question-replay fields, with bounded ordered reviewer/native sequence consumption and host fixtures;
 - source-owned renderer diagnostics daemon on `127.0.0.1:17393`;
 - bounded privacy-safe renderer metrics and explicit bounded raw capture opt-in;
 - duplicate-instance/reactivation helper;
@@ -79,15 +79,15 @@ The canonical script refuses a dirty root checkout by default, validates source 
 
 ### Verified local baseline
 
-The first clean local baseline is now recorded for exact SHA
-`d35962a0fd00beb511f29118acc3855f925d5089`:
+The current clean local non-hardware baseline is recorded for exact SHA
+`512cb803c01cc6a9b2c94c99cd0c7ad908378c3e`:
 
 - host: macOS 26.4 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
 - `sh tools/run_host_gates.sh` — **PASS** using project-local Rust 1.92.0,
   Node 24.19.0 and jsdom 24.1.3; fmt, clippy, policy, native/source
-  syntax, 13 Rust unit tests, doc tests, renderer/CSS/diagnostics contracts
-  and the app self-test passed;
+  syntax, 13 Rust unit tests, doc tests, renderer/CSS/diagnostics contracts,
+  the semantic audio source contract and the app self-test passed;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
   native x86-64 typed library, a disposable collection passed
   build/open/decks/health/close plus independent sync open/close, and the
@@ -99,7 +99,7 @@ The first clean local baseline is now recorded for exact SHA
   exports were present and required GLIBC versions were within the pinned
   sysroot;
 - package SHA-256:
-  `b7b75b2eef19f06d696ece4855cdec49e80cf59309a1904b882705089f54bb3a`;
+  `64f540a0abe7fad521acbfcd59416ee2977849df2109723f2f0c90ae8439ed76`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -107,8 +107,9 @@ The first clean local baseline is now recorded for exact SHA
   `8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0`.
 
 This evidence is non-hardware baseline evidence, not release acceptance. It
-does not prove reviewer audio sequencing, full queue/render/answer semantics,
-sync against AnkiWeb, reproducibility across two clean builds or PW6 behavior.
+does not prove native audio output on PW6/AirPods, full queue/render/answer
+semantics, sync against AnkiWeb, reproducibility across two clean builds or
+PW6 behavior.
 
 ### Baseline failure ledger
 
@@ -127,9 +128,16 @@ sync against AnkiWeb, reproducibility across two clean builds or PW6 behavior.
 - Subsequent host categories fixed a forbidden global image rule, fail-open
   package assertions and portable diagnostics loopback binding in separate
   commits. The clean baseline above is the first SHA after all of them.
+- Commit `512cb803c01cc6a9b2c94c99cd0c7ad908378c3e` fixed the next behavioral
+  category: autoplay is now controlled only by the typed backend boolean,
+  answer playback conditionally queues question then answer AV tags, and the
+  loopback service owns one bounded ordered job. Host and ARMHF package gates
+  pass at that exact SHA without changing generic SVG/image behavior.
 - First remaining failing contract at this checkpoint:
-  `python3 tests/audio_source_contract.py` reports
-  `reviewer must support semantic AV sequences`.
+  `node tests/navigation_contract.test.cjs` reports
+  `external HTTP navigation must be cancelled` (`true !== false`). The test is
+  not yet in `tools/run_host_gates.sh`; adding it before fixing the behavior
+  would only hide this omission behind a permanently red canonical gate.
 
 ## Current GitHub-hosted Actions blocker
 
@@ -149,7 +157,7 @@ The direct audit against pinned Anki 26.08.1 corrected and clarified several ite
 - autoplay must be derived from effective deck config (`!disable_autoplay`) rather than AV-tag presence;
 - answer-side question replay must honor effective `!skip_question_when_replaying_answer`, including filtered-card original deck behavior;
 - the pinned v3 scheduler uses four rating buttons, so the Kindle four-button bar is not a parity defect for this pin;
-- external reviewer navigation is explicitly prevented from replacing the persistent reviewer document;
+- the external-navigation policy contract currently fails because the reviewer does not yet cancel HTTP(S)/`mailto:` navigation;
 - Lab126 CSS-pixel lifecycle behavior still requires PW6 proof.
 
 See `docs/ANKI_DESKTOP_PARITY.md` for the exact source-level rationale.
@@ -188,7 +196,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 ## What is still not verified/closed
 
-- reviewer ordered AV autoplay and answer-side question replay consumption;
+- end-to-end ordered AV autoplay and answer-side question replay on PW6/AirPods;
 - disposable Anki collection queue/render/AV/type-answer/answer/bury/reopen corpus beyond the basic open/deck/close smoke;
 - deck-config autoplay/replay integration fixtures;
 - normal/full/media sync lifecycle;
@@ -205,7 +213,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 ## Immediate next actions
 
-1. Run `python3 tests/audio_source_contract.py`; fix the ordered autoplay/replay contract without changing ordinary SVG/image behavior.
+1. Run `node tests/navigation_contract.test.cjs`; implement a privacy-safe external-navigation policy that preserves the persistent reviewer, then add the test to `tools/run_host_gates.sh`.
 2. Add executable disposable-collection fixtures for queue/render/AV/type-answer/answer/bury/reopen semantics to the canonical host-Anki recipe.
 3. Exercise normal/full/media sync semantics with disposable state and no credentials in logs.
 4. Repeat the clean canonical package build on the eventual candidate and compare manifests/artifact characteristics.

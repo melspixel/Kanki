@@ -16,6 +16,7 @@ A GitHub job that terminates with no step list is an infrastructure/account/repo
 - persistent `#qa` lifecycle;
 - no deck-specific selectors;
 - no global SVG/image/font overrides;
+- backend-controlled autoplay and ordered answer-side AV replay, with autoplay/replay booleans covered both ways;
 - ES5 syntax check for Kindle JavaScript, including CSS and diagnostics runtimes;
 - generic CSS-variable/calc/flex compatibility contract;
 - renderer diagnostics contract: metrics contain no element text; raw capture is disabled by default and bounded when enabled;

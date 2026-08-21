@@ -44,8 +44,8 @@ Kanki equivalents:
 | Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Implemented structurally; fixture evidence pending |
 | Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` and replaces marker in place | Structurally equivalent; fixture evidence pending |
 | Answer separator with FrontSide | Remove `<hr id=answer>` temporarily, then place it immediately before comparison at `[[type:...]]` replacement | Bridge appends separator to the marker-local replacement before `replace_type_markers()` | Structurally equivalent; source contract added |
-| Autoplay | `Card.autoplay()` is deck-config driven | Reviewer currently auto-plays first extracted AV tag | **Semantic delta; bridge should expose `!disable_autoplay`** |
-| Answer-side question replay | `Card.replay_question_audio_on_answer_side()` is deck-config driven | Current packet exposes answer tags only | **Semantic delta; bridge should expose `!skip_question_when_replaying_answer`** |
+| Autoplay | `Card.autoplay()` is deck-config driven | Typed effective-deck boolean controls one bounded ordered AV sequence | Implemented with host fixtures; integration/PW6 evidence pending |
+| Answer-side question replay | `Card.replay_question_audio_on_answer_side()` is deck-config driven | Prepared answer conditionally queues question tags before answer tags | Implemented with both-value host fixtures; filtered-card/PW6 evidence pending |
 | Answer buttons | Pinned v3 scheduler's `answerButtons()` returns 4 | Native bottom bar owns 4 buttons | Equivalent for supported 26.08.1 v3 scheduler; keep interval labels backend-driven |
 | Answer intervals | `describe_next_states()` labels | Bridge calls typed `describe_next_states()` | Implemented |
 | Card timer | Desktop starts timer on card fetch and uses time limit/options | Bridge records `Instant`; native/UI submission can pass elapsed milliseconds | Core timing implemented; UI semantics verify |
@@ -105,15 +105,14 @@ Desktop `Card.autoplay()` reads the effective deck config. In the current protob
 autoplay = !deck_config.disable_autoplay
 ```
 
-Kanki's current reviewer instead automatically plays the first semantic AV tag whenever a packet is shown.
+At `512cb803c01cc6a9b2c94c99cd0c7ad908378c3e`, Kanki resolves this boolean in
+the typed bridge and the reviewer starts one ordered AV sequence only when it
+is true. Replay buttons remain independent of autoplay.
 
-Required design:
+Remaining evidence:
 
-- resolve the effective deck config from the card's current/original deck in the typed bridge;
-- expose an explicit `autoplay` boolean in the review packet;
-- do not infer autoplay from the presence of audio;
-- replay buttons remain available when autoplay is off;
-- add autoplay-on/off fixtures.
+- disposable pinned-Anki fixtures for both effective-deck values, including a filtered card;
+- native sequence playback and repeated replay on PW6/AirPods.
 
 ### 5. Answer-side question-audio replay must be represented explicitly
 
@@ -125,12 +124,15 @@ replay_question_audio_on_answer_side = !deck_config.skip_question_when_replaying
 
 Desktop answer replay concatenates question and answer AV tags when that semantic is true.
 
-Required design:
+At `512cb803c01cc6a9b2c94c99cd0c7ad908378c3e`, prepared-answer data carries
+the resolved boolean and question tags. The persistent reviewer concatenates
+question then answer tags only when it is true; host fixtures cover both
+values.
 
-- expose the resolved semantic in `ReviewDto`/prepared-answer data;
-- construct the effective answer replay/autoplay queue according to Anki semantics;
-- do not make JavaScript reconstruct deck-config inheritance independently;
-- test both values, including filtered cards whose effective deck is their original deck.
+Remaining evidence:
+
+- a filtered-card fixture proving original-deck config inheritance through the pinned backend;
+- ordered native playback on PW6/AirPods.
 
 ### 6. Four rating buttons are correct for the pinned v3 scheduler
 

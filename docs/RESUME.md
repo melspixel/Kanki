@@ -133,18 +133,11 @@ However, hosted Actions is no longer a hard blocker for compilation: the canonic
 
 ## 6. Immediate next actions from this checkpoint
 
-1. On a developer Mac/Linux machine with Docker-compatible tooling, pull `rewrite-v1`, initialize the four project submodules and run:
-
-   ```sh
-   bash tools/local_package_docker.sh
-   ```
-
-2. Save the exact output/evidence from `out/local-kindle/`, especially ZIP SHA-256, `toolchain-info.txt`, package exports and GLIBC reports.
-3. If the local package build fails, fix the **first actual compiler/package error** in `tools/build_kindle_package.sh` or product source; this is actionable evidence unlike the zero-step GitHub jobs.
-4. Once the local ARMHF package is green, run/complete host and typed-Anki integration gates on the same commit, locally where practical.
-5. Freeze one candidate commit only after the non-hardware gates are green on that commit.
-6. Install the exact candidate ZIP on PW6 and execute the hardware acceptance order below.
-7. GitHub Actions may be repaired/rerun later as independent confirmation; it is not permitted to redefine the package recipe.
+The local host, typed-Anki and ARMHF/package baseline has been established.
+Do not preserve a second mutable checklist here: read `docs/STATUS.md` for the
+exact tested SHA, first current failure and next command, then follow the
+takeover sequence in `docs/CODEX_HANDOFF.md`. GitHub Actions remains independent
+confirmation and is not permitted to redefine the package recipe.
 
 ## 7. Local package contract
 
