@@ -149,14 +149,19 @@ The content audit completed on 2026-08-22 against rewrite code point
   the current pinned-Anki disposable integration, controlled normal/full/media
   sync tests, canonical ARMHF package and authenticated PW6 rootfs audit. No
   separate port tree or split overlay was needed by the audited rewrite.
-  However, after that audit the branch resumed receiving GLIBC, protoc,
-  rootfs/QEMU, VM-runbook and CI commits. It advanced repeatedly while the
-  retirement operation was running (observed through
-  `3c0f59d6bc159c86d24748f87677499ed9515bb7`), so it was deliberately
-  excluded rather than racing an active writer. Its initial captured tip and
-  live remote ref preserve the work. Re-audit all later commits once ownership
-  and the tip stabilize; do not import the parallel tree or its workflow
-  wholesale, and do not delete the branch or close PR #14 before that audit.
+  After that audit the branch resumed receiving GLIBC, protoc, rootfs/QEMU,
+  VM-runbook, CI and CSS-fixture commits. All 19 later commits were re-audited
+  through exact tip `d27258cee6bef948809d12ac38c786e05870cd9f` against rewrite
+  candidate `d5f70e061b318202d132203f115dabc00d7bc45b`. The rewrite already has
+  stronger executable coverage for the build/rootfs/CI work. The CSS fixture
+  exposed missing flex `order` coverage; the rewrite implemented only the
+  semantically safe non-negative mapping and rejected the port's invalid
+  negative-value behavior, then passed the complete same-SHA software matrix.
+  No other later commit is required. PR #14 remained an open Draft and the tip
+  had advanced only 24 minutes before the second stability observation, so the
+  branch was still excluded rather than racing another writer. Recheck both
+  the exact tip and ownership immediately before closing/deleting it; do not
+  import the parallel tree or its workflow wholesale.
 - the useful directory-ownership commits from `repo-cleanup-v1` were
   cherry-picked and corrected for the current build. The two one-shot patch
   tools were independently audited/removed with a policy guard, and the sole
@@ -168,7 +173,8 @@ Fifteen static historical/temporary names were deleted atomically on
 2026-08-22 with exact-SHA force-with-lease guards after their preserved tips
 were rechecked. Superseded PRs #8, #9, #12, #13 and #17 were closed without
 merge. `kindle-anki-port` and PR #14 remain temporarily active because of the
-concurrent writes above; PR #10 remains the active rewrite PR. The resulting
+recent concurrent writes above, not because audited code is missing; PR #10
+remains the active rewrite PR. The resulting
 remote branch set was `main`, `rewrite-v1` and the live exception
 `kindle-anki-port`.
 

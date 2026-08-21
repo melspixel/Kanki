@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-22
-**Current fully recorded non-hardware candidate:** `7a0d83975d7f8180f22abec8cc7596e03622ce66`
+**Current fully recorded non-hardware candidate:** `d5f70e061b318202d132203f115dabc00d7bc45b`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -86,7 +86,7 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware candidate is recorded for exact SHA
-`7a0d83975d7f8180f22abec8cc7596e03622ce66`:
+`d5f70e061b318202d132203f115dabc00d7bc45b`:
 
 - host: macOS 26.4.1 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -98,8 +98,11 @@ The current clean local non-hardware candidate is recorded for exact SHA
   self-test passed. The real checksum-verified MathJax 2.7.9 distribution
   produced inline and display SVG across two dynamic renders of the same
   persistent `#qa`; ordinary SVG/image attributes, cloze DOM, long bilingual
-  content, answer scrolling and stale-render callback isolation passed. The
-  deterministic ZIP host contract also passed;
+  content, answer scrolling and stale-render callback isolation passed.
+  Generic flex compatibility maps valid non-negative `order` values to the
+  old WebKit natural-number ordinal groups, while leaving negative and
+  non-integer values free of invalid legacy declarations. The deterministic
+  ZIP host contract also passed;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
   native x86-64 typed library; a backend-created disposable nine-card
   collection passed queue counts, question/answer rendering, semantic
@@ -137,13 +140,13 @@ The current clean local non-hardware candidate is recorded for exact SHA
 - two consecutive clean invocations of the same canonical package command on
   this SHA produced byte-identical ZIPs, `BUILD.json`, manifests and archive
   evidence. Both archives contain 1,296 sorted regular files, use source date
-  epoch `1787328893`, and have the same SHA-256;
+  epoch `1787330453`, and have the same SHA-256;
 - package SHA-256:
-  `340d13ff134247c61fd98ca8f29ce15eaebbd6e31a489ea49367b265d0370b85`;
-- byte-identical companion evidence hashes are `7e98b6993a8563f58840ad4a29b450b24141dfb38e84344c011beff64216b1d9`
-  for `BUILD.json`, `bf131102e51defdb222600509c4e62cb7d51014ecc9285ef4d4516f5219e4b67`
+  `ad375f5f88a49fc8ff64d1de634f3f6206dc883b3480839c40f36a9d43b19d42`;
+- byte-identical companion evidence hashes are `7e509c1f87d61d22adc62e3e6525c19a0342728948c8b9531b4d1ba9731dee54`
+  for `BUILD.json`, `7ff272fa88ff74e968fb1bde7256828715bf23e5759931da1435ad7f262f5c11`
   for the 1,290-entry manifest, and
-  `044ca3d3cfe13655fc998c86d622ebb8438ca4613cb735c1c536b8e1da69d3fd`
+  `c53a7bb054dec313d6ca4fe81a6482a3d11db37d826d2e9c842ede166f332a4e`
   for `archive-info.txt`;
 - `bash tools/local_pw6_rootfs_audit.sh` — **PASS** against the authenticated
   official PW6 5.19.6 recovery bundle. The audit verified the 412,492,749-byte
@@ -160,7 +163,7 @@ The current clean local non-hardware candidate is recorded for exact SHA
   symbols plus all four Lab126 CSS-pixel/zoom symbols, and instantiated
   `mixersink` and `ttssrc` after modeling the firmware's `/usr/lib/tts` mount.
   Evidence is under ignored
-  `out/firmware/pw6-5.19.6/evidence/7a0d83975d7f8180f22abec8cc7596e03622ce66/`;
+  `out/firmware/pw6-5.19.6/evidence/d5f70e061b318202d132203f115dabc00d7bc45b/`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -180,11 +183,11 @@ cross-host reproducibility, or any real-device lifecycle behavior.
 
 Repository cleanup culminated in exact rewrite SHA
 `7a0d83975d7f8180f22abec8cc7596e03622ce66`. The complete same-SHA matrix
-above passed: host gates, disposable Anki review/APKG/sync integration, two
-byte-identical canonical ARMHF packages and the authenticated PW6 rootfs
-audit. The first host invocation after session restoration stopped before
-tests because `cargo` was absent from the restored shell PATH; selecting the
-already-installed project-local Rust 1.92.0 resolved the environment
+recorded at that time passed: host gates, disposable Anki review/APKG/sync
+integration, two byte-identical canonical ARMHF packages and the authenticated
+PW6 rootfs audit. The first host invocation after session restoration stopped
+before tests because `cargo` was absent from the restored shell PATH; selecting
+the already-installed project-local Rust 1.92.0 resolved the environment
 precondition. No compiler, test or package failure was introduced by cleanup.
 
 The useful ownership documentation was integrated, obsolete UI migration
@@ -197,8 +200,9 @@ branches were deleted atomically with exact-SHA leases. Superseded PRs #8, #9,
 `3c0f59d6bc159c86d24748f87677499ed9515bb7`), so that branch and PR #14 were
 excluded pending stabilization and a fresh audit.
 
-This exact SHA is now the fully recorded non-hardware candidate. The first
-open release-evidence failure remains physical PW6 Gate E
+This cleanup SHA was the first fully recorded non-hardware candidate and has
+since been superseded by the fully rerun renderer candidate at the top of this
+document. The first open release-evidence failure remains physical PW6 Gate E
 (`hardware_execution=not_run`), and no original COCA/user APKG is locally
 available. Before transferring the candidate, the next command is:
 
@@ -221,9 +225,9 @@ All three YAML files parsed successfully, `sh tools/run_host_gates.sh` passed,
 and a clean canonical package validation at this exact SHA passed in the
 separate ignored directory `out/workflow-validation-ca345e5/`; its ZIP SHA-256
 is `94915f0933d96105a96598446855cb3ec5e1c94836865c36d662797ce49a4c91`.
-That workflow-only validation is not promoted over candidate
-`7a0d83975d7f8180f22abec8cc7596e03622ce66`, whose complete same-SHA evidence
-and original ZIP remain intact. No real compiler, test or package failure was
+That workflow-only validation was not promoted over the then-current complete
+candidate, and the later candidate at the top of this document has its own
+complete same-SHA evidence. No real compiler, test or package failure was
 found. Hosted execution is still
 unverified because the known runner-allocation failure occurs before steps.
 
@@ -263,15 +267,49 @@ root was found.
 
 No directory move is justified by this evidence, so no cosmetic `git mv` was
 performed. This audit changed no product, build or package file and found no
-compiler, test or package failure. The fully recorded non-hardware candidate
-remains `7a0d83975d7f8180f22abec8cc7596e03622ce66`; its first open evidence
-failure remains physical PW6 Gate E, with original COCA/user-APKG and
+compiler, test or package failure. At that checkpoint the fully recorded
+candidate remained `7a0d83975d7f8180f22abec8cc7596e03622ce66`; it has since been
+superseded by the candidate at the top of this document. Its first open
+evidence failure remains physical PW6 Gate E, with original COCA/user-APKG and
 independent-host evidence also unavailable. The next repository-maintenance
-command, after allowing the concurrently written port branch to settle, is:
+command was:
 
 ```sh
 git ls-remote --heads origin kindle-anki-port
 ```
+
+### Parallel-port re-audit and flex-order checkpoint
+
+The 19 commits added to `kindle-anki-port` after its initially preserved tip
+were re-audited through exact remote tip
+`d27258cee6bef948809d12ac38c786e05870cd9f`. Its target-sysroot GLIBC check,
+offline-protoc accommodation, fixed-rootfs hashes, QEMU gate, ordinary-source
+materialization and CI cleanup are already covered by the rewrite's canonical
+Docker builder, sysroot-derived symbol-version gate, authenticated firmware /
+rootfs / TTS audit, loader probes, ordinary tracked source tree and three thin
+workflows. No parallel source, workflow or VM runbook was imported.
+
+The new branch fixture did expose one generic old-WebKit behavior not yet
+covered in the rewrite: modern flex `order`. Commit
+`d5f70e061b318202d132203f115dabc00d7bc45b` implements the semantically safe
+non-negative subset (`order: n` -> `-webkit-box-ordinal-group: n + 1`) and
+retains the original declaration. Negative order is deliberately not mapped
+to zero or a negative legacy group because the old property accepts natural
+numbers; non-integers are also left without a legacy declaration. This is a
+generic browser-feature transform, not deck or note-type CSS. The source and
+test hashes are respectively
+`bb4148a185f38a12a6483fdeb091b07af21f166fae53a4bb90fc3cf310d50f23`
+and `27e6cb185d921930a1051308f77ba54621f30ebff5dafdbb4b9b80dcd080bb70`.
+
+At that exact SHA, host gates, typed Anki disposable review/APKG/sync, two
+canonical ARMHF package builds and the official PW6 rootfs audit all passed.
+The two package runs were byte-identical with the hashes recorded in the main
+baseline above; the rootfs evidence explicitly records
+`hardware_execution=not_run`. PR #14 was still an open Draft and its branch had
+last advanced only 24 minutes before the second stability check at 00:45
++08:00, so it was not deleted or closed in a race with another writer. Recheck
+the exact remote tip and ownership before retirement; no unaudited commit
+through `d27258c` is required by `rewrite-v1`.
 
 ### Baseline failure ledger
 
@@ -470,7 +508,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 1. Preserve candidate identity before device transfer with
    `shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip`; the expected value
-   is `340d13ff134247c61fd98ca8f29ce15eaebbd6e31a489ea49367b265d0370b85`.
+   is `ad375f5f88a49fc8ff64d1de634f3f6206dc883b3480839c40f36a9d43b19d42`.
 2. Obtain explicit local test access to original COCA and at least one
    unrelated representative APKG, then run the same privacy-reviewed path
    without modifying or committing the decks and without adding deck CSS.

@@ -38,6 +38,7 @@ Kanki equivalents:
 | Scheduler states | Queue-provided states; current custom_data copied to current state | Same pattern in bridge | Four-rating disposable integration passes |
 | Answer | Build `CardAnswer` from current queued states and rating | Same typed `CardAnswer` model | Again/Hard/Good/Easy revlog persistence passes |
 | Card body CSS | Note type CSS is authoritative | Note type CSS is authoritative; generic syntax compatibility only | Architectural invariant |
+| Flex item order | `order` accepts integers with initial value 0 | Non-negative integers map to old WebKit ordinal groups starting at 1; the original declaration is retained and negative values do not emit invalid legacy groups | Host contract passes; full negative-order emulation and PW6 geometry remain open |
 | MathJax | Lazily load MathJax, clear prior typeset state and await typesetting scoped to `#qa` before the shown hook | Load pinned MathJax 2.7.9 once, clear prior jax and await SVG typesetting scoped to persistent `#qa` before UI state/diagnostics | Real vendor host contract passes; PW6 geometry/performance pending |
 | Platform scaling | Desktop Qt/WebEngine uses CSS pixels/device scale | Lab126 WebKit native CSS-pixel/pixel-density/full-content-zoom path | Implemented feature path; initial-view lifecycle audit below |
 | AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` after partial render and semantic `FrontSide` expansion | Synthetic sound/TTS plus fixed upstream `media.apkg` sound pass; COCA/user/PW6 evidence pending |

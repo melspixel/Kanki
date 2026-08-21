@@ -22,7 +22,9 @@ A GitHub job that terminates with no step list is an infrastructure/account/repo
 - ordinary SVG/image preservation and no global SVG/image/font overrides;
 - backend-controlled autoplay and ordered answer-side AV replay, with autoplay/replay booleans covered both ways;
 - ES5 syntax check for Kindle JavaScript, including CSS and diagnostics runtimes;
-- generic CSS-variable/calc/flex compatibility contract;
+- generic CSS-variable/calc/flex compatibility contract, including safe
+  non-negative `order` conversion without invalid legacy groups for negative
+  or non-integer values;
 - renderer diagnostics contract: metrics contain no element text; raw capture is disabled by default and bounded when enabled;
 - launcher/report shell syntax;
 - package manifest validation;
@@ -66,6 +68,7 @@ Each fixture stores backend HTML/CSS and expected semantic measurements from des
 - plain basic card;
 - CSS variables and representative `calc()` expressions;
 - flex row and flex column;
+- non-negative flex item ordering plus explicit negative-order fallback;
 - gap handling on the target old WebKit;
 - embedded scripts;
 - image sizing;
