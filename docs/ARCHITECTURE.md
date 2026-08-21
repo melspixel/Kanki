@@ -8,13 +8,19 @@ Kanki is an Anki-compatible reviewer designed against the exact Kindle system it
 
 ### 1. Anki core
 
-Production uses the pinned `third_party/anki` Rust backend directly. The UI never calls numeric service/method IDs and never owns protobuf wire compatibility. A typed adapter converts Anki messages into the stable types in `kanki-domain`.
+Production uses the pinned `third_party/anki` Rust backend directly. The UI
+never calls numeric service/method IDs and never owns protobuf wire
+compatibility. The source-owned semantic bridge converts typed Anki messages
+into versioned JSON packets consumed by the native device application.
 
 Owned by Anki: collection schema, FSRS/scheduler, rendering, sync, media metadata, deck collapse state and AV extraction.
 
-### 2. Domain controller
+### 2. Host domain oracle
 
-`kanki-domain` is a small deterministic state machine. It knows question/answer/rating sequencing but no GTK, WebKit, protobuf or Kindle ABI. This makes review behavior testable on a normal host.
+`kanki-domain` is a small deterministic host-test state machine. It knows
+question/answer/rating sequencing but no GTK, WebKit, protobuf or Kindle ABI.
+The production device controller is in `device/kanki_device.c`; this Rust model
+keeps the sequencing invariant executable on a normal host.
 
 ### 3. Persistent reviewer
 
@@ -38,10 +44,10 @@ The platform layer is loaded against the audited firmware ABI. It must feature-d
 ## Data flow
 
 ```text
-Anki Backend -> typed adapter -> ReviewCard -> ReviewSession
-                                           -> reviewer JSON packet
-persistent WebKit #qa <- evaluate_script <--- renderer
-Kindle button/touch -> controller -> typed adapter -> Anki Backend
+Anki Backend -> semantic bridge JSON -> native device controller
+                                      -> reviewer JSON packet
+persistent WebKit #qa <- evaluate_script <--- native device controller
+Kindle button/touch -> native device controller -> semantic bridge -> Anki Backend
 ```
 
 ## Failure boundaries

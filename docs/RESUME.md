@@ -46,7 +46,6 @@ If a proposed fix violates any invariant above, stop and redesign it.
 ### Core/domain
 
 - `crates/kanki-domain/` — deterministic review/deck state and shared types
-- `crates/kanki-backend/` — application-facing backend abstractions
 - `crates/kanki-renderer/` — reviewer packet/rendering policy
 - `crates/kanki-platform/` — platform boundary
 - `crates/kanki-app/` — host/self-test executable

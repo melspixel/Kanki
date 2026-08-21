@@ -163,22 +163,12 @@ After this ownership is clear, deduplicate repeated paragraphs rather than delet
 
 ### 4.5 Production path vs scaffolding
 
-The Rust workspace contains five crates while the actual Kindle shell is native C and the production Anki backend bridge is injected into pinned Anki. Audit whether each crate is used by the real package path or is only bootstrap scaffolding:
-
-- `kanki-domain`
-- `kanki-backend`
-- `kanki-renderer`
-- `kanki-platform`
-- `kanki-app`
-
-Do not remove them merely because the device is C. For each crate, establish one of:
-
-- production dependency;
-- host model/test oracle;
-- planned future dependency with an active milestone;
-- obsolete scaffold.
-
-Only the final category should be removed.
+The five-crate audit is recorded in `crates/README.md`. Four crates are retained
+as host-test oracles: `kanki-domain`, `kanki-renderer`, `kanki-platform` and
+`kanki-app`. The unreferenced, incomplete `kanki-backend` Rust loader was the
+only **obsolete-scaffold** and was removed with before/after host gates. The
+production backend remains pinned Anki plus `bridge/`; the production Kindle
+application remains the source-owned native code in `device/`.
 
 ## 5. Recommended target layout
 

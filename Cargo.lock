@@ -195,17 +195,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kanki-backend"
-version = "0.1.0-alpha.1"
-dependencies = [
- "kanki-domain",
- "libloading",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "kanki-domain"
 version = "0.1.0-alpha.1"
 dependencies = [
