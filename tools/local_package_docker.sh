@@ -28,7 +28,7 @@ docker build \
     --platform "$PLATFORM" \
     -f tools/local-builder.Dockerfile \
     -t "$IMAGE" \
-    .
+    tools
 
 printf '%s\n' '== build Kanki Kindle package locally =='
 docker run --rm \
@@ -42,6 +42,13 @@ docker run --rm \
     -v kanki-local-home:/cache/home \
     -w /work \
     "$IMAGE" \
-    bash tools/build_kindle_package.sh
+    bash -lc '
+      git config --global --add safe.directory /work
+      git config --global --add safe.directory /work/third_party/anki
+      git config --global --add safe.directory /work/third_party/kindle-sdk
+      git config --global --add safe.directory /work/third_party/audiobook-koplugin
+      git config --global --add safe.directory /work/third_party/ranki-reference
+      bash tools/build_kindle_package.sh
+    '
 
 printf '\nLocal package is in:\n  %s\n' "$ROOT/out/local-kindle"
