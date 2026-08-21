@@ -25,6 +25,7 @@ def main() -> int:
     package_compat = (ROOT / "testenv" / "scripts" / "package_audit.py").read_text(encoding="utf-8")
     workflow = (REPO / ".github" / "workflows" / "kindle-anki-port.yml").read_text(encoding="utf-8")
     test_environment = (ROOT / "docs" / "TEST_ENVIRONMENT.md").read_text(encoding="utf-8")
+    release_gates = (ROOT / "docs" / "RELEASE_GATES.md").read_text(encoding="utf-8")
 
     for needle in (
         "$(BASH) ./testenv/scripts/run-host-backend-gates.sh",
@@ -75,9 +76,9 @@ def main() -> int:
         )
     forbid(workflow, '"$PROJECT/testenv/scripts/package-and-audit.sh"', "canonical workflow")
 
-    # Both required continuation docs must describe the same release ordering as
-    # the executable entrypoints. Package construction belongs after exact-rootfs
-    # QEMU, not in ARMHF L1 and not before the runtime gate.
+    # Required continuation/test-policy docs must describe the same release
+    # ordering as the executable entrypoints. Package construction belongs after
+    # exact-rootfs QEMU, and physical PW6 HIL remains a separate result.
     require(test_environment, "### L1 — ARMHF cross-build and static ABI audit", "test environment")
     require(test_environment, "### L2 — Exact PW6 rootfs QEMU runtime gate", "test environment")
     require(test_environment, "### L2.5 — Release package, provenance, privacy and reproducibility gate", "test environment")
@@ -97,6 +98,20 @@ def main() -> int:
     package_doc = env_readme.index("`scripts/package-and-audit.sh`")
     if not qemu_doc < package_doc:
         raise AssertionError("testenv README documents package before exact-rootfs QEMU")
+
+    require(release_gates, "5. L1 ARMHF/ABI:", "release gates")
+    require(release_gates, "6. L2 exact-rootfs QEMU:", "release gates")
+    require(release_gates, "7. L2.5 package/privacy/reproducibility:", "release gates")
+    require(release_gates, "only after L2 PASS", "release gates")
+    require(release_gates, "must not be assembled before the exact-rootfs L2 gate passes", "release gates")
+    require(release_gates, "## Hardware acceptance — separate from software delivery", "release gates")
+    require(release_gates, "Hardware acceptance is recorded as a distinct physical-device result", "release gates")
+    rg_l1 = release_gates.index("5. L1 ARMHF/ABI:")
+    rg_l2 = release_gates.index("6. L2 exact-rootfs QEMU:")
+    rg_l25 = release_gates.index("7. L2.5 package/privacy/reproducibility:")
+    rg_hil = release_gates.index("## Hardware acceptance — separate from software delivery")
+    if not rg_l1 < rg_l2 < rg_l25 < rg_hil:
+        raise AssertionError("release gates are not ordered L1 -> L2 -> L2.5 -> separate HIL")
 
     print("test_build_entrypoints: ok")
     return 0
