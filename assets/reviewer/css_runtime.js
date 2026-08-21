@@ -34,29 +34,36 @@
   }
 
   function refresh() {
+    var changed = false;
     if (applying || !window.kankiCssCompat) return;
     var current = styleText();
     if (current !== source && current !== result.css) {
       source = current;
       result = window.kankiCssCompat.transform(current);
+      changed = true;
       if (result.css !== current) {
         applying = true;
         setStyleText(result.css);
         applying = false;
       }
     }
+    if (changed) scheduleLayout();
+  }
+
+  function domChanged() {
     scheduleLayout();
   }
 
   if (style.addEventListener) style.addEventListener('DOMSubtreeModified', refresh, false);
   if (qa.addEventListener) {
-    qa.addEventListener('DOMNodeInserted', scheduleLayout, false);
-    qa.addEventListener('DOMNodeRemoved', scheduleLayout, false);
+    qa.addEventListener('DOMNodeInserted', domChanged, false);
+    qa.addEventListener('DOMNodeRemoved', domChanged, false);
   }
 
-  /* Mutation events are available on the target WebKit, but the bounded poll
-     also covers engines that coalesce style-text mutations. It is deliberately
-     small and does no work when neither CSS nor DOM changed. */
-  window.setInterval(refresh, 100);
+  /* Mutation events are available on the target WebKit. The bounded poll is a
+     compatibility fallback for engines that coalesce style-text mutations.
+     Importantly, an idle poll no longer re-runs all gap selectors every 100ms;
+     layout work only happens when CSS or the card DOM actually changed. */
+  window.setInterval(refresh, 250);
   refresh();
 }());
