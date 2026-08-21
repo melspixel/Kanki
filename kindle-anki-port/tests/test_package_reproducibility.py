@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -14,6 +15,7 @@ SOURCE_ROOT = Path(os.environ.get("KAP_SOURCE_ROOT", Path(__file__).resolve().pa
 PACKAGE_SCRIPT = SOURCE_ROOT / "testenv/scripts/package-and-audit.sh"
 SOURCE_DATE_EPOCH = 1787340224
 BUILD_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+ANKI_COMMIT = json.loads((SOURCE_ROOT / "upstream.lock.json").read_text(encoding="utf-8"))["commit"]
 EXECUTABLES = {
     "extensions/kindle-anki-port/kap-app",
     "extensions/kindle-anki-port/kap-audio",
@@ -43,20 +45,27 @@ def make_project(root: Path) -> Path:
     return project
 
 
+def write_armhf_provenance(
+    armhf: Path,
+    *,
+    source_commit: str = BUILD_COMMIT,
+    anki_commit: str = ANKI_COMMIT,
+) -> None:
+    (armhf / "BUILD-PROVENANCE.txt").write_text(
+        f"source_commit={source_commit}\nanki_commit={anki_commit}\n",
+        encoding="utf-8",
+    )
+
+
 def make_armhf(root: Path) -> Path:
     armhf = root / "armhf"
     armhf.mkdir()
     for name in ("kap-app", "kap-audio", "kap-sync", "libanki-kindle.so"):
         (armhf / name).write_bytes(("fixture:" + name + "\n").encode())
-    for name in (
-        "file.txt",
-        "exports.txt",
-        "ARMHF-GATES.txt",
-        "BUILD-PROVENANCE.txt",
-        "fixture.abi.txt",
-        "fixture.glibc.txt",
-    ):
+    for name in ("file.txt", "exports.txt", "fixture.abi.txt", "fixture.glibc.txt"):
         (armhf / name).write_text("fixture:" + name + "\n", encoding="utf-8")
+    (armhf / "ARMHF-GATES.txt").write_text("ARMHF gates: PASS\n", encoding="utf-8")
+    write_armhf_provenance(armhf)
     return armhf
 
 
@@ -116,6 +125,16 @@ def assert_archive(archive: Path) -> None:
                 )
 
 
+def assert_provenance_rejected(
+    result: subprocess.CompletedProcess[str], expected_message: str
+) -> None:
+    if result.returncode != 66 or expected_message not in result.stdout:
+        raise AssertionError(
+            "stale ARMHF provenance did not fail closed: "
+            f"{result.returncode}\n{result.stdout}"
+        )
+
+
 def main() -> int:
     if not PACKAGE_SCRIPT.is_file():
         raise SystemExit(f"missing package script: {PACKAGE_SCRIPT}")
@@ -148,6 +167,15 @@ def main() -> int:
                 f"{first_hash} != {sha256(archive)}"
             )
         assert_archive(archive)
+
+        write_armhf_provenance(armhf, source_commit="f" * 40)
+        wrong_source = run_package(project, armhf, dist, release, tz="UTC", mask=0o022)
+        assert_provenance_rejected(wrong_source, "ARMHF source_commit mismatch")
+
+        write_armhf_provenance(armhf, anki_commit="e" * 40)
+        wrong_anki = run_package(project, armhf, dist, release, tz="UTC", mask=0o022)
+        assert_provenance_rejected(wrong_anki, "ARMHF anki_commit mismatch")
+        write_armhf_provenance(armhf)
 
         too_new = run_package(
             project,
