@@ -15,15 +15,15 @@ Updated: 2026-08-22 UTC
 | Kindle native host | host/static green; ARMHF green checkpoint | strict C99/Werror gates and ARM EABI5 hard-float build pass |
 | Web reviewer | runtime-fixture green; target rendering pending | persistent `#qa`, scripts, typed input, replay controls, paging and generic CSS compatibility covered |
 | Audio | implementation integrated; hardware pending | GStreamer/`mixersink` worker self-test passes; real Bluetooth/audible routing requires PW6 |
-| Sync | deterministic worker fixture green; lifecycle hardened; live account pending | sync worker owns the collection operation lock; wrapper signals no longer orphan an unprotected sync process |
-| Launcher / collection ownership | deterministic fixture green; lifecycle hardened | double launch and reviewer/sync exclusion covered; signal cleanup and ownership-aware lock release added |
+| Sync | deterministic worker fixture green; lifecycle hardened; live account pending | real worker owns the collection lock; wrapper-death and zombie-owner stale-lock windows have deterministic regressions |
+| Launcher / collection ownership | deterministic fixture green; lifecycle hardened | double launch, reviewer/sync exclusion, signal cleanup, owner-checked release and zombie-owner reclamation covered |
 | Host release build | **green checkpoint** | release `libanki.so` exports the named `kap_*` ABI |
 | ARMHF cross-build | **green checkpoint** | `kap-app`, `kap-audio`, `kap-sync`, `libanki-kindle.so` produced for ARMv7 hard-float |
 | ABI/GLIBC audit | **green against KindleHF sysroot** | workers require GLIBC_2.4; backend max GLIBC_2.18; target PW6 oracle ceiling GLIBC_2.35 |
 | Package audit | **green checkpoint; privacy gate hardened** | stale ZIP checkpoint exists; current auditor additionally rejects backups, collection media and transient PID/lock state |
 | QEMU user mode | static ARM sanity green | QEMU 8.2.2 runs a static ARMHF sanity executable |
 | Exact PW6 runtime provenance | pinned | firmware/rootfs/loader/libc/WebKit hashes committed |
-| Rootfs preparation pipeline | **implemented and fixture-green** | firmware/rootfs hashes, KindleTool extraction, `debugfs rdump`, runtime verifier and cleanup are gated |
+| Rootfs preparation pipeline | **implemented and fixture-green** | canonical Python verifier plus shell acquisition helper validate pinned SHA-256/MD5 and official Amazon sources before extraction |
 | Exact-rootfs QEMU smoke | pending external runtime bytes | preparation/verifier/smoke harnesses exist; exact firmware/rootfs bytes are not currently mounted |
 | Reproducible workflow | updated | canonical workflow consumes ordinary source; Actions quota is not used for iterative development |
 | Final GitHub binary persistence | incomplete | final canonical-head package/reports must be rebuilt and stored durably |
@@ -36,7 +36,9 @@ Updated: 2026-08-22 UTC
 3. Host Rust, strict native C, reviewer fixtures, sync/lifecycle fixtures and ARM hard-float checkpoint builds have passed.
 4. Rootfs extraction is no longer an ad-hoc manual step: it is a checksum-pinned, test-gated pipeline.
 5. A reproduced sync-wrapper termination race is closed: the live sync worker now owns the shared operation lock, so wrapper death cannot make an open collection appear free.
-6. Package privacy checks now reject pre-sync/pre-upgrade `*.anki2` backups, `collection.media`, `.sync-request`, `.opened-build`, operation-lock state and transfer PID files in addition to the previous credential/log/PID checks.
+6. A second stale-lock defect is closed: an exited gated worker can remain a zombie while `kill -0` succeeds; launch/sync liveness now checks `/proc/<pid>/stat` and treats `Z` as dead/reclaimable.
+7. The PW6 shell acquisition helper now reads the real manifest keys, validates both firmware SHA-256 and MD5, uses only the Amazon alias/pinned Amazon object for automatic download, is executable in Git, and is covered by static gates.
+8. Package privacy checks now reject pre-sync/pre-upgrade `*.anki2` backups, `collection.media`, `.sync-request`, `.opened-build`, operation-lock state and transfer PID files in addition to the previous credential/log/PID checks.
 
 ## Verified evidence
 
@@ -68,19 +70,31 @@ test_sync_worker: ok
 
 The sync fixture covers required-action decisions, endpoint/timeout/server-USN propagation, full-sync direction conflicts, open/sync/full/media failures, credential non-disclosure and `abort -> close -> core_free` ordering. Lifecycle fixtures cover concurrent launches, operation locking, sync exclusion and stale-lock recovery.
 
-Additional lifecycle hardening on 2026-08-22 reproduced a real wrapper-death hazard and changed the lock owner from the sync wrapper shell to the actual sync worker. New regression coverage verifies TERM forwarding/status, worker cleanup, wrapper-SIGKILL fail-closed ownership, normal worker error propagation and launcher signal cleanup. A targeted final launcher harness produced:
+Additional lifecycle hardening on 2026-08-22 reproduced a real wrapper-death hazard and changed the lock owner from the sync wrapper shell to the actual sync worker. Regression coverage verifies TERM forwarding/status, worker cleanup, wrapper-SIGKILL fail-closed ownership, normal worker error propagation and launcher signal cleanup. A targeted final launcher harness produced:
 
 ```text
 launch_signal_status=143 child_alive=no pidfile=no lock=no
 ```
 
-Code checkpoint after lifecycle fixes:
+A subsequent pre-publication SIGKILL regression exposed a zombie-owner edge case: the gated child had exited, but `kill -0` still reported success while it remained in state `Z`. `scripts/launch.sh` and `scripts/sync.sh` now use a zombie-aware liveness predicate and reclaim such stale owners. Targeted results:
 
 ```text
-d589345428f28777cf413f97ac0602d565dbfa90
+sh -n scripts/launch.sh                         PASS
+sh -n scripts/sync.sh                           PASS
+test_zombie_operation_lock.sh                   5/5 PASS
+test_sync_wrapper_signal.sh                     3/3 PASS
+KAP_ZOMBIE_LOCK_20260822.log SHA-256             2a97d443b30b172d7e636464f8bfda759e10ce1d120257ab7c8ef97c0e007250
 ```
 
-Detailed report: `docs/VM_LIFECYCLE_HARDENING_20260822.md`.
+Canonical lifecycle blobs:
+
+```text
+scripts/launch.sh                  34ee8d5f106e31eb5e78509e1e6054c993bf9711
+scripts/sync.sh                    7381fca8bdef86c57c580a367f5647173f76c892
+tests/test_zombie_operation_lock.sh 54e3a7c899a69c2fb558b711439b6cb98083284f
+```
+
+Detailed reports: `docs/VM_LIFECYCLE_HARDENING_20260822.md` and `docs/VM_ZOMBIE_LOCK_HARDENING_20260822.md`.
 
 ### Package privacy regression
 
@@ -121,29 +135,44 @@ It passed the then-current internal manifest, required-file, privacy/state and Z
 
 ### Rootfs preparation checkpoint
 
-The following exact Git blobs were deterministically tested in the VM:
+The canonical Python pipeline remains:
 
 ```text
 testenv/scripts/prepare-pw6-rootfs.py  dad0345d6ad56b17fc7764b1ce0d69a3ed637be8
 tests/test_prepare_pw6_rootfs.py        bd503d5842720c054531b3ca60ec708cd27de0eb
 ```
 
-Result:
+Persisted result:
 
 ```text
 python3 tests/test_prepare_pw6_rootfs.py
 test_prepare_pw6_rootfs: ok
 ```
 
-The pipeline verifies the firmware SHA-256/MD5, extracts with KindleTool, requires one rootfs image, verifies its SHA-256, extracts with unprivileged `debugfs rdump`, invokes the exact-runtime verifier, records provenance and removes partial output on failure. It is included in `run-static-gates.sh`.
+The new shell helper was audited and corrected after its first version referenced a non-existent `firmware.package_sha256` manifest key, omitted MD5 verification, depended on a non-executable mode in its test, and allowed an automatic community-mirror fallback. Current identities:
 
-Detailed report: `docs/VM_ROOTFS_PIPELINE_20260822.md`.
+```text
+testenv/scripts/prepare-pw6-rootfs.sh  d01b1d02ced887592926deb5de586b6f40a0a3f0  mode 100755
+tests/test_rootfs_prepare_script.py    d7399aa70688b6128c61a916ff9dd8e758de94f3
+testenv/scripts/run-static-gates.sh    0c79c69f57f9506d6a2239e76cb4ee767476fcec
+```
+
+Targeted helper validation:
+
+```text
+sh -n testenv/scripts/prepare-pw6-rootfs.sh       PASS
+python3 tests/test_rootfs_prepare_script.py       Ran 3 tests; OK
+```
+
+The helper accepts automatic downloads only from the Amazon alias and pinned Amazon S3 object, validates firmware SHA-256 `72445ffe...143c` and MD5 `697aeb33c02f46b9b0911ab05c28b06d` before extraction, then delegates runtime verification to the canonical rootfs verifier. No firmware/rootfs bytes were acquired in this checkpoint.
+
+Detailed reports: `docs/VM_ROOTFS_PIPELINE_20260822.md` and `docs/VM_ROOTFS_HELPER_HARDENING_20260822.md`.
 
 ## Current blockers
 
 ### 1. Final canonical-head provenance
 
-The complete static/backend/APKG/ARMHF/package sequence must be rerun from a VM checkout matching the latest canonical branch head. Existing green results are valid checkpoints but are not yet the immutable final release provenance. In particular, the last package predates the 2026-08-22 lifecycle and privacy hardening.
+The complete static/backend/APKG/ARMHF/package sequence must be rerun from a VM checkout matching the latest canonical branch head. Existing green results are valid checkpoints but are not yet the immutable final release provenance. In particular, the last package predates the 2026-08-22 lifecycle, rootfs-helper and privacy hardening.
 
 ### 2. Exact PW6 runtime bytes
 
@@ -155,8 +184,8 @@ No VM can validate physical e-ink artifacts, real touch/IME focus, Amazon framew
 
 ## Ordered next actions
 
-1. Continue deterministic reviewer, lifecycle, sync and package hardening that does not require the rootfs.
-2. Materialize the then-current canonical GitHub head in the build VM and rerun static, full `rslib`, real-APKG, ARMHF and package gates.
+1. Materialize the then-current canonical GitHub head in the build VM and run the complete static gate, including the new zombie-lock and PW6-helper regressions.
+2. Rerun full official `rslib`, five-real-APKG integration, ARMHF cross-build, ABI/GLIBC audit and package audit from that same head.
 3. Obtain the checksum-matching PW6 5.19.6 firmware as a private input and run:
 
    ```text
