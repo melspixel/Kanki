@@ -12,8 +12,10 @@ FORBIDDEN_BASENAMES = {
     "collection.media",
     "media.db2",
     "config.ini",
+    ".sync-request",
+    ".opened-build",
 }
-FORBIDDEN_SUFFIXES = (".log", ".pid")
+FORBIDDEN_SUFFIXES = (".log", ".pid", ".anki2")
 FORBIDDEN_TEXT = ("LD_PRELOAD", "rewrite-v1", "ranki-armhf", "ranki-armel")
 REQUIRED = {
     "extensions/kindle-anki-port/kap-app",
@@ -24,6 +26,20 @@ REQUIRED = {
     "extensions/kindle-anki-port/MANIFEST.sha256",
     "documents/Kindle Anki.sh",
 }
+
+
+def runtime_state_path(path: PurePosixPath) -> bool:
+    lower_parts = tuple(part.lower() for part in path.parts)
+    lower = path.name.lower()
+    if lower in FORBIDDEN_BASENAMES or lower.endswith(FORBIDDEN_SUFFIXES):
+        return True
+    if "collection.media" in lower_parts:
+        return True
+    if ".kap-operation.lock" in lower_parts:
+        return True
+    if lower.startswith(".kap-operation.lock.pid."):
+        return True
+    return False
 
 
 def main() -> int:
@@ -41,11 +57,8 @@ def main() -> int:
             raise SystemExit(f"FAIL: package missing {sorted(missing)}")
         for name in names:
             path = PurePosixPath(name)
-            lower = path.name.lower()
-            if lower in FORBIDDEN_BASENAMES or lower.endswith(FORBIDDEN_SUFFIXES):
+            if runtime_state_path(path):
                 raise SystemExit(f"FAIL: package contains forbidden state file {name}")
-            if "collection.media/" in name.lower():
-                raise SystemExit(f"FAIL: package contains user media {name}")
             info = archive.getinfo(name)
             if info.file_size <= 2_000_000:
                 try:
