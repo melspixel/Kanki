@@ -103,13 +103,11 @@ fi
   "$QEMU_ARM" --version | head -1
   printf 'source_commit=%s\n' "$BUILD_COMMIT"
   printf 'anki_commit=%s\n' "$ANKI_COMMIT"
-  printf 'rootfs_manifest=%s\n' "$ROOTFS_MANIFEST"
+  printf 'rootfs_manifest_id=pw6-5.19.6-rootfs-manifest.json\n'
   printf 'rootfs_manifest_sha256=%s\n' "$(sha256sum "$ROOTFS_MANIFEST" | awk '{print $1}')"
-  printf 'rootfs=%s\n' "$ROOTFS"
-  [ -z "${ROOTFS_IMAGE:-}" ] || {
-    printf 'rootfs_image=%s\n' "$ROOTFS_IMAGE"
+  printf 'rootfs_verified=true\n'
+  [ -z "${ROOTFS_IMAGE:-}" ] || \
     printf 'rootfs_image_sha256=%s\n' "$(sha256sum "$ROOTFS_IMAGE" | awk '{print $1}')"
-  }
   for binary in libanki-kindle.so kap-app kap-audio kap-sync; do
     printf '%s_sha256=%s\n' "$binary" "$(sha256sum "$ARMHF/$binary" | awk '{print $1}')"
   done
