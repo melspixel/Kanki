@@ -24,8 +24,7 @@ use serde::Serialize;
 
 use crate::backend::{init_backend, Backend};
 use crate::services::{
-    BackendCardRenderingService, BackendCollectionService, BackendDecksService,
-    BackendSchedulerService,
+    BackendCollectionService, CardRenderingService, DecksService, SchedulerService,
 };
 
 #[repr(C)]
@@ -175,14 +174,17 @@ fn extract_av(
     text: String,
     question_side: bool,
 ) -> Result<(String, Vec<AvDto>), String> {
-    let response = BackendCardRenderingService::extract_av_tags(
-        backend,
-        ExtractAvTagsRequest {
-            text,
-            question_side,
-        },
-    )
-    .map_err(|err| err.to_string())?;
+    let response = backend
+        .with_col(|col| {
+            CardRenderingService::extract_av_tags(
+                col,
+                ExtractAvTagsRequest {
+                    text,
+                    question_side,
+                },
+            )
+        })
+        .map_err(|err| err.to_string())?;
     let mut tags = Vec::new();
     for tag in response.av_tags {
         match tag.value {
@@ -308,7 +310,9 @@ pub extern "C" fn kanki_deck_tree_json(core: *mut KankiCore) -> *mut c_char {
             .unwrap_or_default()
             .as_secs()
             .min(i64::MAX as u64) as i64;
-        let tree = BackendDecksService::deck_tree(&core.backend, DeckTreeRequest { now })
+        let tree = core
+            .backend
+            .with_col(|col| DecksService::deck_tree(col, DeckTreeRequest { now }))
             .map_err(|err| err.to_string())?;
         Ok(deck_dto(tree))
     })())
@@ -321,7 +325,8 @@ pub extern "C" fn kanki_set_current_deck_json(
 ) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        BackendDecksService::set_current_deck(&core.backend, DeckId { did: deck_id })
+        core.backend
+            .with_col(|col| DecksService::set_current_deck(col, DeckId { did: deck_id }))
             .map_err(|err| err.to_string())?;
         core.current = None;
         Ok(serde_json::json!({"deck_id": deck_id}))
@@ -336,15 +341,18 @@ pub extern "C" fn kanki_set_deck_collapsed_json(
 ) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        BackendDecksService::set_deck_collapsed(
-            &core.backend,
-            SetDeckCollapsedRequest {
-                deck_id,
-                collapsed: collapsed != 0,
-                scope: set_deck_collapsed_request::Scope::Reviewer as i32,
-            },
-        )
-        .map_err(|err| err.to_string())?;
+        core.backend
+            .with_col(|col| {
+                DecksService::set_deck_collapsed(
+                    col,
+                    SetDeckCollapsedRequest {
+                        deck_id,
+                        collapsed: collapsed != 0,
+                        scope: set_deck_collapsed_request::Scope::Reviewer as i32,
+                    },
+                )
+            })
+            .map_err(|err| err.to_string())?;
         Ok(serde_json::json!({"deck_id": deck_id, "collapsed": collapsed != 0}))
     })())
 }
@@ -353,14 +361,18 @@ pub extern "C" fn kanki_set_deck_collapsed_json(
 pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        let mut queue = BackendSchedulerService::get_queued_cards(
-            &core.backend,
-            GetQueuedCardsRequest {
-                fetch_limit: 1,
-                intraday_learning_only: false,
-            },
-        )
-        .map_err(|err| err.to_string())?;
+        let mut queue = core
+            .backend
+            .with_col(|col| {
+                SchedulerService::get_queued_cards(
+                    col,
+                    GetQueuedCardsRequest {
+                        fetch_limit: 1,
+                        intraday_learning_only: false,
+                    },
+                )
+            })
+            .map_err(|err| err.to_string())?;
 
         let counts = CountsDto {
             new: queue.new_count,
@@ -390,23 +402,28 @@ pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
             current.custom_data = Some(card.custom_data.clone());
         }
 
-        let rendered = BackendCardRenderingService::render_existing_card(
-            &core.backend,
-            RenderExistingCardRequest {
-                card_id: card.id,
-                browser: false,
-                partial_render: false,
-            },
-        )
-        .map_err(|err| err.to_string())?;
+        let rendered = core
+            .backend
+            .with_col(|col| {
+                CardRenderingService::render_existing_card(
+                    col,
+                    RenderExistingCardRequest {
+                        card_id: card.id,
+                        browser: false,
+                        partial_render: false,
+                    },
+                )
+            })
+            .map_err(|err| err.to_string())?;
         let (question_html, question_audio) =
             extract_av(&core.backend, render_nodes(rendered.question_nodes), true)?;
         let (answer_html, answer_audio) =
             extract_av(&core.backend, render_nodes(rendered.answer_nodes), false)?;
-        let intervals =
-            BackendSchedulerService::describe_next_states(&core.backend, states.clone())
-                .map_err(|err| err.to_string())?
-                .vals;
+        let intervals = core
+            .backend
+            .with_col(|col| SchedulerService::describe_next_states(col, states.clone()))
+            .map_err(|err| err.to_string())?
+            .vals;
 
         core.current = Some(CurrentReview {
             card_id: card.id,
@@ -452,22 +469,25 @@ pub extern "C" fn kanki_answer_json(
             .elapsed()
             .as_millis()
             .min(u32::MAX as u128) as u32;
-        BackendSchedulerService::answer_card(
-            &core.backend,
-            CardAnswer {
-                card_id: current.card_id,
-                current_state: current.states.current.clone(),
-                new_state,
-                rating: rating_enum as i32,
-                answered_at_millis: now_millis(),
-                milliseconds_taken: if milliseconds_taken == 0 {
-                    measured
-                } else {
-                    milliseconds_taken
-                },
-            },
-        )
-        .map_err(|err| err.to_string())?;
+        core.backend
+            .with_col(|col| {
+                SchedulerService::answer_card(
+                    col,
+                    CardAnswer {
+                        card_id: current.card_id,
+                        current_state: current.states.current.clone(),
+                        new_state,
+                        rating: rating_enum as i32,
+                        answered_at_millis: now_millis(),
+                        milliseconds_taken: if milliseconds_taken == 0 {
+                            measured
+                        } else {
+                            milliseconds_taken
+                        },
+                    },
+                )
+            })
+            .map_err(|err| err.to_string())?;
         core.current = None;
         Ok(serde_json::json!({"card_id": current.card_id, "rating": rating}))
     })())
@@ -481,15 +501,18 @@ pub extern "C" fn kanki_bury_current_json(core: *mut KankiCore) -> *mut c_char {
             .current
             .clone()
             .ok_or("no current card is available to bury")?;
-        BackendSchedulerService::bury_or_suspend_cards(
-            &core.backend,
-            BuryOrSuspendCardsRequest {
-                card_ids: vec![current.card_id],
-                note_ids: vec![],
-                mode: bury_or_suspend_cards_request::Mode::BuryUser as i32,
-            },
-        )
-        .map_err(|err| err.to_string())?;
+        core.backend
+            .with_col(|col| {
+                SchedulerService::bury_or_suspend_cards(
+                    col,
+                    BuryOrSuspendCardsRequest {
+                        card_ids: vec![current.card_id],
+                        note_ids: vec![],
+                        mode: bury_or_suspend_cards_request::Mode::BuryUser as i32,
+                    },
+                )
+            })
+            .map_err(|err| err.to_string())?;
         core.current = None;
         Ok(serde_json::json!({"card_id": current.card_id, "buried": true}))
     })())
