@@ -1,6 +1,6 @@
 # Resume Kanki rewrite from zero context
 
-This is the first file to read when taking over the `rewrite-v1` work. The goal is that a maintainer can resume the project without chat history, local scratch files, or undocumented commands.
+This is the first file to read when taking over the `rewrite-v1` work. The goal is that a maintainer can resume the project without chat history, local scratch files, undocumented commands, or dependence on GitHub-hosted runners.
 
 ## 1. Authoritative state
 
@@ -11,11 +11,13 @@ This is the first file to read when taking over the `rewrite-v1` work. The goal 
 - `main` remains the last accepted legacy line until the rewrite passes hardware acceptance
 - Target device: Kindle Paperwhite 12th generation / PW6, ARMv7 hard-float
 - Production Anki core: pinned Anki 26.08.1 gitlink under `third_party/anki`
-- KindleHF build toolchain: checksum-pinned koxtoolchain `2026.08`, installed by `tools/install_kindlehf_toolchain.sh`
+- KindleHF build toolchain: checksum-pinned koxtoolchain `2026.08`
+- Canonical package recipe: `tools/build_kindle_package.sh`
+- Local macOS/Linux package executor: `tools/local_package_docker.sh`
 
-Never infer completion from a compile, a screenshot, or an old green job. Issue #11 plus evidence attached to the release commit is the closure record.
+Never infer completion from a compile, a screenshot, or an old green job. Issue #11 plus evidence attached to the release candidate is the closure record.
 
-Read `docs/ANKI_DESKTOP_PARITY.md` before changing reviewer behavior: it records semantics derived directly from the pinned Anki desktop code and known remaining deltas.
+Read `docs/ANKI_DESKTOP_PARITY.md` before changing reviewer behavior. Read `docs/LOCAL_BUILD.md` before changing package/build execution.
 
 ## 2. Current architectural invariants
 
@@ -34,7 +36,8 @@ These are design constraints, not implementation suggestions:
 11. New rewrite installs under `/mnt/us/extensions/kanki`, separate from legacy `/mnt/us/extensions/ranki`.
 12. Release artifacts are self-identifying and manifest-verified. Mixed component versions must be rejected, not tolerated.
 13. Privacy-safe renderer metrics are always available; raw card HTML/CSS capture is bounded and explicit opt-in only.
-14. Build/release workflows must use pinned/checksummed toolchain inputs, never floating `latest` artifacts.
+14. Build/release inputs use pinned/checksummed toolchain/source identities rather than floating release URLs.
+15. GitHub Actions is an executor, not the build definition. Hosted CI and local build must invoke the same canonical package script.
 
 If a proposed fix violates any invariant above, stop and redesign it.
 
@@ -71,7 +74,6 @@ If a proposed fix violates any invariant above, stop and redesign it.
 - `assets/reviewer/css_compat.js` — deterministic CSS source compatibility transform
 - `assets/reviewer/css_runtime.js` — old-WebKit runtime compatibility behavior
 - `assets/reviewer/diagnostics.js` — bounded privacy-safe computed-layout metrics and opt-in raw source capture
-- runtime diagnostic policy is generated as `/mnt/us/extensions/kanki/render-debug/config.js` by the launcher; it is not a package input
 
 ### Packaging/operations
 
@@ -81,7 +83,10 @@ If a proposed fix violates any invariant above, stop and redesign it.
 - `packaging/` — config example and Kindle-home shortcuts
 - `tools/install_kindlehf_toolchain.sh` — pinned/checksummed KindleHF toolchain installer
 - `tools/run_host_gates.sh` — one-command host verification path
-- `.github/workflows/package.yml` — canonical installable package recipe
+- `tools/build_kindle_package.sh` — canonical ARMHF build/package/ABI recipe used by CI and local builds
+- `tools/local-builder.Dockerfile` — Ubuntu 24.04 + Rust 1.92.0 local builder environment
+- `tools/local_package_docker.sh` — one-command Docker/OrbStack/Colima local package executor
+- `docs/LOCAL_BUILD.md` — local-build requirements/evidence contract
 
 ### References
 
@@ -90,104 +95,116 @@ If a proposed fix violates any invariant above, stop and redesign it.
 - `third_party/ranki-reference` — historical behavior reference only
 - `third_party/audiobook-koplugin` — pinned native Kindle GStreamer reference/helper source
 
-## 4. Test gates and canonical workflows
+## 4. Test/build entry points
 
-Use the workflows as executable build documentation. Do not maintain a separate hidden local recipe.
+Hosted workflows remain useful evidence/executors:
 
-- `.github/workflows/actions-probe.yml` — minimal runner/account/repository execution probe; no product dependencies
+- `.github/workflows/actions-probe.yml` — minimal hosted-runner/account execution probe
 - `.github/workflows/ci.yml` — Rust workspace, policy, reviewer contract, host self-test, ARM scaffold
 - `.github/workflows/anki-bridge.yml` — typed Anki host bridge/integration
 - `.github/workflows/anki-bridge-arm.yml` — typed Anki ARMHF build/ABI
 - `.github/workflows/device.yml` — native Kindle device/diagnostics shell
 - `.github/workflows/audio.yml` — audio service/helper
 - `.github/workflows/css-compat.yml` — legacy WebKit CSS compatibility corpus
-- `.github/workflows/package.yml` — final ARMHF package, manifest and ABI gate
+- `.github/workflows/package.yml` — hosted executor for `tools/build_kindle_package.sh`
 
-`docs/TESTING.md` defines Gates A-E. Gate E requires the real PW6.
-
-## 5. Current blocker at handoff checkpoint
-
-The Actions failure has been isolated from Kanki source.
-
-On current audited PR head `6fb88b13e315cf3269ba6e09c96fbfea5d91d926`, deliberately minimal **Actions runner probe** run `32472582601` completed `failure` before its only shell step ran. The seven normal Kanki workflows triggered from the same head also failed before useful execution.
-
-Therefore the immediate blocker is outside product source execution. Do **not** change Kanki code or workflow build commands to repair these zero-step failures.
-
-First action when resuming:
-
-1. inspect PR #10 current head;
-2. inspect the **Actions runner probe** for that head;
-3. if the probe has real steps, resume normal CI diagnosis;
-4. if the probe still has `steps = null`, inspect GitHub repository/account Actions availability before changing source. In particular check repository Actions policy and, because this is a private repository using GitHub-hosted runners, the account's Actions minutes/billing/budget state;
-5. after any account/repository fix, rerun the probe first;
-6. only when the probe enters its `Runner started` step should normal Kanki workflows be treated as actionable source/build failures;
-7. then fix the first real failing step only and rerun the narrow workflow.
-
-Do not shotgun-edit seven workflows merely because seven zero-step jobs are red.
-
-## 6. Local/CI reproduction sequence
-
-When a normal runner or equivalent Linux environment is available, the simplest entry point is:
+Local entry points:
 
 ```sh
 sh tools/run_host_gates.sh
+bash tools/local_package_docker.sh
 ```
 
-Its canonical components are:
+`docs/TESTING.md` defines the closure gates. PW6 acceptance still requires the real device.
+
+## 5. Current hosted-CI blocker
+
+GitHub-hosted Actions remains broken before job execution.
+
+At PR head `fc4879c609ca95978c3ed202a8c485c6993a1d7c`, minimal **Actions runner probe** run `32475742329`, job `96751577470`, completed `failure` with `steps = null`. All normal workflows on the same head failed in the same pre-step manner.
+
+Therefore:
+
+- do **not** treat these red runs as source/compiler failures;
+- do **not** shotgun-edit workflows to chase a job that never started;
+- repository/account Actions policy, minutes/billing/budget or hosted-runner availability remains the likely infrastructure class to inspect.
+
+However, hosted Actions is no longer a hard blocker for compilation: the canonical package recipe now has a local Docker executor.
+
+## 6. Immediate next actions from this checkpoint
+
+1. On a developer Mac/Linux machine with Docker-compatible tooling, pull `rewrite-v1`, initialize the four project submodules and run:
+
+   ```sh
+   bash tools/local_package_docker.sh
+   ```
+
+2. Save the exact output/evidence from `out/local-kindle/`, especially ZIP SHA-256, `toolchain-info.txt`, package exports and GLIBC reports.
+3. If the local package build fails, fix the **first actual compiler/package error** in `tools/build_kindle_package.sh` or product source; this is actionable evidence unlike the zero-step GitHub jobs.
+4. Once the local ARMHF package is green, run/complete host and typed-Anki integration gates on the same commit, locally where practical.
+5. Freeze one candidate commit only after the non-hardware gates are green on that commit.
+6. Install the exact candidate ZIP on PW6 and execute the hardware acceptance order below.
+7. GitHub Actions may be repaired/rerun later as independent confirmation; it is not permitted to redefine the package recipe.
+
+## 7. Local package contract
+
+The canonical package script:
 
 ```sh
-# Repository policy and formatting
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-python3 tools/check_policy.py
-
-# Native source syntax
-cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_diag_server.c
-node --check assets/reviewer/reviewer.js
-node --check assets/reviewer/css_compat.js
-node --check assets/reviewer/css_runtime.js
-node --check assets/reviewer/diagnostics.js
-sh -n scripts/kanki-launch.sh
-sh -n scripts/kanki-report.sh
-
-# Host unit/integration shell
-cargo test --workspace
-cargo run -p kanki-app -- --self-test
-
-# Reviewer contracts (after installing the pinned jsdom used by CI)
-node tests/renderer_contract.test.cjs
-node tests/css_compat.test.cjs
-node tests/diagnostics_contract.test.cjs
+bash tools/build_kindle_package.sh
 ```
 
-For Anki and ARMHF work, follow the corresponding workflow verbatim rather than reconstructing commands from memory. The package workflow is the canonical source for toolchain flags, source pins, exported symbols, ABI gates and ZIP layout.
+requires Linux x86-64-compatible execution, Rust 1.92.0 and the documented host dependencies. On macOS use the wrapper:
 
-## 7. Renderer diagnostics contract
+```sh
+bash tools/local_package_docker.sh
+```
 
-Normal launch creates `/mnt/us/extensions/kanki/render-debug/` and starts `kanki-diag`. Failure to create/start diagnostics is explicit and aborts the launch rather than silently losing observability.
+The wrapper forces `linux/amd64` because the pinned KindleHF toolchain is Linux x86-64-hosted. Apple Silicon Docker/OrbStack/Colima can emulate this platform; the first Anki build may be slow.
 
-Default `metrics.log` is designed to be privacy-safe: render/card identifier, side, body class, viewport/scroll/`#qa` geometry, DPR, and a bounded set of element tag/class/computed font/display/geometry fields. It does not include element text.
+Expected output:
 
-Raw source capture requires the sentinel `/mnt/us/extensions/kanki/enable-render-capture`. The launcher writes runtime `config.js`, the reviewer captures only the first 12 render sides, and `kanki-diag` writes HTML/CSS/AV metadata into `render-debug/`. Raw captures may contain note content and are never copied into the default redacted report.
+```text
+out/local-kindle/Kanki-rewrite-hw3.zip
+out/local-kindle/Kanki-rewrite-hw3.zip.sha256
+out/local-kindle/package-contents.txt
+out/local-kindle/package-exports.txt
+out/local-kindle/package-glibc.txt
+out/local-kindle/sysroot-glibc.txt
+out/local-kindle/toolchain-info.txt
+```
 
-## 8. Current desktop-parity findings
+The script refuses a dirty root checkout by default, validates source gitlinks, installs/reuses the checksum-pinned KindleHF toolchain, restores temporary Anki source injection on exit, performs manifest/export/GLIBC gates, and records the exact build identity inside the package.
 
-Do not treat visual similarity alone as completion. `docs/ANKI_DESKTOP_PARITY.md` currently records these open semantic items:
+A local canonical build is valid build evidence. A ZIP assembled by ad-hoc copy commands is not.
 
-- type-answer `{{FrontSide}}` separator must be inserted at the comparison marker rather than prepended to the whole answer document;
-- autoplay must come from effective deck config (`!disable_autoplay`), not merely from AV-tag presence;
-- answer-side replay must honor the effective `!skip_question_when_replaying_answer` semantic, including filtered-card original deck behavior;
-- Lab126 CSS-pixel policy belongs at the WebView lifecycle boundary and needs real-device proof;
-- ordinary HTTP(S) reviewer links need an explicit navigation policy.
+## 8. Renderer diagnostics contract
 
-The same audit corrected an earlier assumption: the pinned Anki v3 scheduler returns four answer buttons, so Kanki's four-button bar is not a current parity defect; interval labels still come from Anki.
+Normal launch creates `/mnt/us/extensions/kanki/render-debug/` and starts `kanki-diag`. Failure to create/start diagnostics is explicit and aborts launch rather than silently losing observability.
 
-## 9. Evidence rules
+Default `metrics.log` is privacy-safe: render/card identifier, side, body class, viewport/scroll/`#qa` geometry, DPR, and a bounded set of element tag/class/computed font/display/geometry fields. It does not include element text.
 
-For every closed item in issue #11, attach or reference evidence from the same commit:
+Raw source capture requires the sentinel `/mnt/us/extensions/kanki/enable-render-capture`. Raw captures may contain note content and are never copied into the default redacted report.
+
+## 9. Current desktop-parity findings
+
+Do not treat visual similarity alone as completion. `docs/ANKI_DESKTOP_PARITY.md` is the source of truth.
+
+Current important state:
+
+- typed-answer `{{FrontSide}}` separator placement was re-audited and the current bridge is structurally equivalent to desktop Anki; source guard exists, executable fixtures still pending;
+- autoplay must come from effective deck config (`!disable_autoplay`) and is represented in the rewrite design/packet path;
+- answer-side replay must honor effective `!skip_question_when_replaying_answer`, including filtered-card original-deck behavior;
+- the pinned Anki v3 scheduler uses four answer buttons, so the four-button Kindle bar is not a parity defect for this pin;
+- Lab126 CSS-pixel policy still needs lifecycle/device verification;
+- ordinary reviewer HTTP(S) links are explicitly prevented from replacing the persistent reviewer document and need device-policy acceptance.
+
+## 10. Evidence rules
+
+For every closed item in issue #11, attach/reference evidence from the same candidate commit:
 
 - exact commit SHA;
-- workflow/run name;
+- executor/test identifier (GitHub run, local canonical build, or PW6 test);
 - relevant artifact/log;
 - target architecture;
 - for rendering: fixture name and measured contract result;
@@ -197,9 +214,9 @@ For every closed item in issue #11, attach or reference evidence from the same c
 
 Never close a gate using a green result from an older source commit after behavior-changing code has landed.
 
-## 10. PW6 acceptance order
+## 11. PW6 acceptance order
 
-Do not begin hardware acceptance until host + bridge + ARMHF + package gates are green on the exact candidate commit.
+Do not begin final hardware acceptance until host + bridge + ARMHF + package gates are green on the exact candidate commit.
 
 On PW6:
 
@@ -222,25 +239,28 @@ On PW6:
 
 Any failure reopens the relevant gate. Do not compensate by editing the deck.
 
-## 11. Release/merge rule
+## 12. Release/merge rule
 
-PR #10 remains Draft and issue #11 remains open until all applicable Gates A-E have same-commit evidence. Only then:
+PR #10 remains Draft and issue #11 remains open until all applicable gates have same-candidate evidence. Hosted GitHub CI is useful independent confirmation but is no longer the sole build authority.
 
-1. freeze a release candidate commit;
-2. rebuild the installable ZIP from CI;
-3. record ZIP SHA-256 and component pins;
-4. complete PW6 acceptance against that exact ZIP;
-5. update `STATUS.md`, `HANDOFF.md`, issue #11 and release notes;
-6. mark PR ready, merge to `main`, and tag the accepted source point.
+A release candidate may be produced by the documented local canonical builder when hosted Actions is unavailable, provided:
 
-## 12. Things that must never be hidden in chat
+1. the checkout is clean and exact commit recorded;
+2. canonical package script gates pass;
+3. artifact SHA-256/toolchain/ABI evidence is retained;
+4. remaining non-hardware gates are green on the same commit;
+5. PW6 acceptance is completed against that exact ZIP;
+6. `STATUS.md`, `HANDOFF.md`, issue #11 and release notes are updated before merge/tag.
+
+## 13. Things that must never be hidden in chat
 
 Before ending any development session, commit/update:
 
 - `docs/STATUS.md` — what is implemented, verified, failing and next;
 - issue #11 — closure evidence/checklist state;
+- `docs/LOCAL_BUILD.md` if local compilation changes;
 - an ADR if architecture/invariants changed;
 - `docs/HANDOFF.md` if build/release/diagnostic procedures changed;
-- this file if the resume entry point or blocker changed.
+- this file if the resume entry point, blocker or immediate next action changed.
 
 A future maintainer should need the repository and GitHub history only.
