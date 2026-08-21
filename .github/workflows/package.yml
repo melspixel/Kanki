@@ -13,6 +13,17 @@ on:
       - 'third_party/anki'
       - 'third_party/audiobook-koplugin'
       - '.github/workflows/package.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'bridge/**'
+      - 'device/**'
+      - 'assets/**'
+      - 'scripts/**'
+      - 'packaging/**'
+      - 'third_party/anki'
+      - 'third_party/audiobook-koplugin'
+      - '.github/workflows/package.yml'
 
 permissions:
   contents: read
