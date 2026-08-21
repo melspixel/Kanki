@@ -9,6 +9,27 @@ VERSION=${VERSION:-0.1.0-dev}
 BUILD_COMMIT=${BUILD_COMMIT:-unknown}
 ANKI_COMMIT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$PROJECT/upstream.lock.json")
 
+# A reproducible ZIP needs both a clean output tree and a stable DOS timestamp.
+# Prefer an explicitly supplied epoch; otherwise bind it to the Git commit that
+# identifies this build.  Fail closed instead of silently using wall-clock time.
+if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
+  SOURCE_DATE_EPOCH=$(git -C "$PROJECT" show -s --format=%ct "$BUILD_COMMIT" 2>/dev/null || true)
+  if [ -z "$SOURCE_DATE_EPOCH" ]; then
+    SOURCE_DATE_EPOCH=$(git -C "$PROJECT" show -s --format=%ct HEAD 2>/dev/null || true)
+  fi
+fi
+case "$SOURCE_DATE_EPOCH" in
+  ''|*[!0-9]*)
+    echo "SOURCE_DATE_EPOCH must be an integer, or BUILD_COMMIT must resolve in PROJECT" >&2
+    exit 65
+    ;;
+esac
+# ZIP timestamps cannot represent dates before 1980-01-01 UTC.
+if [ "$SOURCE_DATE_EPOCH" -lt 315532800 ]; then
+  echo "SOURCE_DATE_EPOCH predates the ZIP timestamp epoch: $SOURCE_DATE_EPOCH" >&2
+  exit 65
+fi
+
 # Both staging and release output are owned by this invocation.  Reusing an
 # existing ZIP lets `zip` retain members that disappeared from the new staging
 # tree, and stale sidecar reports can make a checkpoint look newer than it is.
@@ -31,10 +52,30 @@ printf '{"product":"Kindle Anki Port","version":"%s","build_commit":"%s","anki_c
   find . -type f ! -name MANIFEST.sha256 -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256
   sha256sum -c MANIFEST.sha256
 )
+
+# Normalize every archived file after MANIFEST generation.  The manifest hashes
+# bytes, not metadata, so this does not invalidate it.  Python avoids GNU-touch
+# date parsing differences between build hosts.
+python3 - "$DIST" "$SOURCE_DATE_EPOCH" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+epoch = int(sys.argv[2])
+for path in root.rglob("*"):
+    if path.is_symlink():
+        raise SystemExit(f"package staging must not contain symlinks: {path}")
+    if path.is_file():
+        os.utime(path, (epoch, epoch))
+PY
+
 ARCHIVE="$RELEASE/Kindle-Anki-Port-PW6-armhf.zip"
 (
   cd "$DIST"
-  zip -X -qr "$ARCHIVE" extensions documents
+  # Feed an explicitly sorted file list so filesystem/readdir ordering cannot
+  # perturb the central directory.  Controlled package paths never contain LF.
+  find extensions documents -type f -print | LC_ALL=C sort | zip -X -q "$ARCHIVE" -@
 )
 python3 "$PROJECT/tools/audit_package.py" "$ARCHIVE" \
   --sha256-out "$ARCHIVE.sha256"
@@ -44,4 +85,7 @@ unzip -l "$ARCHIVE" > "$RELEASE/package-contents.txt"
 cp "$ARMHF/file.txt" "$ARMHF/exports.txt" "$ARMHF/ARMHF-GATES.txt" \
   "$ARMHF/BUILD-PROVENANCE.txt" "$RELEASE/"
 cp "$ARMHF"/*.abi.txt "$ARMHF"/*.glibc.txt "$RELEASE/"
+printf 'build_commit=%s\nanki_commit=%s\nsource_date_epoch=%s\narchive_sha256=%s\n' \
+  "$BUILD_COMMIT" "$ANKI_COMMIT" "$SOURCE_DATE_EPOCH" "$(sha256sum "$ARCHIVE" | awk '{print $1}')" \
+  > "$RELEASE/PACKAGE-PROVENANCE.txt"
 printf '%s\n' "$ARCHIVE"
