@@ -6,20 +6,31 @@ Last updated: 2026-08-21
 
 - Repository: `melspixel/Kanki`
 - Working branch: `kindle-anki-port`
-- Branch head at handoff creation: `a5a5a423fa514a5ecce2aed27b670253d0519be8`
+- Current handoff lineage starts at: `4cf92bcc372f6cd9fcdb6ba72d15a7d7193203ff`
 - Upstream Anki pin: `e5a6fbe27fdd4d57d5f712191b4a753032e57853` (Anki 26.08.1)
+- Detailed status: `kindle-anki-port/PROGRESS.md`
 
 This file is the authoritative continuation point. Update it after every material build, test, packaging, or release change.
 
 ## User-required deliverables
 
 1. Full maintainable source tree committed to GitHub, not only archive chunks.
-2. Reproducible GitHub Actions build.
+2. Reproducible build scripts that run in a local/VM environment and can also run in GitHub Actions when quota is available.
 3. PW6 ARM hard-float installation archive.
 4. SHA-256 checksum, package contents, build provenance, and test report.
 5. Final package persisted on GitHub, not only in a temporary chat filesystem.
 6. No bundled collection, media, credentials, logs, PID files, or user configuration.
 7. No dependency on RAnki, `rewrite-v1`, `LD_PRELOAD`, or prior card-template patch sets.
+
+## Architecture decision
+
+This is a platform port of desktop Anki, not a card-template patch project.
+
+- The pinned official Anki Rust backend remains authoritative for collection, scheduling, rendering, typed-answer comparison, media, sync, and undo.
+- A named semantic C ABI exposes only reviewer operations to the Kindle host.
+- A native GTK2/WebKitGTK1 process owns the Kindle window, persistent WebView, focus, paging, keyboard, lifecycle, and process supervision.
+- An ES5 reviewer shell owns DOM replacement, replay controls, typed-input presentation, and generic old-WebKit compatibility.
+- Audio and sync are separate supervised components.
 
 ## Current repository state
 
@@ -39,29 +50,66 @@ The archive restores a `kindle-anki-port/` project containing:
 
 The source directory has not yet been materialized into ordinary GitHub files on this branch. Archive chunks are temporary and must be removed after source-tree materialization.
 
-## Build status
+## Latest verified build diagnostic
 
-Status: **in progress — no final install package has been accepted or released**.
+The latest useful compile diagnostic came from temporary build-farm run `32474571560`, artifact `9443901779`, head `d57c53af1fc263b1681680ffdd2f095fe949109b`.
 
-The existing workflow `.github/workflows/kindle-anki-port.yml` is an early build definition. Before release it must be replaced by the tested build-farm workflow and must:
+Earlier infrastructure failures were resolved:
 
-- initialize the pinned Anki Fluent translation submodules;
-- use the Kindle hard-float GCC toolchain consistently;
-- compile and test the semantic backend on the host;
-- cross-compile `libanki-kindle.so`, `kap-app`, and `kap-audio`;
-- audit ABI, exported `kap_*` symbols, and GLIBC requirements;
-- assemble, inspect, checksum, and persist the install archive.
+- Anki Fluent translation submodules were initialized;
+- compressed overlay sources were decoded correctly;
+- the build reached the injected `kap_port.rs` module in the pinned Anki crate.
 
-## Known engineering risks / next actions
+The current blocking failure is semantic-adapter placement/API visibility:
 
-1. Materialize the verified source archive into `kindle-anki-port/` in GitHub.
-2. Apply the latest corrected semantic backend, native frontend, audio worker, and injector sources.
-3. Add Anki `ftl/core-repo` and `ftl/qt-repo` submodule initialization to CI.
-4. Run the host backend test/build gate and fix any API drift against Anki 26.08.1.
-5. Run ARMHF cross-build with `arm-kindlehf-linux-gnueabihf-gcc`.
-6. Verify `file`, `readelf`, `nm`, dynamic dependencies, and GLIBC ceiling.
-7. Add automated package-policy and lifecycle tests.
-8. Create a GitHub-hosted final artifact/release and record its immutable URL and SHA-256 below.
+- 26 Rust errors remain;
+- generated backend service methods such as `get_queued_cards`, `answer_card`, `render_existing_card`, `compare_answer`, `extract_cloze_for_typing`, `deck_tree`, and `bury_or_suspend_cards` are private from the injected crate-root module;
+- the accompanying type-inference errors are secondary to those inaccessible calls.
+
+The preferred repair is to place a narrow bridge inside Anki's `backend` module, or route through backend-owned `pub(crate)`/collection-level APIs, rather than making generated service methods globally public or calling unstable numeric protobuf indices.
+
+## Actual implementation completeness
+
+Implemented as source but not yet release-validated:
+
+- collection open/close ABI;
+- deck tree/current deck/collapse ABI;
+- queue, question, reveal, answer, and bury state machine;
+- typed-answer marker parsing and reviewer input UI;
+- semantic AV marker replacement and replay controls;
+- persistent `#qa` reviewer shell;
+- generic CSS compatibility and nested-scroll flattening;
+- GTK/WebKit host, touch paging, single-instance/lifecycle scaffolding;
+- audio worker and launcher/backup scaffolding.
+
+Still missing or not yet adequate:
+
+- no successful host build against the pinned Anki source;
+- no ARMHF backend/frontend build;
+- `kap-sync` implementation is absent even though the shell script refers to it;
+- the archived audio source still uses miniaudio, while Kindle-native GStreamer/mixersink integration must be selected and validated;
+- the documentation describes a parity suite, but the archived source currently has only two small Rust parser tests and no complete `tests/` tree;
+- no package, ABI/GLIBC report, release asset, or PW6 hardware acceptance exists.
+
+## Execution environment
+
+GitHub Actions runtime quota is exhausted. Iterative compilation and tests must therefore run in the available VM/container environment. GitHub remains the canonical source, progress, handoff, and final-artifact store. Use Actions only for a final independent reproduction when quota is available; lack of Actions minutes must not block local build/test progress.
+
+If work must move to a user's local machine, create/update a repository communication document with exact commands, expected outputs, artifact paths, and unresolved questions so Codex can act as the local executor without relying on chat history.
+
+## Ordered next actions
+
+1. Materialize the verified source archive into ordinary `kindle-anki-port/` files in GitHub and remove archive chunks after verification.
+2. Consolidate all later temporary overlays into the canonical source tree.
+3. Refactor the Rust adapter into a backend-owned visibility boundary and make host `cargo check`, unit tests, and release build green.
+4. Add real integration fixtures for collection open, deck tree, queue, render, typed answer, answer, bury, and close.
+5. Implement the official normal/full/media sync adapter and `kap-sync` binary.
+6. Replace or validate the audio backend against the Kindle audio stack, including Bluetooth rerouting.
+7. Run KindleHF ARM hard-float cross-build for `libanki-kindle.so`, `kap-app`, `kap-audio`, and `kap-sync`.
+8. Audit ELF class, interpreter, ABI, exported `kap_*` symbols, dynamic dependencies, and GLIBC ceiling.
+9. Add reviewer, lifecycle, package-policy, and repeat-launch tests.
+10. Assemble, unpack, inspect, checksum, and persist `Kindle-Anki-Port-PW6-armhf.zip` plus reports on GitHub.
+11. Run the PW6 hardware matrix: rendering, typed keyboard, audio/Bluetooth, long-card paging, suspend/resume, and 50 exit/re-enter cycles.
 
 ## Release record
 
@@ -71,7 +119,8 @@ When complete, replace this section with:
 
 - release/tag;
 - source commit;
-- workflow run ID;
+- build environment and command;
+- workflow run ID if available;
 - artifact/release asset name;
 - exact SHA-256;
 - automated test results;
@@ -79,4 +128,4 @@ When complete, replace this section with:
 
 ## Integrity rule
 
-Do not mark the project complete merely because a ZIP exists locally. Completion requires a green reproducible build, package audit, GitHub persistence, and this handoff document updated with exact evidence.
+Do not mark the project complete merely because a ZIP exists locally. Completion requires maintainable GitHub source, a reproducible green build, package audit, GitHub persistence, and this handoff document updated with exact evidence.
