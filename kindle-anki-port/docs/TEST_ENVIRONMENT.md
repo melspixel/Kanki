@@ -1,202 +1,246 @@
 # Kindle Anki Port — Test Environment
 
-Updated: 2026-08-21
+Updated: 2026-08-22
 
 ## Goal
 
-Build a reproducible test environment that separates desktop-Anki semantics, ARM/Linux compatibility, Kindle runtime ABI, and real-device behavior. The environment is a porting laboratory, not a substitute for target-device acceptance.
+Provide a reproducible porting laboratory that separates desktop-Anki semantics, ARM/Linux compatibility, exact PW6 runtime ABI, release packaging, and real-device behavior. VM/QEMU evidence may close non-hardware gates, but it is never a substitute for physical PW6 acceptance.
 
-The official Kindle source tree is useful for rebuilding open-source components and understanding API contracts, but source alone is not a complete emulator. The exact firmware rootfs and proprietary Lab126 runtime services are also needed for high-fidelity ABI and runtime tests.
+The official Kindle open-source tree is useful for understanding and rebuilding open components; it is not a complete emulator. High-fidelity runtime testing additionally requires the checksum-matching PW6 5.19.6 rootfs/proprietary runtime files. Those bytes are private external inputs and are never committed to GitHub.
+
+## Release-order invariant
+
+The maintained non-hardware release sequence is strictly:
+
+```text
+L0 host semantics/static contracts
+-> L1 ARMHF cross-build + ELF/ABI/GLIBC audit
+-> L2 exact checksum-matching PW6 rootfs QEMU
+-> L2.5 QEMU-bound package/reproducibility/privacy audit
+-> durable GitHub release artifacts
+```
+
+A final-looking `Kindle-Anki-Port-PW6-armhf.zip` must **not** be assembled before L2 passes for the exact ARMHF bytes being archived. Generic ARM/QEMU host sanity is not a substitute for L2.
 
 ## Test layers
 
-### L0 — Host semantic tests
+### L0 — Host semantic and deterministic contract tests
 
 Runs natively in the VM/container.
 
-- build the pinned official Anki `rslib`;
-- run collection, scheduler, rendering, typed-answer, cloze, AV, bury, close, and sync-protocol fixture tests;
+- build/test the pinned official Anki `rslib`;
+- run collection, scheduler, rendering, typed-answer, cloze, AV, bury, close, and sync-protocol fixtures;
 - test the named `kap_*` C ABI;
 - test reviewer state transitions without GTK/WebKit;
-- run JavaScript syntax, DOM-contract, CSS-compatibility, lifecycle-shell, and package-policy tests.
+- run JavaScript syntax/DOM/CSS compatibility fixtures;
+- run launcher/sync lifecycle and operation-lock regressions;
+- run package-policy/reproducibility **fixtures**;
+- run build/QEMU/package provenance and orchestration contract tests.
 
-This layer must be fast and deterministic.
+Package tests at L0 use synthetic fixtures only. A synthetic ZIP is test evidence, not a release artifact.
 
 ### L1 — ARMHF cross-build and static ABI audit
 
-Uses the pinned KindleHF toolchain and a generated sysroot.
+Uses the pinned KindleHF toolchain and generated/verified sysroot inputs.
 
 - compile `libanki-kindle.so`, `kap-app`, `kap-audio`, and `kap-sync` for ARMv7 hard-float;
-- verify ELF class, EABI, interpreter, CPU attributes, dynamic dependencies, and exported `kap_*` symbols;
+- verify ELF class, EABI/hard-float attributes, interpreter, dynamic dependencies and exported `kap_*` symbols;
 - reject host-library leakage;
 - enforce the target GLIBC ceiling;
 - inspect RPATH/RUNPATH and unresolved symbols;
-- unpack and audit the installation archive.
+- persist `ARMHF-GATES.txt`, `BUILD-PROVENANCE.txt`, file/export/ABI/GLIBC reports and exact binary hashes.
 
-No physical Kindle is required.
+L1 may run generic static ARM/QEMU sanity, but it does **not** create the final installer. No physical Kindle is required.
 
-### L2 — QEMU user-mode runtime
+### L2 — Exact PW6 rootfs QEMU runtime gate
 
-Runs ARM binaries against an extracted, checksum-verified PW6 rootfs under `qemu-arm`/`qemu-arm-static`.
+Runs the fresh L1 ARM binaries against an extracted, checksum-verified PW6 5.19.6 rootfs under `qemu-arm`/`qemu-arm-static`.
 
-- load the real target dynamic linker and shared libraries;
-- open a disposable copied Anki collection;
-- exercise the C ABI and scheduler/rendering lifecycle;
-- smoke-test process startup, IPC, manifest verification, and clean shutdown;
-- detect missing symbols and incompatible GLIBC/library assumptions.
+Required identity checks occur before QEMU execution:
 
-The rootfs is an external input and is never committed to GitHub.
+```text
+clean project HEAD == BUILD_COMMIT
+Anki identity == upstream.lock.json pin
+ARMHF-GATES.txt == ARMHF gates: PASS
+ARMHF source/Anki provenance matches the release identity
+rootfs manifest bytes == committed canonical PW6 5.19.6 manifest
+```
+
+Runtime checks include:
+
+- verify loader/libc/WebKit and rootfs-image hashes against the canonical manifest;
+- load the real target dynamic linker/shared libraries;
+- load the exact `libanki-kindle.so` built at L1;
+- smoke-test backend startup/C ABI loading and shutdown;
+- run `kap-audio --self-test` and `kap-sync --self-test` under the exact rootfs;
+- detect missing symbols and incompatible target-library assumptions;
+- persist `QEMU-SMOKE.txt`, rootfs verification, backend/audio/sync logs and `QEMU-PROVENANCE.txt`.
+
+`QEMU-PROVENANCE.txt` records source/Anki identity, canonical manifest hash and the SHA-256 of all four ARMHF release binaries. It does not expose private rootfs absolute paths.
+
+The rootfs is an external private input and is never committed to GitHub.
+
+### L2.5 — Release package, provenance, privacy and reproducibility gate
+
+This layer may run **only after L2 PASS**.
+
+`package-and-audit.sh` requires the fresh L2 evidence directory and independently verifies:
+
+```text
+QEMU smoke PASS
+PW6 rootfs verification PASS
+backend/audio/sync smoke PASS
+same source commit
+same pinned Anki commit
+same canonical rootfs-manifest SHA-256
+same SHA-256 for libanki-kindle.so, kap-app, kap-audio and kap-sync
+```
+
+Then it may:
+
+- stage the installer from maintained source plus the verified L1 binaries;
+- generate and verify the internal SHA-256 manifest;
+- reject collections, media, credentials, logs, PID/lock state and user configuration;
+- normalize modes/timestamps/member order for reproducibility;
+- run ZIP integrity/content/policy audit;
+- persist ARMHF/QEMU/rootfs/ABI/GLIBC/package provenance reports alongside the ZIP;
+- generate the external ZIP SHA-256 and package contents listing.
+
+The production package path must fail closed on absent or stale L2 evidence.
 
 ### L3 — Virtual Kindle service laboratory
 
-Provides test-only platform adapters for services unavailable in QEMU.
+Provides test-only platform adapters for target services not meaningfully reproduced by user-mode QEMU.
 
-- virtual framebuffer and Xvfb/Xephyr display surface;
+- virtual framebuffer/Xvfb/Xephyr surface;
 - scripted touch/key events;
 - mock Lab126 CSS-pixel/full-content-zoom API;
 - mock e-ink refresh requests with call-order assertions;
 - mock DBus/framework focus and single-instance activation;
 - fake Bluetooth/audio-route events;
 - fake suspend/resume and low-memory signals;
-- fake network and AnkiWeb protocol server;
+- fake network/AnkiWeb protocol server;
 - deterministic virtual clock.
 
-Mocks are selected by a test build/runtime flag. Production packages must not depend on preload shims or mock libraries.
+Mocks must be selected only through test build/runtime paths. Production packages must not depend on preload shims or mock libraries.
 
 ### L4 — Renderer fixture tests
 
-Uses a persistent reviewer shell and a representative fixture collection.
+Uses a persistent reviewer shell and representative fixture content.
 
-Fixture matrix:
+Fixture matrix includes:
 
-- short plain-text card;
-- long dictionary card;
-- image-heavy card;
-- mixed CJK/Latin card;
+- short text and long dictionary cards;
+- image-heavy and mixed CJK/Latin cards;
 - `card1`/`card2` selectors;
-- inline script card;
-- local and remote AV tags;
+- inline script cards;
+- local/remote AV tags;
 - typed answer and cloze typed answer;
-- hint card;
-- MathJax inline/display;
-- nested overflow and long-page card;
-- deliberately unsupported modern template.
+- hint and MathJax cards;
+- nested overflow/long-page cards;
+- deliberately unsupported modern-template cases.
 
-Evidence collected:
-
-- backend-rendered HTML/CSS/AV packets;
-- final DOM/body classes;
-- computed geometry and scroll root;
-- screenshot or rasterized page;
-- JavaScript/renderer errors;
-- question/answer transition trace.
+Evidence may include backend-rendered HTML/CSS/AV packets, final DOM/body classes, geometry/scroll-root traces, renderer errors, question/answer traces and sanitized screenshots/rasterized output.
 
 ### L5 — Hardware-in-the-loop PW6 acceptance
 
-Runs only on the actual Kindle.
+Runs only on an actual PW6.
 
-- e-ink waveform, ghosting, partial/full refresh, and latency;
-- real touch paging and calibration;
-- on-screen keyboard and IME focus;
+- e-ink waveform, ghosting, partial/full refresh and latency;
+- real touch paging/calibration and on-screen keyboard/IME focus;
 - Kindle framework fullscreen/focus/leave-and-reenter behavior;
-- real Bluetooth pairing, `mixersink` routing, disconnect/reconnect, and audible output;
-- suspend/resume, power button, USB mode, Wi-Fi transitions, low-memory behavior;
-- 50-cycle launch/raise/exit/relaunch matrix;
+- real Bluetooth pairing, `mixersink` routing, disconnect/reconnect and audible output;
+- suspend/resume, power button, USB mode, Wi-Fi, thermal/battery/OOM behavior;
+- repeated launch/raise/exit/relaunch matrix;
 - final visual review of representative real cards.
 
-This is the only layer that can claim hardware acceptance.
+L5 is the only layer that can claim hardware acceptance.
 
-## Proposed repository layout
+## Canonical inputs and provenance
 
-```text
-kindle-anki-port/testenv/
-├── README.md
-├── Makefile
-├── container/
-│   └── Dockerfile
-├── scripts/
-│   ├── fetch-pinned-anki.sh
-│   ├── prepare-sysroot.sh
-│   ├── run-host-gates.sh
-│   ├── run-armhf-gates.sh
-│   ├── run-qemu-smoke.sh
-│   └── package-and-audit.sh
-├── qemu/
-│   ├── entrypoint.sh
-│   └── rootfs-manifest.json
-├── mocks/
-│   ├── lab126/
-│   ├── framework/
-│   ├── audio/
-│   ├── eink/
-│   └── network/
-├── fixtures/
-│   ├── collections/
-│   ├── media/
-│   └── renderer/
-├── tests/
-│   ├── core/
-│   ├── reviewer/
-│   ├── lifecycle/
-│   ├── sync/
-│   └── package/
-└── hil/
-    ├── device-agent.sh
-    ├── host-bridge.sh
-    └── acceptance-matrix.md
-```
-
-## Inputs and provenance
-
-The environment must pin and verify:
+The environment must pin/verify:
 
 - official Anki source commit;
-- KindleHF toolchain release and checksum;
+- Rust/toolchain/protoc inputs used by the release build;
+- KindleHF toolchain release/checksum;
 - exact PW6 firmware/rootfs checksum;
-- Kindle open-source bundle checksum;
-- generated sysroot manifest;
-- fixture collection hashes;
-- test environment container digest.
+- canonical PW6 runtime-file hashes;
+- generated sysroot manifest where used;
+- real APKG fixture hashes in the final test report;
+- source, ARMHF, QEMU and package provenance hashes.
 
-Firmware/rootfs/proprietary library bytes are not committed. Only scripts, expected hashes, manifests, and derived reports are stored in GitHub.
+Canonical PW6 manifest:
+
+```text
+testenv/qemu/pw6-5.19.6-rootfs-manifest.json
+```
+
+Firmware/rootfs/proprietary library bytes are never committed. Only scripts, expected hashes, manifests and sanitized derived reports belong in GitHub.
+
+## Maintained release entrypoints
+
+The public interfaces must encode the same ordering as the production gates:
+
+```text
+make qemu-smoke
+  -> writes QEMU evidence to $(QEMU)
+
+make package
+  -> requires $(QEMU)
+  -> package-and-audit.sh revalidates the QEMU evidence
+
+vm-advance.py without --rootfs
+  -> may stop at armhf-checkpoint-passed
+  -> must not create final ZIP
+
+vm-advance.py with --rootfs but incomplete required real-APKG coverage
+  -> may stop at qemu-checkpoint-passed
+  -> must not create final ZIP
+
+vm-advance.py with all semantic + ARMHF + exact-rootfs QEMU gates green
+  -> may package
+  -> may record non-hardware-release-gates-passed
+```
+
+Public GitHub Actions do not possess the private PW6 rootfs. The canonical workflow therefore persists a `NOT-A-RELEASE.txt` host/ARMHF build checkpoint and intentionally does not create the final installer.
 
 ## What the VM can complete without the user's local host
 
-- all source editing and code generation;
+Given the required public/pinned build inputs and private rootfs mounted into the VM, the VM can perform:
+
+- all source editing/code generation;
 - host Rust/C/JavaScript tests;
+- five-real-APKG integration;
 - ARMHF cross-compilation;
-- ELF/ABI/GLIBC audits;
-- QEMU user-mode execution against an available rootfs;
-- mocked GTK/WebKit/Lab126/service integration;
-- sync protocol fixtures and optional real-network tests with injected secrets;
-- installation-package assembly and privacy audit;
-- reproducibility reports and GitHub persistence.
+- ELF/ABI/GLIBC/export audits;
+- exact-rootfs QEMU L2;
+- mocked service integration;
+- QEMU-bound installer assembly/privacy/reproducibility audit;
+- release reports/checksums and GitHub persistence.
+
+The user's Mac is not required for ordinary compilation, QEMU, or packaging.
+
+If the VM cannot itself obtain the private checksum-matching PW6 rootfs, a local/Codex worker may only transport that verified private input according to `CODEX_COORDINATION.md`. Compilation remains VM-owned.
 
 ## What cannot be truthfully validated in the VM
 
-These require the physical Kindle, not specifically the user's Mac:
+These require the physical Kindle:
 
-1. real e-ink waveform, ghosting, refresh latency, and display artifacts;
+1. real e-ink waveform/ghosting/refresh artifacts and latency;
 2. actual touch controller behavior and on-screen keyboard focus;
-3. Amazon framework window/focus behavior when leaving fullscreen and reopening;
-4. real Bluetooth pairing and audible route switching through the device audio stack;
-5. suspend/resume, power-button, USB-storage, Wi-Fi, thermal, battery, and OOM behavior;
-6. device-specific proprietary services that depend on `/dev` nodes or live DBus/framework processes.
+3. Amazon framework window/focus behavior when leaving fullscreen/reopening;
+4. real Bluetooth pairing and audible route switching through the device stack;
+5. suspend/resume, power-button, USB-storage, Wi-Fi, thermal, battery and OOM behavior;
+6. proprietary services dependent on live `/dev` nodes or framework/DBus processes.
 
-A local host is needed only as a bridge when the VM cannot reach the Kindle over USB/SSH. Compilation itself does not require the user's host.
+A local host is needed only as a bridge when the VM cannot reach the Kindle over USB/SSH.
 
 ## Local-host / Codex collaboration contract
 
-When hardware testing starts, Codex on the user's host should:
+When hardware testing eventually starts, the local worker must first read `CODEX_COORDINATION.md`, verify the final installer/test-bundle hashes recorded in `HANDOFF.md`, and collect only sanitized HIL evidence. It must not rebuild the software locally as a substitute for the VM release provenance.
 
-1. read `kindle-anki-port/CODEX_COORDINATION.md` and this file;
-2. verify the package SHA-256;
-3. copy the installation package and test agent to the Kindle;
-4. run scripted device tests over USBNetwork/SSH when available;
-5. prompt the user only for irreducibly physical actions such as Bluetooth pairing, hearing audio, touching the screen, and pressing the power button;
-6. collect logs, framebuffer captures, system fingerprints, and the completed acceptance matrix;
-7. commit only sanitized reports to GitHub.
+Before hardware testing, Task B in `CODEX_COORDINATION.md` may be used only to provide the checksum-verified private PW6 5.19.6 rootfs bytes to the VM/private channel.
 
 ## Completion rule
 
-The virtual test environment may close all non-hardware release gates. It must never mark PW6 acceptance complete without evidence from L5.
+The virtual environment can close all non-hardware gates only when L0 -> L1 -> L2 -> L2.5 are green for one coherent current source/Anki/ARMHF/runtime identity and the final artifacts/reports are persisted durably. It must never mark PW6 hardware acceptance complete without L5 evidence.
