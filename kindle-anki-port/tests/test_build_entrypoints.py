@@ -23,6 +23,7 @@ def main() -> int:
     host_compat = (ROOT / "testenv" / "scripts" / "run-host-gates.sh").read_text(encoding="utf-8")
     package_compat = (ROOT / "testenv" / "scripts" / "package_audit.py").read_text(encoding="utf-8")
     workflow = (REPO / ".github" / "workflows" / "kindle-anki-port.yml").read_text(encoding="utf-8")
+    test_environment = (ROOT / "docs" / "TEST_ENVIRONMENT.md").read_text(encoding="utf-8")
 
     for needle in (
         "$(BASH) ./testenv/scripts/run-host-backend-gates.sh",
@@ -72,6 +73,20 @@ def main() -> int:
             "canonical workflow should mention package-and-audit.sh only in the two explanatory checkpoint lines"
         )
     forbid(workflow, '"$PROJECT/testenv/scripts/package-and-audit.sh"', "canonical workflow")
+
+    # TEST_ENVIRONMENT.md is a required continuation document and must describe
+    # the same release ordering as the executable entrypoints. In particular,
+    # package construction belongs after exact-rootfs L2, not in ARMHF L1.
+    require(test_environment, "### L1 — ARMHF cross-build and static ABI audit", "test environment")
+    require(test_environment, "### L2 — Exact PW6 rootfs QEMU runtime gate", "test environment")
+    require(test_environment, "### L2.5 — Release package, provenance, privacy and reproducibility gate", "test environment")
+    require(test_environment, "must **not** be assembled before L2 passes", "test environment")
+    require(test_environment, "Public GitHub Actions do not possess the private PW6 rootfs", "test environment")
+    l1 = test_environment.index("### L1 —")
+    l2 = test_environment.index("### L2 —")
+    l25 = test_environment.index("### L2.5 —")
+    if not l1 < l2 < l25:
+        raise AssertionError("test environment release layers are not ordered L1 -> L2 -> L2.5")
 
     print("test_build_entrypoints: ok")
     return 0
