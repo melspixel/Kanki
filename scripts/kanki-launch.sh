@@ -54,12 +54,41 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if [ -f "$DIR/MANIFEST.sha256" ]; then
+verify_installation() {
+    if [ ! -r "$DIR/BUILD.json" ]; then
+        printf '%s build identity missing: BUILD.json\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+        return 70
+    fi
+    if [ ! -r "$DIR/MANIFEST.sha256" ]; then
+        printf '%s package manifest missing: MANIFEST.sha256\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+        return 71
+    fi
+    for REQUIRED in \
+        './BUILD.json' \
+        './libanki-kanki.so' \
+        './kanki-device' \
+        './kanki-sync' \
+        './kanki-diag' \
+        './kanki-audio' \
+        './kanki-gst-play' \
+        './assets/device/reviewer-shell.html' \
+        './assets/reviewer/reviewer.js' \
+        './assets/reviewer/diagnostics.js'; do
+        if ! grep -F "  $REQUIRED" "$DIR/MANIFEST.sha256" >/dev/null 2>&1; then
+            printf '%s package manifest missing required component=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$REQUIRED" >>"$LOG"
+            return 72
+        fi
+    done
     (cd "$DIR" && sha256sum -c MANIFEST.sha256) >>"$LOG" 2>&1 || {
         printf '%s manifest verification failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
-        exit 71
+        return 73
     }
-fi
+    printf '%s build identity: ' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+    tr '\n' ' ' <"$DIR/BUILD.json" >>"$LOG"
+    printf '\n' >>"$LOG"
+}
+
+verify_installation
 
 export KANKI_MEDIA_DIR=/mnt/us/anki_data/collection.media
 export KANKI_GST_PLAYER="$DIR/kanki-gst-play"
@@ -72,12 +101,12 @@ prepare_diagnostic_dirs() {
     if [ -d "$DEBUG_DIR" ]; then
         mv "$DEBUG_DIR" "$DEBUG_PREVIOUS" || {
             printf '%s diagnostic rotation failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
-            return 72
+            return 74
         }
     fi
     mkdir -p "$DEBUG_DIR" || {
         printf '%s diagnostic directory creation failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
-        return 73
+        return 75
     }
 }
 
@@ -107,7 +136,7 @@ start_diag() {
         DIAG_PID=
         rm -f "$DIAG_PID_FILE"
         printf '%s diagnostic service failed to start\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
-        return 74
+        return 76
     fi
     printf '%s diagnostic service started raw_capture=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$([ -f "$DIR/enable-render-capture" ] && echo enabled || echo disabled)" >>"$LOG"
 }
