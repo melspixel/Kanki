@@ -11,6 +11,7 @@ This is the first file to read when taking over the `rewrite-v1` work. The goal 
 - `main` remains the last accepted legacy line until the rewrite passes hardware acceptance
 - Target device: Kindle Paperwhite 12th generation / PW6, ARMv7 hard-float
 - Production Anki core: pinned Anki 26.08.1 gitlink under `third_party/anki`
+- KindleHF build toolchain: checksum-pinned koxtoolchain `2026.08`, installed by `tools/install_kindlehf_toolchain.sh`
 
 Never infer completion from a compile, a screenshot, or an old green job. Issue #11 plus evidence attached to the release commit is the closure record.
 
@@ -30,6 +31,8 @@ These are design constraints, not implementation suggestions:
 10. `/mnt/us/anki_data` is user data. Install, upgrade, rollback, diagnostics and uninstall must never delete or replace it.
 11. New rewrite installs under `/mnt/us/extensions/kanki`, separate from legacy `/mnt/us/extensions/ranki`.
 12. Release artifacts are self-identifying and manifest-verified. Mixed component versions must be rejected, not tolerated.
+13. Privacy-safe renderer metrics are always available; raw card HTML/CSS capture is bounded and explicit opt-in only.
+14. Build/release workflows must use pinned/checksummed toolchain inputs, never floating `latest` artifacts.
 
 If a proposed fix violates any invariant above, stop and redesign it.
 
@@ -55,6 +58,7 @@ If a proposed fix violates any invariant above, stop and redesign it.
 - `device/kanki_device.c` — GTK2/WebKit application and lifecycle
 - `device/kanki_sync_cli.c` — sync process
 - `device/kanki_raise.c` — existing-instance reactivation helper
+- `device/kanki_diag_server.c` — loopback renderer metrics/raw-capture service on `127.0.0.1:17393`
 - `device/audio/kanki_audio_server.c` — loopback audio service
 
 ### Reviewer/device assets
@@ -64,19 +68,22 @@ If a proposed fix violates any invariant above, stop and redesign it.
 - `assets/reviewer/reviewer.css` — minimal reviewer-owned CSS only
 - `assets/reviewer/css_compat.js` — deterministic CSS source compatibility transform
 - `assets/reviewer/css_runtime.js` — old-WebKit runtime compatibility behavior
+- `assets/reviewer/diagnostics.js` — bounded privacy-safe computed-layout metrics and opt-in raw source capture
+- runtime diagnostic policy is generated as `/mnt/us/extensions/kanki/render-debug/config.js` by the launcher; it is not a package input
 
 ### Packaging/operations
 
-- `scripts/kanki-launch.sh` — launcher and component verification
+- `scripts/kanki-launch.sh` — launcher, manifest verification, diagnostics/audio lifetime and component startup
 - `scripts/kanki-sync.sh` — sync lifecycle
-- `scripts/kanki-report.sh` — redacted diagnostic bundle
+- `scripts/kanki-report.sh` — redacted diagnostic bundle; does not include raw card captures
 - `packaging/` — config example and Kindle-home shortcuts
+- `tools/install_kindlehf_toolchain.sh` — pinned/checksummed KindleHF toolchain installer
 - `.github/workflows/package.yml` — canonical installable package recipe
 
 ### References
 
 - `third_party/anki` — production core pin
-- `third_party/kindle-sdk` — Kindle toolchain/system reference pin
+- `third_party/kindle-sdk` — Kindle system/toolchain reference pin
 - `third_party/ranki-reference` — historical behavior reference only
 - `third_party/audiobook-koplugin` — pinned native Kindle GStreamer reference/helper source
 
@@ -88,7 +95,7 @@ Use the workflows as executable build documentation. Do not maintain a separate 
 - `.github/workflows/ci.yml` — Rust workspace, policy, reviewer contract, host self-test, ARM scaffold
 - `.github/workflows/anki-bridge.yml` — typed Anki host bridge/integration
 - `.github/workflows/anki-bridge-arm.yml` — typed Anki ARMHF build/ABI
-- `.github/workflows/device.yml` — native Kindle device shell
+- `.github/workflows/device.yml` — native Kindle device/diagnostics shell
 - `.github/workflows/audio.yml` — audio service/helper
 - `.github/workflows/css-compat.yml` — legacy WebKit CSS compatibility corpus
 - `.github/workflows/package.yml` — final ARMHF package, manifest and ABI gate
@@ -99,7 +106,7 @@ Use the workflows as executable build documentation. Do not maintain a separate 
 
 The Actions failure has been isolated from Kanki source.
 
-On 2026-08-21, a deliberately minimal PR workflow named **Actions runner probe** was added. It uses `ubuntu-latest` and has one shell step that only prints the date, `uname`, runner OS and runner architecture. On commit `e3f2abb42bcaca385968b8146751ebbeda269201`, probe run `32469010279` completed `failure`; its only job (`probe`, job `96731662061`) reported `steps = null` and no job log. The normal Kanki workflows failed in the same pre-step manner on that commit.
+On 2026-08-21, a deliberately minimal PR workflow named **Actions runner probe** was added. It uses `ubuntu-latest` and has one shell step that only prints the date, `uname`, runner OS and runner architecture. The failure continues on later source/documentation heads: probe run `32470385718`, job `96735736090`, completed `failure` with `steps = null`. Normal Kanki workflows fail in the same pre-step manner.
 
 Therefore the immediate blocker is outside product source execution. Do **not** change Kanki code or workflow build commands to repair these zero-step failures.
 
@@ -108,7 +115,7 @@ First action when resuming:
 1. inspect PR #10 current head;
 2. inspect the **Actions runner probe** for that head;
 3. if the probe has real steps, resume normal CI diagnosis;
-4. if the probe still has `steps = null`, inspect GitHub repository/account Actions availability before changing source. In particular check repository Actions policy and, because this is a private repository using GitHub-hosted runners, the account's Actions minutes/billing/budget state. GitHub blocks hosted-runner use when applicable quota/budget/payment conditions prevent additional usage;
+4. if the probe still has `steps = null`, inspect GitHub repository/account Actions availability before changing source. In particular check repository Actions policy and, because this is a private repository using GitHub-hosted runners, the account's Actions minutes/billing/budget state;
 5. after any account/repository fix, rerun the probe first;
 6. only when the probe enters its `Runner started` step should normal Kanki workflows be treated as actionable source/build failures;
 7. then fix the first real failing step only and rerun the narrow workflow.
@@ -125,6 +132,15 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 python3 tools/check_policy.py
 
+# Native source syntax
+cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_diag_server.c
+node --check assets/reviewer/reviewer.js
+node --check assets/reviewer/css_compat.js
+node --check assets/reviewer/css_runtime.js
+node --check assets/reviewer/diagnostics.js
+sh -n scripts/kanki-launch.sh
+sh -n scripts/kanki-report.sh
+
 # Host unit/integration shell
 cargo test --workspace
 cargo run -p kanki-app -- --self-test
@@ -136,7 +152,15 @@ node tests/css_compat.test.cjs
 
 For Anki and ARMHF work, follow the corresponding workflow verbatim rather than reconstructing commands from memory. The package workflow is the canonical source for toolchain flags, source pins, exported symbols, ABI gates and ZIP layout.
 
-## 7. Evidence rules
+## 7. Renderer diagnostics contract
+
+Normal launch creates `/mnt/us/extensions/kanki/render-debug/` and starts `kanki-diag`. Failure to create/start diagnostics is explicit and aborts the launch rather than silently losing observability.
+
+Default `metrics.log` is designed to be privacy-safe: render/card identifier, side, body class, viewport/scroll/`#qa` geometry, DPR, and a bounded set of element tag/class/computed font/display/geometry fields. It does not include element text.
+
+Raw source capture requires the sentinel `/mnt/us/extensions/kanki/enable-render-capture`. The launcher writes runtime `config.js`, the reviewer captures only the first 12 render sides, and `kanki-diag` writes HTML/CSS/AV metadata into `render-debug/`. Raw captures may contain note content and are never copied into the default redacted report.
+
+## 8. Evidence rules
 
 For every closed item in issue #11, attach or reference evidence from the same commit:
 
@@ -151,7 +175,7 @@ For every closed item in issue #11, attach or reference evidence from the same c
 
 Never close a gate using a green result from an older source commit after behavior-changing code has landed.
 
-## 8. PW6 acceptance order
+## 9. PW6 acceptance order
 
 Do not begin hardware acceptance until host + bridge + ARMHF + package gates are green on the exact candidate commit.
 
@@ -160,20 +184,22 @@ On PW6:
 1. back up the collection;
 2. clean-install into `extensions/kanki` without touching `extensions/ranki` or `anki_data`;
 3. capture build identity and system fingerprint;
-4. verify deck tree and collapse persistence;
-5. verify question -> answer -> Again/Hard/Good/Easy, bury, restart;
-6. run renderer corpus including representative original APKG decks without modifying them;
-7. verify long-card scrolling;
-8. verify AirPods audio and repeated replay;
-9. verify normal sync, restart, then desktop Anki integrity;
-10. verify full-sync decision paths separately;
-11. verify back/exit, duplicate launch, sleep/wake and USB/MTP lifecycle;
-12. generate diagnostic ZIP and inspect for credentials/private database content;
-13. verify rollback while leaving `anki_data` untouched.
+4. confirm `render-debug/metrics.log` exists after first review render;
+5. verify deck tree and collapse persistence;
+6. verify question -> answer -> Again/Hard/Good/Easy, bury, restart;
+7. run renderer corpus including representative original APKG decks without modifying them;
+8. verify long-card scrolling;
+9. verify AirPods audio and repeated replay;
+10. verify normal sync, restart, then desktop Anki integrity;
+11. verify full-sync decision paths separately;
+12. verify back/exit, duplicate launch, sleep/wake and USB/MTP lifecycle;
+13. generate diagnostic ZIP and inspect for credentials/private database content;
+14. if layout diagnosis requires raw content, enable raw capture deliberately for a bounded session and review it separately;
+15. verify rollback while leaving `anki_data` untouched.
 
 Any failure reopens the relevant gate. Do not compensate by editing the deck.
 
-## 9. Release/merge rule
+## 10. Release/merge rule
 
 PR #10 remains Draft and issue #11 remains open until all applicable Gates A-E have same-commit evidence. Only then:
 
@@ -184,7 +210,7 @@ PR #10 remains Draft and issue #11 remains open until all applicable Gates A-E h
 5. update `STATUS.md`, `HANDOFF.md`, issue #11 and release notes;
 6. mark PR ready, merge to `main`, and tag the accepted source point.
 
-## 10. Things that must never be hidden in chat
+## 11. Things that must never be hidden in chat
 
 Before ending any development session, commit/update:
 
