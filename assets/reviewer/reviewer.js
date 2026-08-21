@@ -5,6 +5,12 @@
   var deckStyle = document.getElementById('kanki-deck-style');
   var currentCard = null;
   var shownAt = 0;
+  var renderNumber = 0;
+  var diagnosticQueue = [];
+  var diagnosticBusy = false;
+  var DIAGNOSTIC_RENDER_LIMIT = 12;
+  var DIAGNOSTIC_ELEMENT_LIMIT = 40;
+  var DIAGNOSTIC_CHUNK_SIZE = 500;
 
   function command(name, values) {
     var parts = [];
@@ -19,10 +25,28 @@
     window.location.href = 'kanki://' + name + '?' + parts.join('&');
   }
 
-  function audioPing(path, values) {
+  function imagePing(url, done) {
+    var image = new Image();
+    var finished = false;
+    var timer;
+    function finish() {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timer);
+      if (image.parentNode) image.parentNode.removeChild(image);
+      if (done) done();
+    }
+    image.style.display = 'none';
+    image.onload = finish;
+    image.onerror = finish;
+    image.src = url;
+    (document.body || document.documentElement).appendChild(image);
+    timer = window.setTimeout(finish, 1200);
+  }
+
+  function httpPing(port, path, values, done) {
     var query = [];
     var key;
-    var image = new Image();
     values = values || {};
     values.nonce = String(new Date().getTime()) + String(Math.random());
     for (key in values) {
@@ -30,12 +54,133 @@
         query.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(values[key])));
       }
     }
-    image.style.display = 'none';
-    image.src = 'http://127.0.0.1:17392/' + path + '?' + query.join('&');
-    (document.body || document.documentElement).appendChild(image);
+    imagePing('http://127.0.0.1:' + String(port) + '/' + path + '?' + query.join('&'), done);
+  }
+
+  function audioPing(path, values) {
+    httpPing(17392, path, values, null);
+  }
+
+  function diagnosticPing(path, values) {
+    httpPing(17393, path, values, null);
+  }
+
+  function diagnosticQueueNext() {
+    var item;
+    if (diagnosticBusy || !diagnosticQueue.length) return;
+    diagnosticBusy = true;
+    item = diagnosticQueue.shift();
+    httpPing(17393, item.path, item.values, function () {
+      diagnosticBusy = false;
+      diagnosticQueueNext();
+    });
+  }
+
+  function diagnosticEnqueue(path, values) {
+    diagnosticQueue.push({path: path, values: values});
+    diagnosticQueueNext();
+  }
+
+  function captureChunks(id, side, kind, value) {
+    var text = String(value == null ? '' : value);
+    var offset = 0;
+    var part = 0;
+    if (!text.length) {
+      diagnosticEnqueue('capture', {id: id, side: side, kind: kind, part: 0, data: ''});
+      return;
+    }
+    while (offset < text.length) {
+      diagnosticEnqueue('capture', {
+        id: id,
+        side: side,
+        kind: kind,
+        part: part,
+        data: text.substring(offset, offset + DIAGNOSTIC_CHUNK_SIZE)
+      });
+      offset += DIAGNOSTIC_CHUNK_SIZE;
+      part += 1;
+    }
+  }
+
+  function classText(element) {
+    var value = element && element.className;
+    if (value && typeof value.baseVal === 'string') return value.baseVal;
+    return value == null ? '' : String(value);
+  }
+
+  function finiteNumber(value) {
+    value = Number(value);
+    return isFinite(value) ? Math.round(value * 100) / 100 : 0;
+  }
+
+  function recordElementDiagnostics(id, side, phase) {
+    var nodes = qa.getElementsByTagName('*');
+    var count = 0;
+    var i;
+    for (i = 0; i < nodes.length && count < DIAGNOSTIC_ELEMENT_LIMIT; i += 1) {
+      var node = nodes[i];
+      var rect;
+      var style;
+      if (!node.getBoundingClientRect) continue;
+      rect = node.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+      style = window.getComputedStyle ? window.getComputedStyle(node, null) : node.currentStyle;
+      diagnosticPing('element', {
+        id: id,
+        side: side,
+        phase: phase,
+        i: i,
+        tag: String(node.tagName || '').toLowerCase(),
+        cls: classText(node).substring(0, 180),
+        g: [finiteNumber(rect.left), finiteNumber(rect.top), finiteNumber(rect.width), finiteNumber(rect.height)].join(','),
+        font: style ? [style.fontFamily || '', style.fontSize || '', style.fontWeight || '', style.lineHeight || ''].join('|').substring(0, 170) : '',
+        display: style ? [style.display || '', style.position || '', style.overflow || ''].join('|') : ''
+      });
+      count += 1;
+    }
+    return count;
+  }
+
+  function recordPageDiagnostics(id, side, phase, withElements) {
+    var rect = qa.getBoundingClientRect ? qa.getBoundingClientRect() : null;
+    var elementCount = 0;
+    if (withElements) elementCount = recordElementDiagnostics(id, side, phase);
+    diagnosticPing('metric', {
+      id: id,
+      side: side,
+      phase: phase,
+      body: String(document.body.className || '').substring(0, 180),
+      iw: window.innerWidth || 0,
+      ih: window.innerHeight || 0,
+      qw: rect ? finiteNumber(rect.width) : qa.clientWidth || 0,
+      qh: rect ? finiteNumber(rect.height) : qa.clientHeight || 0,
+      sw: Math.max(document.documentElement.scrollWidth || 0, document.body.scrollWidth || 0),
+      sh: Math.max(document.documentElement.scrollHeight || 0, document.body.scrollHeight || 0),
+      dpr: window.devicePixelRatio || 1,
+      elements: withElements ? elementCount : qa.getElementsByTagName('*').length
+    });
+  }
+
+  function captureRenderSource(id, packet) {
+    if (renderNumber > DIAGNOSTIC_RENDER_LIMIT) return;
+    captureChunks(id, packet.side || 'unknown', 'html', packet.html || '');
+    captureChunks(id, packet.side || 'unknown', 'css', packet.css || '');
+    captureChunks(id, packet.side || 'unknown', 'meta', JSON.stringify({
+      side: packet.side || '',
+      body_class: packet.body_class || '',
+      audio: packet.audio || []
+    }));
+  }
+
+  function beginRenderDiagnostics(packet) {
+    var cardId = currentCard && currentCard.card_id != null ? String(currentCard.card_id) : 'none';
+    renderNumber += 1;
+    var id = String(renderNumber) + '-' + cardId;
+    captureRenderSource(id, packet);
+    recordPageDiagnostics(id, packet.side || 'unknown', 'initial', false);
     window.setTimeout(function () {
-      if (image.parentNode) image.parentNode.removeChild(image);
-    }, 1500);
+      recordPageDiagnostics(id, packet.side || 'unknown', 'settled', renderNumber <= DIAGNOSTIC_RENDER_LIMIT);
+    }, 300);
   }
 
   window.kankiBridge = {
@@ -238,6 +383,7 @@
       } else {
         window.scrollTo(0, 0);
       }
+      beginRenderDiagnostics(packet);
       if (window.kankiBridge && window.kankiBridge.renderComplete) {
         window.kankiBridge.renderComplete(packet.side, qa.scrollWidth, qa.scrollHeight);
       }
