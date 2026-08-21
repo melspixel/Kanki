@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-21
-**Last fully recorded non-hardware baseline:** `dc53cc89603428b5b41bc9b223dc07a6222c2f65`
+**Last fully recorded non-hardware baseline:** `eed36e5be94d9557d7d70df642a4b778bb83fddf`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -81,7 +81,7 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware baseline is recorded for exact SHA
-`dc53cc89603428b5b41bc9b223dc07a6222c2f65`:
+`eed36e5be94d9557d7d70df642a4b778bb83fddf`:
 
 - host: macOS 26.4 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -98,16 +98,21 @@ The current clean local non-hardware baseline is recorded for exact SHA
   and health checks. Its sixth card was moved into a filtered deck from a
   normal deck whose autoplay and answer-side question replay were disabled;
   both question and prepared-answer packets preserved the two `false` semantic
-  values and SQLite confirmed distinct current/original deck IDs. Independent
-  sync-core open/close also passed; library SHA-256 was
+  values and SQLite confirmed distinct current/original deck IDs. A separate
+  two-client fixture against a pinned-Anki sync server on loopback passed
+  authentication with synthetic credentials, full upload, full download,
+  normal-sync deck-state propagation, media byte propagation/status and an
+  idle abort. Its evidence and server log passed a scan for the synthetic
+  username, password and derived hkey. All 24 C ABI exports declared by the
+  review and sync headers were present; library SHA-256 was
   `066193df0ca31fe6a52d5fd6c837433bc68d350a4a25c9273f9035467d74de0d`;
 - `bash tools/local_package_docker.sh` — **PASS**; typed Anki and all six
   ARMHF native executables built, renderer/reproducibility policy passed,
   `MANIFEST.sha256` verified, forbidden archive paths were absent, semantic
-  exports were present and required GLIBC versions were within the pinned
-  sysroot;
+  all 24 required review/sync exports were individually present and required
+  GLIBC versions were within the pinned sysroot;
 - package SHA-256:
-  `429a6f2ae66b528efb7a4448b2e6400316f5be908b32bd93e12aecf9226fcfa8`;
+  `e4d01f545bc5427bb05b501c1cf0d3b749ed133060558995d80fbadd8af6eafc`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -116,8 +121,8 @@ The current clean local non-hardware baseline is recorded for exact SHA
 
 This evidence is non-hardware baseline evidence, not release acceptance. It
 does not prove native audio output on PW6/AirPods, cloze/edge-case type
-answers, normal/full/media sync semantics, reproducibility across two clean
-builds or PW6 behavior.
+answers, live AnkiWeb/PW6 sync, reproducibility across two clean builds or PW6
+behavior.
 
 ### Baseline failure ledger
 
@@ -159,10 +164,24 @@ builds or PW6 behavior.
   inheritance. The first diagnostic and clean runs passed without a product
   change; modifying the bridge would have been an unjustified behavioral
   change.
+- The controlled sync diagnostic at
+  `eed36e5be94d9557d7d70df642a4b778bb83fddf` passed without a product sync
+  change. Its audit instead found that the host/package export checks accepted
+  any matching semantic symbol rather than requiring the complete ABI. The
+  review and sync headers now have one source-controlled 24-symbol requirement
+  list consumed by both canonical recipes, and every symbol is checked
+  individually.
+- The first package-workflow failure in that category was exit 71 before
+  compilation: `tools/local_package_docker.sh` did not forward the existing
+  `KANKI_ALLOW_DIRTY=1` diagnostic flag into the container. The wrapper now
+  forwards that flag while retaining the default value `0`; dirty builds remain
+  invalid as release evidence. The subsequent clean host, Anki and ARMHF
+  package runs passed at the exact baseline SHA.
 - There is no red canonical local software gate at this checkpoint. The first
   missing executable category in the requested closure sequence is
-  normal/full/media sync. Extend the disposable host recipe with controlled
-  sync fixtures, then rerun `sh tools/local_anki_bridge_docker.sh`.
+  cloze and unknown/empty-field typed answers. Extend only the disposable host
+  fixtures, without note-type-specific product behavior, then rerun
+  `sh tools/local_anki_bridge_docker.sh`.
 
 ## Current GitHub-hosted Actions blocker
 
@@ -224,7 +243,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 - end-to-end ordered AV autoplay and answer-side question replay on PW6/AirPods;
 - cloze and unknown/empty-field typed-answer integration fixtures;
-- normal/full/media sync lifecycle;
+- live AnkiWeb sync and normal/full/media sync acceptance on PW6;
 - repeated clean-build comparison and reproducibility evidence;
 - runtime ABI/loader proof against an audited PW6 rootfs or device;
 - native GTK/WebKit shell and CSS-pixel behavior on PW6;
@@ -238,13 +257,12 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 ## Immediate next actions
 
-1. Exercise normal/full/media sync semantics with disposable state, controlled endpoints and no credentials in logs, then rerun `sh tools/local_anki_bridge_docker.sh`.
-2. Add cloze and unknown/empty-field typed-answer fixtures without adding note-type-specific product behavior.
-3. Extend the renderer corpus with generic fixtures and original, unmodified representative APKGs.
-4. Repeat the clean canonical package build on the eventual candidate and compare manifests/artifact characteristics.
-5. Freeze one candidate only after non-hardware gates are green.
-6. Install that exact ZIP on PW6 and run hardware acceptance, renderer metrics and audio/sync tests.
-7. Repair/rerun hosted Actions later as independent confirmation, not as a separate build definition.
+1. Add cloze and unknown/empty-field typed-answer fixtures without adding note-type-specific product behavior, then rerun `sh tools/local_anki_bridge_docker.sh`.
+2. Extend the renderer corpus with generic fixtures and original, unmodified representative APKGs.
+3. Repeat the clean canonical package build on the eventual candidate and compare manifests/artifact characteristics.
+4. Freeze one candidate only after non-hardware gates are green.
+5. Install that exact ZIP on PW6 and run hardware acceptance, renderer metrics and live audio/sync tests.
+6. Repair/rerun hosted Actions later as independent confirmation, not as a separate build definition.
 
 ## Release rule
 

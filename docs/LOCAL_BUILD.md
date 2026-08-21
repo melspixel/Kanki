@@ -81,22 +81,35 @@ basic typed-answer comparison, Again/Hard/Good/Easy persistence, user bury,
 close/reopen and health checks. A sixth card is created in a normal deck with
 both playback settings disabled and gathered into a filtered deck; the
 production bridge must preserve the original-deck `false` values in question
-and prepared-answer packets. The recipe also reopens/closes the collection
-through the independent sync core and audits semantic exports. The trap
-restores the pinned checkout and removes the disposable collection. It never
-opens `/mnt/us/anki_data`. Evidence is written to:
+and prepared-answer packets.
+
+The recipe also starts the pinned Anki sync server on a Docker-local loopback
+port with a scratch base directory and synthetic credentials. Two independent
+disposable clients exercise full upload, full download, normal-sync deck-state
+propagation, media-byte propagation/status and idle abort through the production
+sync C ABI. The evidence and server log are scanned for the synthetic username,
+password and derived hkey. This is a controlled protocol/lifecycle test; it
+does not contact AnkiWeb.
+
+The export audit requires every review and sync ABI symbol listed in
+`bridge/required_exports.txt`; the source contract requires that list to match
+both public bridge headers exactly. The trap stops the server, restores the
+pinned checkout and removes every disposable directory. It never opens
+`/mnt/us/anki_data`. Evidence is written to:
 
 ```text
 out/host-anki/bridge-smoke.txt
 out/host-anki/bridge-integration.txt
+out/host-anki/sync-integration.txt
 out/host-anki/bridge-exports.txt
 out/host-anki/bridge-dynamic.txt
 out/host-anki/bridge-library.sha256
 ```
 
-This is executable synthetic review/ownership/ABI evidence, not original-APKG,
-full-sync/media-sync or PW6 evidence. The Anki bridge workflow invokes the same
-canonical script instead of embedding its own injection/build/test recipe.
+This is executable synthetic review/sync/ownership/ABI evidence, not
+original-APKG, live AnkiWeb or PW6 evidence. The Anki bridge workflow invokes
+the same canonical script instead of embedding its own injection/build/test
+recipe.
 
 ## Canonical Linux recipe without Docker
 
@@ -113,6 +126,14 @@ KANKI_ALLOW_DIRTY=1 bash tools/build_kindle_package.sh
 ```
 
 Do not use a dirty build as release evidence.
+
+The Docker package executor forwards the same diagnostic-only flag:
+
+```sh
+KANKI_ALLOW_DIRTY=1 bash tools/local_package_docker.sh
+```
+
+It defaults to `0`; omitting the flag keeps the canonical clean-checkout gate.
 
 ## Relationship to GitHub Actions
 

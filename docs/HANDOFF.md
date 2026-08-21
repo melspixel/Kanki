@@ -106,8 +106,18 @@ tools/run_anki_bridge_host.sh
 `.github/workflows/anki-bridge.yml` and
 `tools/local_anki_bridge_docker.sh` are executors for that recipe. Its
 disposable collection is always created under `mktemp`; it must never point at
-`/mnt/us/anki_data`. Passing this smoke establishes build/open/deck/health and
-close ownership plus ABI presence, not full reviewer or network-sync parity.
+`/mnt/us/anki_data`. The recipe also starts the pinned Anki sync server on a
+Docker-local loopback port with scratch state and synthetic credentials, runs
+two disposable clients through full upload/download, normal state propagation
+and media propagation/status, and scans retained evidence for the synthetic
+secrets. Passing establishes controlled review/sync lifecycle behavior and all
+24 declared review/sync ABI exports, not live AnkiWeb or PW6 parity.
+
+Both direct and Docker package paths reject a dirty checkout by default. For a
+diagnostic build only, `KANKI_ALLOW_DIRTY=1` may be supplied to either
+`bash tools/build_kindle_package.sh` or
+`bash tools/local_package_docker.sh`; such an artifact is never release
+evidence.
 
 ## Build and CI ownership map
 
