@@ -1,6 +1,6 @@
 # Kindle Anki Port — Progress and Handoff
 
-Last updated: 2026-08-21 UTC
+Last updated: 2026-08-22 UTC
 
 ## Canonical project location
 
@@ -10,7 +10,8 @@ Last updated: 2026-08-21 UTC
 - Upstream Anki pin: `e5a6fbe27fdd4d57d5f712191b4a753032e57853` (Anki 26.08.1)
 - Detailed phase status: `kindle-anki-port/PROGRESS.md`
 - Initial VM build evidence: `kindle-anki-port/docs/VM_BUILD_20260821.md`
-- Continuation evidence: `kindle-anki-port/docs/VM_CONTINUATION_20260821.md`
+- First continuation evidence: `kindle-anki-port/docs/VM_CONTINUATION_20260821.md`
+- Latest continuation evidence: `kindle-anki-port/docs/VM_CONTINUATION_20260822.md`
 - Target-runtime test design: `kindle-anki-port/docs/TEST_ENVIRONMENT.md`
 
 This file is the authoritative continuation point. Update it after every material build, test, package, source-persistence, QEMU or release change.
@@ -48,7 +49,7 @@ Temporary root `part-00` … `part-08`, `restore.sh`, the old source-ZIP checksu
 repo: retire archive staging after ordinary source materialization
 ```
 
-The retained root-level `src/`, `scripts/`, `tools/` and legacy documentation belong to the historical Kanki/Ranki project from the repository's main lineage. They are not production inputs to the independent port. The root README now makes this distinction explicit, and the legacy workflow is excluded from `kindle-anki-port` pushes.
+The retained root-level `src/`, `scripts/`, `tools/` and legacy documentation belong to the historical Kanki/Ranki project from the repository's main lineage. They are not production inputs to the independent port. The root README makes this distinction explicit, and the legacy workflow is excluded from `kindle-anki-port` pushes.
 
 ## Semantic / host status
 
@@ -62,7 +63,33 @@ Persisted full official Anki rslib evidence:
 
 Five real APKG fixtures passed the C ABI open/deck/queue/render/reveal/rate/close lifecycle. Typed-answer behavior was observed on `Advanced Vocabulary Complete (20 Units).apkg`; AV packets were observed on three real decks.
 
-Static/lifecycle gates also pass for injector idempotence, semantic/source contracts, JavaScript syntax/DOM contract, strict C99/Werror native builds, worker self-tests, launch lifecycle and deterministic sync-worker fixtures.
+The previous complete static/lifecycle checkpoint passes injector idempotence, semantic/source contracts, JavaScript syntax/DOM contract, strict C99/Werror native builds, worker self-tests, launch lifecycle and deterministic sync-worker fixtures.
+
+### 2026-08-22 sync hardening and reviewer runtime evidence
+
+The current ordinary source additionally contains the following material source/test commits:
+
+```text
+36c73d49251ca73d8448434b247e722c46c4fa99  sync: reject conflicting full-sync modes
+4a27352fa7718e2d8e48fc603582e7d55f2b0653  test: add deterministic sync error and shutdown tracing
+78fbfa38c4599673eb356f88597bf7ea0707e9c1  test: expand sync decision error and abort fixtures
+a3bdeaf924b5fb6d802c9454ac4c5435d3eb5b16  test: add reviewer runtime fixture matrix
+3e139cb006be449b385ad26470ebe9327dc15393  test: include reviewer runtime fixtures in static gate
+```
+
+The sync worker now rejects simultaneous `--full-upload` and `--full-download` with status 64 rather than silently letting argument order choose a destructive direction. Its deterministic fixture now covers required-action decisions, endpoint/timeout/server-USN propagation, error cleanup, credential non-disclosure and SIGTERM shutdown ordering. Exact source blobs were Git-object-hash checked before local execution.
+
+```text
+test_sync_worker: ok
+```
+
+The dependency-free Node/vm reviewer harness drives the production `window.kapReviewer` API with ten runtime fixture groups covering mixed CJK/Latin rendering, body classes/CSS/intervals, typed input, inline-script replacement, replay controls/AV routing, nested-scroll flattening, answer behavior, state transitions, failure telemetry and touch paging.
+
+```text
+test_reviewer_runtime_fixtures: ok (10 fixture groups)
+```
+
+These are genuine executable fixture advances, but they do **not** replace the required full canonical-head static/rslib/ARMHF/package rerun.
 
 ## Fresh ARM hard-float checkpoint
 
@@ -81,7 +108,7 @@ kap-sync          ARM EABI5 hard-float, GLIBC_2.4
 libanki-kindle.so ARM EABI5 hard-float, max GLIBC_2.18
 ```
 
-The build gate now derives the compatibility ceiling from the KindleHF target sysroot rather than a hard-coded host-like value. KindleHF's sysroot ceiling is GLIBC_2.18. The exact PW6 5.19.6 runtime `libc.so.6` oracle advertises through GLIBC_2.35, so the current backend requirement is below both ceilings.
+The build gate derives the compatibility ceiling from the KindleHF target sysroot rather than a hard-coded host-like value. KindleHF's sysroot ceiling is GLIBC_2.18. The exact PW6 5.19.6 runtime `libc.so.6` oracle advertises through GLIBC_2.35, so the checkpoint backend requirement is below both ceilings.
 
 This remains checkpoint evidence; the final package must be regenerated from a VM materialization matching the current canonical GitHub source head.
 
@@ -126,6 +153,8 @@ target GLIBC max:      2.35
 
 `testenv/scripts/verify-pw6-rootfs.py` validates these hashes/version markers before QEMU is allowed to run.
 
+The VM currently retains the prior exact-rootfs extraction/oracle reports and hashes, including the rootfs-image SHA above, but not the rootfs bytes themselves. Reports are not accepted as runtime input.
+
 ## QEMU state
 
 QEMU user-mode is available in the VM:
@@ -143,13 +172,13 @@ QEMU host sanity: PASS
 
 The KindleHF compiler sysroot was tested as a possible dynamic stand-in and rejected: even a trivial dynamic ARM program trips an `ld.so` relocation assertion. That sysroot is therefore not accepted as PW6 runtime evidence.
 
-Exact-rootfs QEMU execution remains pending because the current VM has the verified hashes/oracle reports but not the complete extracted PW6 rootfs bytes. Current VM package-network/DNS access is restricted. This is an external test-input limitation, not a code/compiler blocker and not a reason to move ordinary compilation to the user's local host.
+Exact-rootfs QEMU execution remains pending because the current VM has verified hashes/oracle reports but not the complete extracted PW6 rootfs bytes. Current VM package-network/DNS access is restricted. This is an external test-input limitation, not a code/compiler blocker and not a reason to move ordinary compilation to the user's local host.
 
 ## Reproducibility definition
 
-`.github/workflows/kindle-anki-port.yml` has been rewritten to build directly from ordinary `kindle-anki-port/` source files. It now defines:
+`.github/workflows/kindle-anki-port.yml` builds directly from ordinary `kindle-anki-port/` source files. It defines:
 
-- static/native/lifecycle gates;
+- static/native/lifecycle gates, including the new reviewer runtime fixture matrix;
 - exact Anki + Fluent source fetch;
 - Rust 1.92.0 host full-rslib gate;
 - KindleHF ARM hard-float cross-build;
@@ -162,9 +191,9 @@ GitHub Actions quota is exhausted, so this workflow is maintained as the indepen
 
 ## Current ordered next actions
 
-1. Materialize the **current canonical GitHub head** in the VM and rerun static, full rslib, real-APKG, ARMHF and package gates so final provenance is tied to the canonical source commit rather than `f1f5ff0…`.
+1. Materialize the **then-current canonical GitHub head** in a build-capable VM and rerun the complete static gate, full rslib, real-APKG, ARMHF and package gates so final provenance is tied to the canonical source commit rather than `f1f5ff0…`.
 2. Obtain/extract the checksum-verified PW6 5.19.6 rootfs as a private VM test input; run `verify-pw6-rootfs.py` and the backend/audio/sync QEMU smoke gate.
-3. Add broader deterministic renderer fixtures and sync decision/error fixtures.
+3. Extend renderer evidence from the new public-API fake-DOM runtime matrix toward exact-rootfs/target-WebKit execution and additional backend-rendered packet fixtures where useful.
 4. Build the final canonical-head `Kindle-Anki-Port-PW6-armhf.zip`; persist it, SHA-256, package contents, ABI/GLIBC reports and test report durably on GitHub.
 5. Only then start physical PW6 hardware acceptance: e-ink rendering/ghosting, typed keyboard, framework leave/re-enter, Bluetooth audio rerouting, suspend/resume and repeated relaunch.
 
@@ -182,12 +211,15 @@ Current checkpoint evidence:
 - Anki: `e5a6fbe27fdd4d57d5f712191b4a753032e57853`;
 - full Anki rslib tests: `539/539` pass (persisted checkpoint);
 - real APKG core integration: 5/5 fixtures pass;
-- fresh ARMHF static/ABI gate: pass;
-- fresh package audit: pass;
+- sync decision/error/shutdown fixture: pass on exact current source blobs from the 2026-08-22 implementation commits;
+- reviewer public-API runtime fixture matrix: 10 groups pass;
+- fresh ARMHF static/ABI gate: pass checkpoint;
+- fresh package audit: pass checkpoint;
 - fresh VM package SHA-256: `9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225` (checkpoint only);
 - QEMU static ARM sanity: pass;
 - exact PW6 rootfs manifest/verifier: present;
 - exact-rootfs dynamic QEMU gate: pending rootfs bytes;
+- full canonical-head host/rslib/ARMHF/package rerun: pending;
 - final canonical-head GitHub binary persistence: pending;
 - PW6 hardware acceptance: pending.
 
