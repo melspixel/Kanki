@@ -71,6 +71,7 @@ verify_installation() {
         './kanki-diag' \
         './kanki-audio' \
         './kanki-gst-play' \
+        './kanki-verify.sh' \
         './assets/device/reviewer-shell.html' \
         './assets/reviewer/reviewer.js' \
         './assets/reviewer/diagnostics.js'; do
@@ -79,10 +80,23 @@ verify_installation() {
             return 72
         fi
     done
-    (cd "$DIR" && sha256sum -c MANIFEST.sha256) >>"$LOG" 2>&1 || {
-        printf '%s manifest verification failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+    VERIFY_RECORD=$(grep -E '^[0-9a-fA-F]{64}  \./kanki-verify\.sh$' \
+        "$DIR/MANIFEST.sha256" 2>/dev/null || true)
+    if [ -z "$VERIFY_RECORD" ] || \
+        ! printf '%s\n' "$VERIFY_RECORD" | (cd "$DIR" && sha256sum -c -) \
+            >>"$LOG" 2>&1; then
+        printf '%s install verifier is missing or does not match manifest\n' \
+            "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
         return 73
-    }
+    fi
+    if sh "$DIR/kanki-verify.sh" "$DIR" >>"$LOG" 2>&1; then
+        :
+    else
+        STATUS=$?
+        printf '%s installation integrity verification failed status=%s\n' \
+            "$(date '+%Y-%m-%d %H:%M:%S')" "$STATUS" >>"$LOG"
+        return "$STATUS"
+    fi
     printf '%s build identity: ' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
     tr '\n' ' ' <"$DIR/BUILD.json" >>"$LOG"
     printf '\n' >>"$LOG"
@@ -94,7 +108,7 @@ export KANKI_MEDIA_DIR=/mnt/us/anki_data/collection.media
 export KANKI_GST_PLAYER="$DIR/kanki-gst-play"
 export KANKI_GST_LOADER=/lib/ld-linux-armhf.so.3
 export GST_PLUGIN_PATH=/usr/lib/gstreamer-0.10:/usr/lib/gstreamer-1.0
-chmod 755 "$DIR/kanki-device" "$DIR/kanki-audio" "$DIR/kanki-diag" "$DIR/kanki-gst-play" "$DIR/kanki-raise" "$DIR/kanki-sync.sh" "$DIR/kanki-report.sh" 2>/dev/null || true
+chmod 755 "$DIR/kanki-device" "$DIR/kanki-audio" "$DIR/kanki-diag" "$DIR/kanki-gst-play" "$DIR/kanki-raise" "$DIR/kanki-sync.sh" "$DIR/kanki-report.sh" "$DIR/kanki-verify.sh" 2>/dev/null || true
 
 prepare_diagnostic_dirs() {
     rm -rf "$DEBUG_PREVIOUS"

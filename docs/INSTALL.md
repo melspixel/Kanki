@@ -67,4 +67,10 @@ Close Kanki, rename or delete `/mnt/us/extensions/kanki`, and launch the previou
 
 ## Integrity
 
-Every launcher checks `MANIFEST.sha256` before running. A partial or mixed-version copy is rejected instead of starting with incompatible components.
+Every launcher and standalone sync checks `MANIFEST.sha256` before running. In
+addition to missing or modified package files, verification rejects symlinks
+and stale files left by a mixed-version copy. Only Kanki's bounded runtime
+state is allowed outside the manifest: `config.ini`, `kanki.log`, the capture
+sentinel, launcher/audio/diagnostic PID state, and files below
+`render-debug/` or `render-debug.previous/`. The redacted report runs the same
+read-only verifier and records its result.

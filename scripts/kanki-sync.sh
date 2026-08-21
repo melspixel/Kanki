@@ -20,10 +20,23 @@ if [ ! -r "$DIR/BUILD.json" ] || [ ! -r "$DIR/MANIFEST.sha256" ]; then
     printf '%s sync refused: build identity or package manifest missing\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
     exit 70
 fi
-(cd "$DIR" && sha256sum -c MANIFEST.sha256) >>"$LOG" 2>&1 || {
-    printf '%s sync refused: package manifest verification failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+VERIFY_RECORD=$(grep -E '^[0-9a-fA-F]{64}  \./kanki-verify\.sh$' \
+    "$DIR/MANIFEST.sha256" 2>/dev/null || true)
+if [ -z "$VERIFY_RECORD" ] || \
+    ! printf '%s\n' "$VERIFY_RECORD" | (cd "$DIR" && sha256sum -c -) \
+        >>"$LOG" 2>&1; then
+    printf '%s sync refused: install verifier missing or mismatched\n' \
+        "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
     exit 71
-}
+fi
+if sh "$DIR/kanki-verify.sh" "$DIR" >>"$LOG" 2>&1; then
+    :
+else
+    STATUS=$?
+    printf '%s sync refused: installation integrity verification failed status=%s\n' \
+        "$(date '+%Y-%m-%d %H:%M:%S')" "$STATUS" >>"$LOG"
+    exit "$STATUS"
+fi
 
 if [ ! -f "$CONFIG" ] && [ -r "$OLD_CONFIG" ]; then
     HKEY=$(sed -n 's/^[[:space:]]*hkey[[:space:]]*=[[:space:]]*//p' "$OLD_CONFIG" | tail -n 1)

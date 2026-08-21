@@ -202,7 +202,8 @@ cp assets/reviewer/reviewer.css assets/reviewer/reviewer.js \
    assets/reviewer/mathjax_runtime.js assets/reviewer/diagnostics.js \
    "$EXT/assets/reviewer/"
 cp -R "$MATHJAX_SOURCE/." "$MATHJAX_DEST/"
-cp scripts/kanki-launch.sh scripts/kanki-sync.sh scripts/kanki-report.sh "$EXT/"
+cp scripts/kanki-launch.sh scripts/kanki-sync.sh scripts/kanki-report.sh \
+   scripts/kanki-verify.sh "$EXT/"
 cp packaging/config.example.ini "$EXT/"
 cp THIRD_PARTY_NOTICES.md docs/INSTALL.md "$EXT/"
 cp packaging/documents/* "$ROOT_PACKAGE/documents/"
@@ -230,7 +231,8 @@ find "$ROOT_PACKAGE" -type d -exec chmod 755 {} +
 find "$ROOT_PACKAGE" -type f -exec chmod 644 {} +
 chmod 755 "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-diag" "$EXT/kanki-raise" \
           "$EXT/kanki-audio" "$EXT/kanki-gst-play" "$EXT/kanki-launch.sh" \
-          "$EXT/kanki-sync.sh" "$EXT/kanki-report.sh" "$ROOT_PACKAGE/documents/"*.sh
+          "$EXT/kanki-sync.sh" "$EXT/kanki-report.sh" "$EXT/kanki-verify.sh" \
+          "$ROOT_PACKAGE/documents/"*.sh
 (cd "$EXT" && find . -type f ! -name MANIFEST.sha256 ! -name config.ini ! -name kanki.log -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256)
 python3 tools/create_reproducible_zip.py \
     "$ROOT_PACKAGE" "$OUT_DIR/$PACKAGE_NAME.zip" "$BUILD_EPOCH" \
@@ -241,6 +243,7 @@ printf '%s\n' '== package and ABI gates =='
 test -x "$EXT/kanki-raise"
 test -x "$EXT/kanki-diag"
 test -x "$EXT/kanki-report.sh"
+test -x "$EXT/kanki-verify.sh"
 test -f "$EXT/assets/reviewer/css_compat.js"
 test -f "$EXT/assets/reviewer/css_runtime.js"
 test -f "$EXT/assets/reviewer/mathjax_runtime.js"
@@ -260,6 +263,8 @@ grep -q 'kanki://sync/run?mode=upload' "$EXT/assets/device/sync.html"
 grep -q 'kanki://sync/run?mode=download' "$EXT/assets/device/sync.html"
 grep -q 'DISPLAY="${DISPLAY:-:0}"' "$EXT/kanki-launch.sh"
 grep -q 'render-debug' "$EXT/kanki-launch.sh"
+grep -q 'kanki-verify.sh' "$EXT/kanki-launch.sh"
+grep -q 'unexpected file outside package manifest' "$EXT/kanki-verify.sh"
 grep -q 'enable-render-capture' "$EXT/kanki-diag"
 grep -q "\"koxtoolchain_version\": \"$KOX_VERSION\"" "$EXT/BUILD.json"
 grep -q "\"koxtoolchain_sha256\": \"$KOX_SHA256\"" "$EXT/BUILD.json"

@@ -93,6 +93,22 @@ launch = (ROOT / "scripts/kanki-launch.sh").read_text(encoding="utf-8")
 for required in ["render-debug", "enable-render-capture", "kanki-diag", "MANIFEST.sha256"]:
     if required not in launch:
         errors.append(f"launcher observability/integrity contract missing: {required}")
+install_verifier = (ROOT / "scripts/kanki-verify.sh").read_text(encoding="utf-8")
+for required in [
+    "sha256sum -c MANIFEST.sha256",
+    "find . -type l",
+    "unexpected file outside package manifest",
+    "./render-debug/*",
+    "./render-debug.previous/*",
+]:
+    if required not in install_verifier:
+        errors.append(f"install verifier contract missing: {required}")
+for caller_name in ["kanki-launch.sh", "kanki-sync.sh", "kanki-report.sh"]:
+    caller = (ROOT / "scripts" / caller_name).read_text(encoding="utf-8")
+    if "kanki-verify.sh" not in caller or "sha256sum -c -" not in caller:
+        errors.append(f"{caller_name} must authenticate and call the shared install verifier")
+if "scripts/kanki-verify.sh" not in (ROOT / "tools/build_kindle_package.sh").read_text(encoding="utf-8"):
+    errors.append("canonical package recipe must install the shared install verifier")
 
 # Release reproducibility: KindleHF is checksum pinned and no workflow may
 # silently float to a new 'latest' cross toolchain.

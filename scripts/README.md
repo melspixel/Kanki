@@ -5,6 +5,8 @@ Scripts here are copied into `/mnt/us/extensions/kanki` and execute on the Kindl
 - `kanki-launch.sh` — package identity/manifest checks and component lifecycle startup.
 - `kanki-sync.sh` — collection-exclusive sync lifecycle.
 - `kanki-report.sh` — redacted diagnostic bundle creation.
+- `kanki-verify.sh` — read-only manifest, symlink and mixed-install verifier
+  shared by launch, sync and diagnostic reporting.
 
 Developer/build scripts belong in `tools/` instead.
 

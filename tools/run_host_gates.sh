@@ -60,6 +60,7 @@ node --check tests/diagnostics_contract.test.cjs
 sh -n scripts/kanki-launch.sh
 sh -n scripts/kanki-sync.sh
 sh -n scripts/kanki-report.sh
+sh -n scripts/kanki-verify.sh
 sh -n tools/install_kindlehf_toolchain.sh
 sh -n tools/install_mathjax.sh
 sh -n tools/install_host_node.sh
@@ -98,6 +99,7 @@ node tests/diagnostics_contract.test.cjs
 
 printf '%s\n' '== reproducible package archive contract =='
 python3 tests/reproducible_zip_contract.py
+sh tests/install_integrity_contract.sh
 
 printf '%s\n' '== app self-test =='
 SELF=$(mktemp)

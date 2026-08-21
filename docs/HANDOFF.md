@@ -57,6 +57,9 @@ The permanent invariants are enumerated in `docs/RESUME.md`. In particular:
 - explicit collection ownership across review/sync;
 - `anki_data` is never part of install/upgrade/rollback mutation;
 - release components must refuse mixed build identities.
+- launch, standalone sync and diagnostic reports share the packaged read-only
+  install verifier; manifest-external package files and symlinks are rejected,
+  while the documented bounded runtime-state allowlist remains valid.
 
 Architecture changes require an ADR before or with the implementation change.
 

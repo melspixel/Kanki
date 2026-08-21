@@ -139,10 +139,14 @@ redact_log "$LOG" "$WORK/kanki.redacted.log"
 
 {
     echo '== packaged-file integrity =='
-    if [ -r "$DIR/MANIFEST.sha256" ] && command -v sha256sum >/dev/null 2>&1; then
-        (cd "$DIR" && sha256sum -c MANIFEST.sha256) 2>&1 || true
+    VERIFY_RECORD=$(grep -E '^[0-9a-fA-F]{64}  \./kanki-verify\.sh$' \
+        "$DIR/MANIFEST.sha256" 2>/dev/null || true)
+    if [ -n "$VERIFY_RECORD" ] && \
+        printf '%s\n' "$VERIFY_RECORD" | (cd "$DIR" && sha256sum -c -) \
+            >/dev/null 2>&1; then
+        sh "$DIR/kanki-verify.sh" "$DIR" 2>&1 || true
     else
-        echo 'manifest-check=unavailable'
+        echo 'install-integrity-check=unavailable-or-untrusted'
     fi
     echo
     echo '== executable identity =='

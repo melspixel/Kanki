@@ -15,6 +15,9 @@ Tests in this directory are cross-layer contracts for the rewrite. They are inte
 - `rootfs_audit_source_contract.py` pins the PW6 firmware audit identity and
   evidence boundary; `tools/audit_pw6_rootfs.sh` supplies the corresponding
   executable loader/QEMU evidence;
+- `install_integrity_contract.sh` proves that the installed runtime accepts
+  only manifest-owned package files plus the bounded config/log/PID/diagnostic
+  state allowlist, and rejects tampering, stale files and symlinks;
 - `reproducible_zip_contract.py` checks deterministic archive mechanics; two
   full canonical package builds remain the release evidence.
 
