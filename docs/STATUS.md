@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-21
-**Last fully recorded non-hardware baseline:** `868b07a15ec09be2790f97e339e4a7984c8a7afb`
+**Last fully recorded non-hardware baseline:** `dc53cc89603428b5b41bc9b223dc07a6222c2f65`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -81,7 +81,7 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware baseline is recorded for exact SHA
-`868b07a15ec09be2790f97e339e4a7984c8a7afb`:
+`dc53cc89603428b5b41bc9b223dc07a6222c2f65`:
 
 - host: macOS 26.4 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -91,12 +91,15 @@ The current clean local non-hardware baseline is recorded for exact SHA
   semantic ordered-audio and external-navigation contracts, and the app
   self-test passed;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
-  native x86-64 typed library; a backend-created disposable five-card
+  native x86-64 typed library; a backend-created disposable six-card
   collection passed queue counts, question/answer rendering, semantic
   question/answer sound and TTS extraction, `{{FrontSide}}`, basic typed-answer
   input/comparison, Again/Hard/Good/Easy persistence, user bury, close/reopen
-  and health checks, in addition to independent sync-core open/close; library
-  SHA-256 was
+  and health checks. Its sixth card was moved into a filtered deck from a
+  normal deck whose autoplay and answer-side question replay were disabled;
+  both question and prepared-answer packets preserved the two `false` semantic
+  values and SQLite confirmed distinct current/original deck IDs. Independent
+  sync-core open/close also passed; library SHA-256 was
   `066193df0ca31fe6a52d5fd6c837433bc68d350a4a25c9273f9035467d74de0d`;
 - `bash tools/local_package_docker.sh` — **PASS**; typed Anki and all six
   ARMHF native executables built, renderer/reproducibility policy passed,
@@ -104,7 +107,7 @@ The current clean local non-hardware baseline is recorded for exact SHA
   exports were present and required GLIBC versions were within the pinned
   sysroot;
 - package SHA-256:
-  `ee8fb88383ce7999999aeabcef8dbb1bd912bacc28333370e3775527eee018ec`;
+  `429a6f2ae66b528efb7a4448b2e6400316f5be908b32bd93e12aecf9226fcfa8`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -112,9 +115,9 @@ The current clean local non-hardware baseline is recorded for exact SHA
   `8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0`.
 
 This evidence is non-hardware baseline evidence, not release acceptance. It
-does not prove native audio output on PW6/AirPods, effective-deck playback
-flags for a filtered card, cloze/edge-case type answers, sync against AnkiWeb,
-reproducibility across two clean builds or PW6 behavior.
+does not prove native audio output on PW6/AirPods, cloze/edge-case type
+answers, normal/full/media sync semantics, reproducibility across two clean
+builds or PW6 behavior.
 
 ### Baseline failure ledger
 
@@ -150,10 +153,16 @@ reproducibility across two clean builds or PW6 behavior.
   q/a marker identity. A later `-2` versus `-3` bury mismatch was corrected in
   the test oracle after confirming pinned Anki records user bury as `-3`; no
   product bury behavior was changed for that mismatch.
+- Commit `dc53cc89603428b5b41bc9b223dc07a6222c2f65` added pinned-backend
+  executable evidence for both playback booleans with default-enabled and
+  disabled effective deck values, including filtered-card original-deck
+  inheritance. The first diagnostic and clean runs passed without a product
+  change; modifying the bridge would have been an unjustified behavioral
+  change.
 - There is no red canonical local software gate at this checkpoint. The first
-  missing executable evidence is effective-deck autoplay/replay with disabled
-  values and filtered-card original-deck inheritance. Extend the disposable
-  fixture, then rerun `sh tools/local_anki_bridge_docker.sh`.
+  missing executable category in the requested closure sequence is
+  normal/full/media sync. Extend the disposable host recipe with controlled
+  sync fixtures, then rerun `sh tools/local_anki_bridge_docker.sh`.
 
 ## Current GitHub-hosted Actions blocker
 
@@ -172,6 +181,7 @@ The direct audit against pinned Anki 26.08.1 corrected and clarified several ite
 - typed-answer `{{FrontSide}}` separator placement is structurally equivalent to desktop and now has an executable basic-field fixture; cloze and edge-case fixtures remain pending;
 - autoplay must be derived from effective deck config (`!disable_autoplay`) rather than AV-tag presence;
 - answer-side question replay must honor effective `!skip_question_when_replaying_answer`, including filtered-card original deck behavior;
+- the pinned-backend disposable fixture now proves enabled and disabled packet values plus filtered-card original-deck inheritance; native PW6 playback remains open;
 - the pinned v3 scheduler uses four rating buttons, so the Kindle four-button bar is not a parity defect for this pin;
 - external navigation is blocked by both reviewer JavaScript and native WebKit policy while same-document navigation remains allowed; PW6 policy-callback evidence remains pending;
 - Lab126 CSS-pixel lifecycle behavior still requires PW6 proof.
@@ -213,7 +223,6 @@ Because behavior-changing commits landed afterward, these do not close the curre
 ## What is still not verified/closed
 
 - end-to-end ordered AV autoplay and answer-side question replay on PW6/AirPods;
-- effective-deck autoplay/replay integration fixtures for disabled values and a filtered card;
 - cloze and unknown/empty-field typed-answer integration fixtures;
 - normal/full/media sync lifecycle;
 - repeated clean-build comparison and reproducibility evidence;
@@ -229,9 +238,9 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 ## Immediate next actions
 
-1. Extend the pinned-Anki disposable fixture for both disabled playback values and filtered-card original-deck inheritance, then rerun `sh tools/local_anki_bridge_docker.sh`.
+1. Exercise normal/full/media sync semantics with disposable state, controlled endpoints and no credentials in logs, then rerun `sh tools/local_anki_bridge_docker.sh`.
 2. Add cloze and unknown/empty-field typed-answer fixtures without adding note-type-specific product behavior.
-3. Exercise normal/full/media sync semantics with disposable state and no credentials in logs.
+3. Extend the renderer corpus with generic fixtures and original, unmodified representative APKGs.
 4. Repeat the clean canonical package build on the eventual candidate and compare manifests/artifact characteristics.
 5. Freeze one candidate only after non-hardware gates are green.
 6. Install that exact ZIP on PW6 and run hardware acceptance, renderer metrics and audio/sync tests.

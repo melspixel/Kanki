@@ -44,8 +44,8 @@ Kanki equivalents:
 | Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Basic field disposable fixture passes; cloze/edge cases pending |
 | Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` and replaces marker in place | Basic comparison fixture passes; cloze/edge cases pending |
 | Answer separator with FrontSide | Remove `<hr id=answer>` temporarily, then place it immediately before comparison at `[[type:...]]` replacement | Bridge appends separator to the marker-local replacement before `replace_type_markers()` | Source contract and executable basic `FrontSide` fixture pass |
-| Autoplay | `Card.autoplay()` is deck-config driven | Typed effective-deck boolean controls one bounded ordered AV sequence | Implemented with host fixtures; integration/PW6 evidence pending |
-| Answer-side question replay | `Card.replay_question_audio_on_answer_side()` is deck-config driven | Prepared answer conditionally queues question tags before answer tags | Implemented with both-value host fixtures; filtered-card/PW6 evidence pending |
+| Autoplay | `Card.autoplay()` is deck-config driven | Typed effective-deck boolean controls one bounded ordered AV sequence | Enabled/disabled and filtered original-deck integration pass; PW6 pending |
+| Answer-side question replay | `Card.replay_question_audio_on_answer_side()` is deck-config driven | Prepared answer conditionally queues question tags before answer tags | Enabled/disabled and filtered original-deck integration pass; PW6 pending |
 | Answer buttons | Pinned v3 scheduler's `answerButtons()` returns 4 | Native bottom bar owns 4 buttons | Equivalent for supported 26.08.1 v3 scheduler; keep interval labels backend-driven |
 | Answer intervals | `describe_next_states()` labels | Bridge calls typed `describe_next_states()` | Implemented |
 | Card timer | Desktop starts timer on card fetch and uses time limit/options | Bridge records `Instant`; native/UI submission can pass elapsed milliseconds | Core timing implemented; UI semantics verify |
@@ -89,7 +89,7 @@ Kanki's `render_type_answer()` follows the same structural order: it removes the
 
 `tests/bridge_source_contract.py` now guards this property so a later refactor cannot accidentally reintroduce the earlier suspected bug.
 
-At `868b07a15ec09be2790f97e339e4a7984c8a7afb`, a disposable basic-field
+At `dc53cc89603428b5b41bc9b223dc07a6222c2f65`, a disposable basic-field
 fixture exercises the input, comparison, `{{FrontSide}}` placement and
 close/reopen path through the production bridge.
 
@@ -107,13 +107,14 @@ Desktop `Card.autoplay()` reads the effective deck config. In the current protob
 autoplay = !deck_config.disable_autoplay
 ```
 
-At `868b07a15ec09be2790f97e339e4a7984c8a7afb`, Kanki resolves this boolean in
+At `dc53cc89603428b5b41bc9b223dc07a6222c2f65`, Kanki resolves this boolean in
 the typed bridge and the reviewer starts one ordered AV sequence only when it
-is true. Replay buttons remain independent of autoplay.
+is true. Replay buttons remain independent of autoplay. The pinned-backend
+fixture covers the enabled default and a disabled normal deck whose card Anki
+moves into a filtered deck; the packet remains disabled by the original deck.
 
 Remaining evidence:
 
-- disposable pinned-Anki fixtures for both effective-deck values, including a filtered card;
 - native sequence playback and repeated replay on PW6/AirPods.
 
 ### 5. Answer-side question-audio replay must be represented explicitly
@@ -126,14 +127,15 @@ replay_question_audio_on_answer_side = !deck_config.skip_question_when_replaying
 
 Desktop answer replay concatenates question and answer AV tags when that semantic is true.
 
-At `868b07a15ec09be2790f97e339e4a7984c8a7afb`, prepared-answer data carries
+At `dc53cc89603428b5b41bc9b223dc07a6222c2f65`, prepared-answer data carries
 the resolved boolean and question tags. The persistent reviewer concatenates
 question then answer tags only when it is true; host fixtures cover both
-values.
+values. The pinned-backend fixture confirms that both the question packet and
+prepared answer remain disabled when a card is reviewed from a filtered deck
+whose original normal deck disables question replay.
 
 Remaining evidence:
 
-- a filtered-card fixture proving original-deck config inheritance through the pinned backend;
 - ordered native playback on PW6/AirPods.
 
 ### 6. Four rating buttons are correct for the pinned v3 scheduler
