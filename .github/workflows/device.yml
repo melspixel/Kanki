@@ -38,6 +38,7 @@ jobs:
           gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_device.c -Ibridge
           gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_sync_cli.c -Ibridge
           gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_raise.c
+          gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_diag_server.c
           node --check assets/device/decks.js
           node --check assets/reviewer/reviewer.js
           node --check assets/reviewer/css_compat.js
@@ -64,7 +65,7 @@ jobs:
           sudo apt-get install -y zstd
           bash tools/install_kindlehf_toolchain.sh
           echo "$HOME/x-tools/arm-kindlehf-linux-gnueabihf/bin" >> "$GITHUB_PATH"
-      - name: Build dynamic Kindle UI, sync and reactivation clients
+      - name: Build dynamic Kindle UI, sync, diagnostics and reactivation clients
         run: |
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             -DKANKI_BUILD_COMMIT=\"$GITHUB_SHA\" \
@@ -72,18 +73,23 @@ jobs:
             device/kanki_device.c -ldl -o kanki-device
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             device/kanki_sync_cli.c -ldl -o kanki-sync
+          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -D_POSIX_C_SOURCE=200809L -Os -fsigned-char -Wall -Wextra -Werror \
+            device/kanki_diag_server.c -o kanki-diag
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror \
             -ffreestanding -fno-builtin -fno-stack-protector -nostdlib \
             -Wl,-e,_start -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3 \
             device/kanki_raise.c -ldl -o kanki-raise
-          file kanki-device kanki-sync kanki-raise
+          file kanki-device kanki-sync kanki-diag kanki-raise
           arm-kindlehf-linux-gnueabihf-readelf -h kanki-device | tee device-elf.txt
           arm-kindlehf-linux-gnueabihf-readelf -h kanki-sync | tee sync-elf.txt
+          arm-kindlehf-linux-gnueabihf-readelf -h kanki-diag | tee diag-elf.txt
           arm-kindlehf-linux-gnueabihf-readelf -h kanki-raise | tee raise-elf.txt
           arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-device \
             | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee device-glibc.txt || true
           arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-sync \
             | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee sync-glibc.txt || true
+          arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-diag \
+            | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee diag-glibc.txt || true
           arm-kindlehf-linux-gnueabihf-readelf --version-info kanki-raise \
             | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee raise-glibc.txt || true
           arm-kindlehf-linux-gnueabihf-nm -D kanki-device | grep -E ' U (dlopen|dlsym|dlclose)' | tee device-dynamic-imports.txt
@@ -96,12 +102,15 @@ jobs:
           path: |
             kanki-device
             kanki-sync
+            kanki-diag
             kanki-raise
             device-elf.txt
             sync-elf.txt
+            diag-elf.txt
             raise-elf.txt
             device-glibc.txt
             sync-glibc.txt
+            diag-glibc.txt
             raise-glibc.txt
             device-dynamic-imports.txt
             sync-dynamic-imports.txt
