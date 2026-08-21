@@ -15,98 +15,120 @@ env:
   KOX_TAG: '2025.05'
   KOX_TRIPLE: arm-kindlehf-linux-gnueabihf
   RUST_TARGET: armv7-unknown-linux-gnueabihf
+  PROJECT: ${{ github.workspace }}/kindle-anki-port
 
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
-      - name: Restore archived source
+
+      - name: Install host dependencies
         run: |
           set -euo pipefail
-          ./restore.sh
-          unzip -q Kindle-Anki-Port-source.zip
-          test -f kindle-anki-port/core/src/port.rs
-      - name: Install dependencies
-        run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang curl file git jq nodejs python3 protobuf-compiler unzip zip pkg-config cmake ninja-build perl
-      - name: Fetch pinned miniaudio
-        working-directory: kindle-anki-port
-        run: |
-          commit=$(jq -r '.miniaudio.commit' third_party.lock.json)
-          curl -fL --retry 3 "https://raw.githubusercontent.com/mackron/miniaudio/${commit}/miniaudio.h" -o native/miniaudio.h
-      - name: Static and host gates
+          sudo apt-get install -y \
+            build-essential binutils clang curl file git jq make nodejs \
+            python3 protobuf-compiler qemu-user-static unzip zip pkg-config \
+            cmake ninja-build perl
+
+      - name: Static, native-host and lifecycle gates
         working-directory: kindle-anki-port
         run: |
           set -euo pipefail
-          python3 -m py_compile tools/inject_into_anki.py
-          node --check web/bridge.js
-          node --check web/css_compat.js
-          node --check web/decks.js
-          node --check web/reviewer.js
-          sh -n scripts/launch.sh
-          sh -n scripts/sync.sh
-          cc -O2 -std=c99 -Wall -Wextra -Werror -Icore native/app.c -ldl -o /tmp/kap-app-host
-          cc -O2 -std=c99 -Wall -Wextra -Werror -Inative -DMA_NO_RUNTIME_LINKING -DMA_NO_NODE_GRAPH -DMA_NO_ENGINE -DMA_NO_RESOURCE_MANAGER native/audio.c -ldl -lpthread -lm -o /tmp/kap-audio-host
-      - name: Fetch and inject official Anki
+          make static-test
+          make qemu-host-sanity \
+            TOOLCHAIN_BIN=/tmp/not-installed-yet 2>/dev/null || true
+
+      - name: Fetch exact official Anki source and Fluent repositories
         run: |
           set -euo pipefail
+          rm -rf /tmp/anki
           git init /tmp/anki
           git -C /tmp/anki remote add origin https://github.com/ankitects/anki.git
           git -C /tmp/anki fetch --depth 1 origin "$ANKI_COMMIT"
           git -C /tmp/anki checkout --detach FETCH_HEAD
-          python3 kindle-anki-port/tools/inject_into_anki.py --project "$GITHUB_WORKSPACE/kindle-anki-port" --anki /tmp/anki
+          test "$(git -C /tmp/anki rev-parse HEAD)" = "$ANKI_COMMIT"
+          git -C /tmp/anki submodule update --init --depth 1 ftl/core-repo ftl/qt-repo
+          python3 "$PROJECT/tools/inject_into_anki.py" \
+            --project "$PROJECT" --anki /tmp/anki --skip-submodules
+
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.92.0
           targets: armv7-unknown-linux-gnueabihf
-      - name: Host backend compile and tests
-        working-directory: /tmp/anki
+
+      - name: Prime Cargo cache for deterministic offline gates
         run: |
-          cargo test -p anki --features rustls kap_port::tests --lib --no-fail-fast
-          cargo build -p anki --features rustls --release
-          nm -D target/release/libanki.so | grep ' kap_'
-      - name: Fetch Kindle toolchain
-        run: |
-          curl -fL --retry 3 "https://github.com/koreader/koxtoolchain/releases/download/${KOX_TAG}/kindlehf.tar.gz" -o /tmp/kindlehf.tar.gz
-          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
-          echo "$HOME/x-tools/$KOX_TRIPLE/bin" >> "$GITHUB_PATH"
-      - name: Cross-build
+          set -euo pipefail
+          cargo fetch --manifest-path /tmp/anki/Cargo.toml --locked
+
+      - name: Full host Anki backend gate
         env:
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-kindlehf-linux-gnueabihf-gcc
-          CC_armv7_unknown_linux_gnueabihf: arm-kindlehf-linux-gnueabihf-gcc
-          CXX_armv7_unknown_linux_gnueabihf: arm-kindlehf-linux-gnueabihf-g++
-          AR_armv7_unknown_linux_gnueabihf: arm-kindlehf-linux-gnueabihf-ar
+          ANKI: /tmp/anki
+          CARGO_HOME: ${{ runner.home }}/.cargo
+          PROTOC: /usr/bin/protoc
         run: |
           set -euo pipefail
-          cargo build --manifest-path /tmp/anki/Cargo.toml -p anki --features rustls --release --target "$RUST_TARGET"
-          mkdir -p /tmp/kap-build
-          cp "/tmp/anki/target/$RUST_TARGET/release/libanki.so" /tmp/kap-build/libanki-kindle.so
-          arm-kindlehf-linux-gnueabihf-gcc -O2 -std=c99 -Wall -Wextra -Werror -DKAP_BUILD_COMMIT=\"$GITHUB_SHA\" -DKAP_ANKI_COMMIT=\"$ANKI_COMMIT\" -Ikindle-anki-port/core kindle-anki-port/native/app.c -ldl -o /tmp/kap-build/kap-app
-          arm-kindlehf-linux-gnueabihf-gcc -O2 -std=c99 -Wall -Wextra -Werror -Ikindle-anki-port/native -DMA_NO_RUNTIME_LINKING -DMA_NO_NODE_GRAPH -DMA_NO_ENGINE -DMA_NO_RESOURCE_MANAGER kindle-anki-port/native/audio.c -ldl -lpthread -lm -o /tmp/kap-build/kap-audio
-      - name: Package
+          "$PROJECT/testenv/scripts/run-host-backend-gates.sh" \
+            | tee "$RUNNER_TEMP/host-backend-gates.log"
+
+      - name: Fetch Kindle hard-float toolchain
         run: |
           set -euo pipefail
-          DIST="$RUNNER_TEMP/kap-dist"
-          EXT="$DIST/extensions/kindle-anki-port"
-          DOC="$DIST/documents"
-          mkdir -p "$EXT" "$DOC" release
-          cp /tmp/kap-build/kap-app /tmp/kap-build/kap-audio /tmp/kap-build/libanki-kindle.so "$EXT/"
-          cp -R kindle-anki-port/web kindle-anki-port/scripts "$EXT/"
-          cp kindle-anki-port/packaging/config.example.ini "$EXT/"
-          cp kindle-anki-port/packaging/documents/* "$DOC/"
-          cp kindle-anki-port/LICENSE kindle-anki-port/README.md "$EXT/"
-          chmod 755 "$EXT/kap-app" "$EXT/kap-audio" "$EXT/scripts/launch.sh" "$EXT/scripts/sync.sh" "$DOC"/*.sh
-          printf '{"product":"Kindle Anki Port","version":"0.1.0-port1","build_commit":"%s","anki_commit":"%s","target":"%s"}\n' "$GITHUB_SHA" "$ANKI_COMMIT" "$RUST_TARGET" > "$EXT/BUILD.json"
-          (cd "$EXT" && find . -type f ! -name MANIFEST.sha256 -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256)
-          (cd "$DIST" && zip -qr "$GITHUB_WORKSPACE/release/Kindle-Anki-Port-PW6-armhf.zip" extensions documents)
-          (cd release && sha256sum Kindle-Anki-Port-PW6-armhf.zip > Kindle-Anki-Port-PW6-armhf.zip.sha256)
-          unzip -t release/Kindle-Anki-Port-PW6-armhf.zip
-          cp kindle-anki-port/docs/ARCHITECTURE.md kindle-anki-port/docs/PARITY_MATRIX.md kindle-anki-port/docs/RELEASE_GATES.md release/
-      - uses: actions/upload-artifact@v4
+          curl -fL --retry 3 \
+            "https://github.com/koreader/koxtoolchain/releases/download/${KOX_TAG}/kindlehf.tar.gz" \
+            -o /tmp/kindlehf.tar.gz
+          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
+          test -x "$HOME/x-tools/$KOX_TRIPLE/bin/$KOX_TRIPLE-gcc"
+
+      - name: QEMU ARMHF host sanity
+        env:
+          TOOLCHAIN_BIN: ${{ runner.home }}/x-tools/arm-kindlehf-linux-gnueabihf/bin
+        run: |
+          set -euo pipefail
+          PROJECT="$PROJECT" OUT="$RUNNER_TEMP/qemu-host-sanity" \
+            "$PROJECT/testenv/scripts/run-qemu-host-sanity.sh"
+
+      - name: ARMHF cross-build and ABI audit
+        env:
+          ANKI: /tmp/anki
+          CARGO_HOME: ${{ runner.home }}/.cargo
+          PROTOC: /usr/bin/protoc
+          TOOLCHAIN_BIN: ${{ runner.home }}/x-tools/arm-kindlehf-linux-gnueabihf/bin
+          OUT: ${{ runner.temp }}/kap-armhf
+          BUILD_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          "$PROJECT/testenv/scripts/run-armhf-gates.sh" \
+            | tee "$RUNNER_TEMP/armhf-gates.log"
+
+      - name: Assemble and audit installation archive
+        env:
+          ARMHF: ${{ runner.temp }}/kap-armhf
+          RELEASE: ${{ github.workspace }}/release
+          BUILD_COMMIT: ${{ github.sha }}
+          VERSION: 0.1.0-dev
+        run: |
+          set -euo pipefail
+          "$PROJECT/testenv/scripts/package-and-audit.sh" \
+            | tee "$RUNNER_TEMP/package-gates.log"
+          cp "$RUNNER_TEMP/host-backend-gates.log" release/
+          cp "$RUNNER_TEMP/armhf-gates.log" release/
+          cp "$RUNNER_TEMP/package-gates.log" release/
+          cp -R "$RUNNER_TEMP/qemu-host-sanity" release/qemu-host-sanity
+          cp "$PROJECT/testenv/qemu/pw6-5.19.6-rootfs-manifest.json" release/
+          git archive --format=tar.gz \
+            --output=release/Kindle-Anki-Port-source-${GITHUB_SHA}.tar.gz \
+            "$GITHUB_SHA" kindle-anki-port
+          (cd release && sha256sum Kindle-Anki-Port-source-*.tar.gz \
+            > Kindle-Anki-Port-source.tar.gz.sha256)
+
+      - name: Upload audited release checkpoint
+        uses: actions/upload-artifact@v4
         with:
-          name: Kindle-Anki-Port-PW6-armhf
+          name: Kindle-Anki-Port-PW6-armhf-${{ github.sha }}
           path: release/
           retention-days: 90
+          if-no-files-found: error
