@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-21
-**Last fully recorded non-hardware baseline:** `4b11acb9cb2c029c1349093683ee1335a1295149`
+**Last fully recorded non-hardware baseline:** `96b326c0da1fdcbe96f519ac84f3f1f985ec403e`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -85,12 +85,12 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware baseline is recorded for exact SHA
-`4b11acb9cb2c029c1349093683ee1335a1295149`:
+`96b326c0da1fdcbe96f519ac84f3f1f985ec403e`:
 
 - host: macOS 26.4 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
 - `sh tools/run_host_gates.sh` — **PASS** using project-local Rust 1.92.0,
-  Node 24.19.0 and jsdom 24.1.3; fmt, clippy, policy, native/source
+  checksum-pinned Node 20.18.2 and lockfile-pinned jsdom 24.1.3; fmt, clippy, policy, native/source
   syntax, 13 Rust unit tests, doc tests, renderer/CSS/diagnostics contracts,
   semantic ordered-audio and external-navigation contracts, and the app
   self-test passed. The real checksum-verified MathJax 2.7.9 distribution
@@ -117,6 +117,15 @@ The current clean local non-hardware baseline is recorded for exact SHA
   username, password and derived hkey. All 24 C ABI exports declared by the
   review and sync headers were present; library SHA-256 was
   `066193df0ca31fe6a52d5fd6c837433bc68d350a4a25c9273f9035467d74de0d`;
+- the same clean typed-Anki run checksum-verified all seven unmodified APKGs
+  available in the pinned Anki test corpus, imported each into its own
+  backend-created disposable collection, selected a queued deck, rendered a
+  production question packet and prepared answer, then inserted all fourteen
+  sides into one persistent reviewer `#qa`. Source APKG hashes remained
+  unchanged; note-type CSS remained verbatim; `media.apkg` imported `foo.wav`
+  and produced one typed question AV tag. Only structural lengths/hashes are
+  logged; the fixed public fixture packets are retained under ignored
+  `out/host-anki/apkg-packets.json`;
 - `bash tools/local_package_docker.sh` — **PASS**; typed Anki and all six
   ARMHF native executables built, renderer/reproducibility policy passed,
   `MANIFEST.sha256` verified, forbidden archive paths were absent, and all 24
@@ -126,9 +135,15 @@ The current clean local non-hardware baseline is recorded for exact SHA
 - two consecutive clean invocations of the same canonical package command on
   this SHA produced byte-identical ZIPs, `BUILD.json`, manifests and archive
   evidence. Both archives contain 1,296 sorted regular files, use source date
-  epoch `1787321203`, and have the same SHA-256;
+  epoch `1787323042`, and have the same SHA-256;
 - package SHA-256:
-  `f0ba4c91d3f8bf7f5e8eda29f508cbaafa3ec0a995b898e7e256af2b9a114c37`;
+  `7e3f8c817e9a0396ab3b16585a386c4776971353218d857d2ee9320d35657b91`;
+- byte-identical companion evidence hashes are `dd99fa3454c924e2abe941163352685b57acd6549095521285441351d839f24c`
+  for `BUILD.json`, `31ac30f444db9debf198e6f9c66e5b9997504f8e830283e90e9a098bb6324c7c`
+  for the 1,290-entry manifest, and
+  `838ca24047141b931e20e9bce515cebe0a9126ce4793686d68e9665a13ff5974`
+  for `archive-info.txt`; retained run1/run2 evidence is under ignored
+  `out/reproducibility/96b326c0da1fdcbe96f519ac84f3f1f985ec403e/`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -223,12 +238,20 @@ independent cross-host reproducibility, or PW6 behavior.
   commit, sorts paths, fixes file modes/ZIP metadata, records archive identity
   and adds an executable host contract. Two subsequent clean ARMHF builds were
   byte-identical at `f0ba4c91d3f8bf7f5e8eda29f508cbaafa3ec0a995b898e7e256af2b9a114c37`.
-- There is no red canonical local software gate at this checkpoint. The first
-  missing executable renderer category is backend/render/device evidence from
-  original, unmodified representative APKGs. The synthetic generic host corpus
-  now covers scripts, images, unrelated/replay SVG, inline/display MathJax,
-  cloze, type answer, long bilingual DOM, flex/gap/CSS variables and `cardN`.
-  Kindle computed geometry and original-deck evidence remain open.
+- Commit `96b326c0da1fdcbe96f519ac84f3f1f985ec403e` added the first
+  unmodified-APKG executable path. The inventory found only seven fixed public
+  APKGs in pinned Anki; no COCA or user deck is present, so no substitute was
+  fabricated. All seven passed import -> queue -> backend packet -> prepared
+  answer -> persistent reviewer without a product-code fix. After environment
+  restoration, the first preflight stop was a missing host `rustfmt` PATH;
+  the existing project-local Rust toolchain resolved it. Installing Ubuntu's
+  global `npm` set in the builder would have added roughly 875 MB/480 packages,
+  so that diagnostic build was aborted and replaced with checksum-pinned Node
+  plus lockfile-pinned jsdom under ignored `out/`. Clean host, Anki and two
+  byte-identical ARMHF package builds then passed at the exact commit.
+- There is no red canonical local software gate at this checkpoint. The next
+  missing executable categories are an audited PW6 runtime/rootfs loader check,
+  original COCA plus an unrelated rich APKG, and Kindle computed geometry.
 
 ## Current GitHub-hosted Actions blocker
 
@@ -253,6 +276,9 @@ The direct audit against pinned Anki 26.08.1 corrected and clarified several ite
 - upstream MathJax 2.7.9 SVG output is packaged and exercised across dynamic
   persistent-reviewer renders; real Kindle WebKit geometry/performance remains
   pending;
+- seven unmodified pinned-Anki APKG fixtures now pass semantic import, queue,
+  render/AV packet and persistent-reviewer transitions; this is not evidence
+  for COCA, arbitrary user decks or Kindle geometry;
 - Lab126 CSS-pixel lifecycle behavior still requires PW6 proof.
 
 See `docs/ANKI_DESKTOP_PARITY.md` for the exact source-level rationale.
@@ -299,7 +325,8 @@ Because behavior-changing commits landed afterward, these do not close the curre
 - native GTK/WebKit shell and CSS-pixel behavior on PW6;
 - audio sequence behavior on PW6/AirPods;
 - renderer diagnostics daemon behavior on ARMHF/PW6;
-- full generic CSS/renderer corpus including original unmodified representative APKGs;
+- original unmodified COCA plus an unrelated rich/user APKG and their PW6
+  geometry; the seven small pinned-Anki APKG fixtures pass on host;
 - clean install / historical upgrade / rollback;
 - diagnostic privacy review;
 - PW6 review/sync/scroll/sleep-wake/USB lifecycle acceptance;
@@ -307,11 +334,12 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 ## Immediate next actions
 
-1. Inventory available original APKG evidence with
-   `rg --files -g '*.apkg' -g '*.colpkg' -g '!out/**'`, then add a generic,
-   privacy-reviewed import/render evidence path without modifying the decks.
-2. Capture pinned-backend packets plus desktop expectations for original COCA
-   and at least one unrelated representative deck; never add deck-specific CSS.
+1. Inventory the pinned SDK/rootfs runtime surface with
+   `find third_party/kindle-sdk -type f \( -name 'ld-linux-armhf.so.3' -o -name 'libc.so.6' -o -name 'libwebkit-1.0.so*' -o -name 'libgtk-x11-2.0.so*' \) -print`,
+   then distinguish SDK link evidence from an audited PW6 runtime.
+2. Obtain explicit local test access to original COCA and at least one
+   unrelated representative APKG, then run the same privacy-reviewed path
+   without modifying or committing the decks and without adding deck CSS.
 3. Audit runtime ABI/loader requirements against an official PW6 rootfs or the
    device, then retain the exact evidence.
 4. Freeze one candidate only after remaining non-hardware gates are green.

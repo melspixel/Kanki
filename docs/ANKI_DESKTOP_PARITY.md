@@ -33,14 +33,14 @@ Kanki equivalents:
 |---|---|---|---|
 | Reviewer document | One initialized reviewer WebView with persistent `#qa` | One persistent reviewer shell and `#qa` | Implemented; verify on PW6 |
 | Card body classes | `card cardN isLin` plus theme classes | `card cardN isLin kindle` | Core parity; `kindle` is intentional platform extension |
-| Card transition | Replace `#qa`, execute card script in established reviewer runtime | Replace `#qa`, recreate embedded scripts | Implemented; contract test required |
-| Question queue | Anki v3 scheduler `get_queued_cards()` | Typed scheduler service with semantic bridge | Five-card disposable integration passes |
+| Card transition | Replace `#qa`, execute card script in established reviewer runtime | Replace `#qa`, recreate embedded scripts | Synthetic and seven fixed upstream-APKG host transitions pass; verify on PW6 |
+| Question queue | Anki v3 scheduler `get_queued_cards()` | Typed scheduler service with semantic bridge | Synthetic and seven separately imported upstream APKG queues pass |
 | Scheduler states | Queue-provided states; current custom_data copied to current state | Same pattern in bridge | Four-rating disposable integration passes |
 | Answer | Build `CardAnswer` from current queued states and rating | Same typed `CardAnswer` model | Again/Hard/Good/Easy revlog persistence passes |
 | Card body CSS | Note type CSS is authoritative | Note type CSS is authoritative; generic syntax compatibility only | Architectural invariant |
 | MathJax | Lazily load MathJax, clear prior typeset state and await typesetting scoped to `#qa` before the shown hook | Load pinned MathJax 2.7.9 once, clear prior jax and await SVG typesetting scoped to persistent `#qa` before UI state/diagnostics | Real vendor host contract passes; PW6 geometry/performance pending |
 | Platform scaling | Desktop Qt/WebEngine uses CSS pixels/device scale | Lab126 WebKit native CSS-pixel/pixel-density/full-content-zoom path | Implemented feature path; initial-view lifecycle audit below |
-| AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` after partial render and semantic `FrontSide` expansion | Synthetic sound/TTS integration passes; original APKG/PW6 evidence pending |
+| AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` after partial render and semantic `FrontSide` expansion | Synthetic sound/TTS plus fixed upstream `media.apkg` sound pass; COCA/user/PW6 evidence pending |
 | Replay button | Reviewer-owned semantic control | Reviewer-owned 40px semantic control | Implemented; unrelated SVG must stay untouched |
 | Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Basic/cloze plus known-empty/unknown-field disposable fixtures pass; PW6 pending |
 | Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` and replaces marker in place | Basic and backend-extracted cloze comparisons pass; PW6 pending |
@@ -193,6 +193,21 @@ updates of the same `#qa`. Host contracts also prove stale callbacks cannot
 publish state for a newer side and that ordinary SVG/image attributes remain
 unchanged. This is not PW6 acceptance: old-WebKit geometry, long-card scroll,
 formula performance and idle behavior remain hardware gates.
+
+### 10. Original packages must remain inputs, not compatibility patches
+
+At `96b326c0da1fdcbe96f519ac84f3f1f985ec403e`, Kanki inventories and
+checksum-verifies the seven unmodified APKGs available in pinned Anki's public
+test corpus. Each is imported by the semantic typed Anki service into a fresh
+disposable collection, queued/rendered by the production bridge, and shown on
+both sides in one persistent reviewer `#qa`. Note-type CSS is passed through
+verbatim; the test adds no deck/note-type selectors. `media.apkg` proves the
+imported `foo.wav` path becomes typed AV without changing ordinary media.
+
+These small upstream fixtures prove the generic boundary, but they are not a
+substitute for original COCA, an unrelated rich user deck, or Kindle WebKit
+computed geometry. Those inputs are absent from the repository and remain
+explicit PW6/corpus gates; they must never be rewritten to make Kanki pass.
 
 ## Release gate
 

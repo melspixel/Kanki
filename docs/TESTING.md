@@ -16,6 +16,8 @@ A GitHub job that terminates with no step list is an infrastructure/account/repo
 - persistent `#qa` lifecycle;
 - real checksum-pinned MathJax inline/display SVG across successive dynamic
   renders of the same `#qa`, with stale completion isolation;
+- checksum-pinned host Node plus lockfile-pinned jsdom test runtime; no global
+  Node/npm installation is part of the gate;
 - no deck-specific selectors;
 - ordinary SVG/image preservation and no global SVG/image/font overrides;
 - backend-controlled autoplay and ordered answer-side AV replay, with autoplay/replay booleans covered both ways;
@@ -48,6 +50,15 @@ credentials, then scans retained evidence for credential leakage. This closes
 the controlled protocol/lifecycle fixture only; live AnkiWeb and PW6 acceptance
 remain Gate E work.
 
+The same recipe checksum-verifies the seven unmodified APKGs available in
+pinned Anki's public test corpus. Each package is imported through the semantic
+`ImportExportService` into a separate disposable collection, queued/rendered
+through the production C ABI, and its question/prepared-answer packets are
+inserted into one persistent reviewer `#qa`. Logs retain only structural
+lengths/hashes; raw public fixture packets stay under ignored `out/`. This
+proves the generic APKG-to-reviewer path for those fixed fixtures, not COCA,
+arbitrary user decks, a user-facing importer, or PW6 geometry.
+
 ## Gate C — renderer parity corpus
 
 Each fixture stores backend HTML/CSS and expected semantic measurements from desktop Anki and Kindle:
@@ -64,7 +75,9 @@ Each fixture stores backend HTML/CSS and expected semantic measurements from des
 - cloze;
 - typed-answer input/result;
 - multiple card templates (`card1`, `card2`);
-- representative original COCA and existing user decks without APKG modification.
+- the seven checksum-pinned upstream Anki APKG fixtures (host structural path
+  passes), plus original COCA and unrelated rich/user decks without APKG
+  modification (still required).
 
 For each candidate fixture, renderer evidence should include the backend render packet plus privacy-safe measured Kindle layout. Raw card HTML/CSS is only captured with explicit test consent/sentinel.
 

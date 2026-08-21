@@ -105,6 +105,13 @@ package permissions and derives ZIP timestamps from the source commit epoch.
 second package recipe. Release evidence compares two clean full builds of the
 same candidate byte-for-byte; matching manifests alone are insufficient.
 
+Host reviewer tests use a project-local, reproducible JavaScript toolchain:
+`tools/install_host_node.sh` checksum-verifies Node 20.18.2 for the supported
+Linux/macOS host architectures, and `tools/install_host_jsdom.sh` installs
+jsdom 24.1.3 from `tools/host-node/package-lock.json`. Both destinations must
+remain below ignored `out/`; never require a global Node/npm install and never
+copy this host-test runtime into the Kindle package.
+
 Typed Anki native-host integration has a separate canonical test recipe:
 
 ```text
@@ -119,7 +126,11 @@ Docker-local loopback port with scratch state and synthetic credentials, runs
 two disposable clients through full upload/download, normal state propagation
 and media propagation/status, and scans retained evidence for the synthetic
 secrets. Passing establishes controlled review/sync lifecycle behavior and all
-24 declared review/sync ABI exports, not live AnkiWeb or PW6 parity.
+24 declared review/sync ABI exports. The same recipe checksum-verifies the
+seven public APKGs in pinned Anki, imports each into a separate disposable
+collection, renders production packets, and passes their question/answer sides
+through one persistent reviewer `#qa`. This is fixed upstream-fixture evidence,
+not original COCA/user-deck, live AnkiWeb or PW6 parity.
 
 Both direct and Docker package paths reject a dirty checkout by default. For a
 diagnostic build only, `KANKI_ALLOW_DIRTY=1` may be supplied to either
@@ -139,6 +150,7 @@ evidence.
 - `.github/workflows/package.yml` — hosted executor for the canonical package script
 - `tools/run_host_gates.sh` — local host gate entry point
 - `tools/run_anki_bridge_host.sh` — canonical native-host typed Anki/disposable collection recipe
+- `tools/install_host_node.sh` / `tools/install_host_jsdom.sh` — pinned host-test runtime installers below `out/`
 - `tools/local_anki_bridge_docker.sh` — local Docker executor for the typed Anki host recipe
 - `tools/build_kindle_package.sh` — canonical ARMHF package/ABI recipe
 - `tools/local_package_docker.sh` — local Docker wrapper for macOS/Linux

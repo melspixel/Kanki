@@ -13,7 +13,7 @@ On Apple Silicon Macs the wrapper forces `linux/amd64`, because the pinned Kindl
 1. A local checkout of `melspixel/Kanki` on branch `rewrite-v1`.
 2. Git submodules initialized for the pinned project references.
 3. Docker-compatible CLI and daemon: Docker Desktop, OrbStack, or Colima.
-4. Internet access for the first build to obtain Ubuntu packages, Rust 1.92.0 dependencies, the checksum-pinned KindleHF toolchain, Anki translation submodules, Cargo crates, pinned miniaudio source, and the checksum-pinned MathJax 2.7.9 archive.
+4. Internet access for the first build to obtain Ubuntu packages, Rust 1.92.0 dependencies, the checksum-pinned KindleHF toolchain, Anki translation submodules, Cargo crates, pinned miniaudio source, the checksum-pinned MathJax 2.7.9 archive, and host-test-only Node/jsdom dependencies.
 
 Initialize the project gitlinks once:
 
@@ -94,6 +94,22 @@ answer extraction/comparison, known fields with empty values, and unknown-field
 warning/marker removal. These are host-only generic fixtures; they do not add
 note-type-specific behavior to the production bridge.
 
+The recipe also checksum-verifies all seven unmodified APKGs present in pinned
+Anki's public test corpus. A second host-only binary imports each through the
+semantic Anki service into its own disposable collection. The production
+bridge selects a queued deck, renders a question and prepared answer, and the
+actual reviewer runtime inserts all fourteen sides into the same persistent
+`#qa`. `media.apkg` additionally proves imported `foo.wav` becomes one typed
+question AV tag. The APKG files are hashed before and after; logs contain only
+structural lengths/hashes. No COCA or user deck exists in the repository, so
+this gate does not claim either.
+
+No global Node/npm installation is required. `tools/install_host_node.sh`
+downloads Node 20.18.2 into ignored `out/`, validates the official archive
+SHA-256 for the host OS/architecture, and `tools/install_host_jsdom.sh` installs
+jsdom 24.1.3 from the source-controlled npm lockfile. These are host-test
+oracles and are never copied into the Kindle package.
+
 The recipe also starts the pinned Anki sync server on a Docker-local loopback
 port with a scratch base directory and synthetic credentials. Two independent
 disposable clients exercise full upload, full download, normal-sync deck-state
@@ -111,16 +127,21 @@ pinned checkout and removes every disposable directory. It never opens
 ```text
 out/host-anki/bridge-smoke.txt
 out/host-anki/bridge-integration.txt
+out/host-anki/apkg-integration.txt
+out/host-anki/apkg-packets.json
+out/host-anki/apkg-reviewer.txt
+out/host-anki/node-install.txt
+out/host-anki/jsdom-install.txt
 out/host-anki/sync-integration.txt
 out/host-anki/bridge-exports.txt
 out/host-anki/bridge-dynamic.txt
 out/host-anki/bridge-library.sha256
 ```
 
-This is executable synthetic review/sync/ownership/ABI evidence, not
-original-APKG, live AnkiWeb or PW6 evidence. The Anki bridge workflow invokes
-the same canonical script instead of embedding its own injection/build/test
-recipe.
+This is executable synthetic review/sync/ownership/ABI evidence plus fixed
+upstream APKG structural evidence, not original COCA/user-deck, live AnkiWeb or
+PW6 evidence. The Anki bridge workflow invokes the same canonical script
+instead of embedding its own injection/build/test recipe.
 
 ## Canonical Linux recipe without Docker
 

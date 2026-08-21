@@ -294,6 +294,13 @@ The package recipe checksum-verifies MathJax through
 ZIP through the internal `tools/create_reproducible_zip.py` helper and emits
 `archive-info.txt`; this helper is not an alternative package recipe.
 
+The host gates install no global packages. `tools/install_host_node.sh`
+checksum-verifies Node 20.18.2 below ignored `out/`, and
+`tools/install_host_jsdom.sh` consumes the source-controlled npm lockfile. The
+typed-Anki recipe also imports the seven unmodified public APKGs present in the
+pinned Anki submodule and feeds their production packets through one persistent
+reviewer `#qa`; see `docs/STATUS.md` for the exact passing SHA and limitations.
+
 ## 8. First takeover session — exact sequence
 
 Execute this sequence before broad refactoring:
@@ -355,7 +362,8 @@ Issue #11 is authoritative, but expect work in these areas:
 - old-WebKit generic CSS compatibility corpus;
 - scripts/images/SVG/audio/cloze/long-card/cardN behavior and MathJax geometry
   on actual Kindle WebKit (the generic host MathJax lifecycle contract passes);
-- original COCA and other representative APKGs without modifying them;
+- the fixed upstream Anki APKG structural path passes; original COCA and other
+  rich representative/user APKGs still require unmodified local/device evidence;
 - diagnostics directory/metrics/raw-capture limits and privacy;
 - clean install, historical upgrade, rollback and duplicate/sleep/USB lifecycle;
 - reproducible package and exact artifact SHA;

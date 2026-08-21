@@ -198,6 +198,9 @@ Current important state:
 - ordinary reviewer HTTP(S) links are explicitly prevented from replacing the persistent reviewer document and need device-policy acceptance.
 - checksum-pinned MathJax SVG output is exercised across dynamic persistent
   `#qa` renders; real PW6 geometry/performance remains open.
+- seven checksum-pinned, unmodified upstream Anki APKG fixtures pass semantic
+  import -> packet -> persistent-reviewer host tests; original COCA, unrelated
+  rich/user APKGs and PW6 geometry remain open.
 
 ## 10. Evidence rules
 
