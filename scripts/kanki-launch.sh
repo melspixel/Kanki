@@ -6,6 +6,8 @@ LOG="$DIR/kanki.log"
 LOCK="$DIR/.kanki.lock"
 AUDIO_PID_FILE="$DIR/.audio.pid"
 DIAG_PID_FILE="$DIR/.diag.pid"
+DEBUG_DIR="$DIR/render-debug"
+DEBUG_PREVIOUS="$DIR/render-debug.previous"
 AUDIO_PID=
 DIAG_PID=
 START_SYNC_PAGE=0
@@ -65,21 +67,32 @@ export KANKI_GST_LOADER=/lib/ld-linux-armhf.so.3
 export GST_PLUGIN_PATH=/usr/lib/gstreamer-0.10:/usr/lib/gstreamer-1.0
 chmod 755 "$DIR/kanki-device" "$DIR/kanki-audio" "$DIR/kanki-diag" "$DIR/kanki-gst-play" "$DIR/kanki-raise" "$DIR/kanki-sync.sh" "$DIR/kanki-report.sh" 2>/dev/null || true
 
-write_diagnostic_config() {
-    mkdir -p "$DIR/render-debug" || {
+prepare_diagnostic_dirs() {
+    rm -rf "$DEBUG_PREVIOUS"
+    if [ -d "$DEBUG_DIR" ]; then
+        mv "$DEBUG_DIR" "$DEBUG_PREVIOUS" || {
+            printf '%s diagnostic rotation failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+            return 72
+        }
+    fi
+    mkdir -p "$DEBUG_DIR" || {
         printf '%s diagnostic directory creation failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
         return 73
     }
-    CONFIG_TMP="$DIR/render-debug/config.js.tmp.$$"
+}
+
+write_diagnostic_config() {
+    CONFIG_TMP="$DEBUG_DIR/config.js.tmp.$$"
     if [ -f "$DIR/enable-render-capture" ]; then
         printf '%s\n' 'window.kankiDiagnostics={rawCapture:true,protocolVersion:1};' >"$CONFIG_TMP"
     else
         printf '%s\n' 'window.kankiDiagnostics={rawCapture:false,protocolVersion:1};' >"$CONFIG_TMP"
     fi
-    mv "$CONFIG_TMP" "$DIR/render-debug/config.js"
+    mv "$CONFIG_TMP" "$DEBUG_DIR/config.js"
 }
 
 start_diag() {
+    prepare_diagnostic_dirs
     write_diagnostic_config
     if [ -f "$DIAG_PID_FILE" ]; then
         OLD_DIAG_PID=$(cat "$DIAG_PID_FILE" 2>/dev/null || true)
