@@ -6,11 +6,13 @@ umask 022
 
 PROJECT=${PROJECT:?set PROJECT}
 ARMHF=${ARMHF:?set ARMHF to the directory from run-armhf-gates.sh}
+QEMU=${QEMU:?set QEMU to the directory from run-qemu-smoke.sh}
 DIST=${DIST:-$PROJECT/build/package-root}
 RELEASE=${RELEASE:-$PROJECT/release}
 VERSION=${VERSION:-0.1.0-dev}
 BUILD_COMMIT=${BUILD_COMMIT:-$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null || true)}
 ANKI_COMMIT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$PROJECT/upstream.lock.json")
+CANONICAL_ROOTFS_MANIFEST=$PROJECT/testenv/qemu/pw6-5.19.6-rootfs-manifest.json
 
 # The package provenance must name an immutable source commit. If a Git checkout
 # is available, also require the checked-out project tree to match it exactly;
@@ -52,6 +54,64 @@ ARMHF_ANKI_COMMIT=$(sed -n 's/^anki_commit=//p' "$ARMHF/BUILD-PROVENANCE.txt")
   echo "ARMHF anki_commit mismatch: $ARMHF_ANKI_COMMIT != $ANKI_COMMIT" >&2
   exit 66
 }
+
+# A release package is only valid after exact-rootfs QEMU has passed for these
+# exact ARMHF bytes. Bind packaging to that evidence instead of relying on an
+# operator to remember an ordering convention.
+for required in QEMU-SMOKE.txt QEMU-PROVENANCE.txt rootfs-verification.txt backend-smoke.txt audio-self-test.txt sync-self-test.txt; do
+  [ -s "$QEMU/$required" ] || {
+    echo "missing/non-empty QEMU evidence: $QEMU/$required" >&2
+    exit 66
+  }
+done
+grep -qx 'QEMU smoke: PASS' "$QEMU/QEMU-SMOKE.txt" || {
+  echo "QEMU-SMOKE.txt does not record PASS" >&2
+  exit 66
+}
+grep -Fqx 'PW6 rootfs verification: PASS' "$QEMU/rootfs-verification.txt" || {
+  echo "rootfs-verification.txt does not record exact PW6 verification PASS" >&2
+  exit 66
+}
+grep -Fqx 'qemu backend smoke: ok' "$QEMU/backend-smoke.txt" || {
+  echo "backend-smoke.txt does not record backend smoke PASS" >&2
+  exit 66
+}
+grep -Fqx 'kap-audio self-test: ok' "$QEMU/audio-self-test.txt" || {
+  echo "audio-self-test.txt does not record audio self-test PASS" >&2
+  exit 66
+}
+grep -Fqx 'kap-sync self-test: ok' "$QEMU/sync-self-test.txt" || {
+  echo "sync-self-test.txt does not record sync self-test PASS" >&2
+  exit 66
+}
+[ -r "$CANONICAL_ROOTFS_MANIFEST" ] || {
+  echo "canonical PW6 rootfs manifest is missing: $CANONICAL_ROOTFS_MANIFEST" >&2
+  exit 66
+}
+QEMU_BUILD_COMMIT=$(sed -n 's/^source_commit=//p' "$QEMU/QEMU-PROVENANCE.txt")
+QEMU_ANKI_COMMIT=$(sed -n 's/^anki_commit=//p' "$QEMU/QEMU-PROVENANCE.txt")
+QEMU_MANIFEST_SHA256=$(sed -n 's/^rootfs_manifest_sha256=//p' "$QEMU/QEMU-PROVENANCE.txt")
+CANONICAL_MANIFEST_SHA256=$(sha256sum "$CANONICAL_ROOTFS_MANIFEST" | awk '{print $1}')
+[ "$QEMU_BUILD_COMMIT" = "$BUILD_COMMIT" ] || {
+  echo "QEMU source_commit mismatch: $QEMU_BUILD_COMMIT != $BUILD_COMMIT" >&2
+  exit 66
+}
+[ "$QEMU_ANKI_COMMIT" = "$ANKI_COMMIT" ] || {
+  echo "QEMU anki_commit mismatch: $QEMU_ANKI_COMMIT != $ANKI_COMMIT" >&2
+  exit 66
+}
+[ "$QEMU_MANIFEST_SHA256" = "$CANONICAL_MANIFEST_SHA256" ] || {
+  echo "QEMU rootfs manifest hash mismatch: $QEMU_MANIFEST_SHA256 != $CANONICAL_MANIFEST_SHA256" >&2
+  exit 66
+}
+for binary in libanki-kindle.so kap-app kap-audio kap-sync; do
+  RECORDED_HASH=$(sed -n "s/^${binary}_sha256=//p" "$QEMU/QEMU-PROVENANCE.txt")
+  ACTUAL_HASH=$(sha256sum "$ARMHF/$binary" | awk '{print $1}')
+  [ "$RECORDED_HASH" = "$ACTUAL_HASH" ] || {
+    echo "QEMU artifact hash mismatch for $binary: $RECORDED_HASH != $ACTUAL_HASH" >&2
+    exit 66
+  }
+done
 
 # A reproducible ZIP needs both a clean output tree and a stable DOS timestamp.
 # Prefer an explicitly supplied epoch; otherwise bind it to the Git commit that
@@ -138,7 +198,12 @@ unzip -l "$ARCHIVE" > "$RELEASE/package-contents.txt"
 cp "$ARMHF/file.txt" "$ARMHF/exports.txt" "$ARMHF/ARMHF-GATES.txt" \
   "$ARMHF/BUILD-PROVENANCE.txt" "$RELEASE/"
 cp "$ARMHF"/*.abi.txt "$ARMHF"/*.glibc.txt "$RELEASE/"
-printf 'build_commit=%s\nanki_commit=%s\nsource_date_epoch=%s\narchive_sha256=%s\n' \
-  "$BUILD_COMMIT" "$ANKI_COMMIT" "$SOURCE_DATE_EPOCH" "$(sha256sum "$ARCHIVE" | awk '{print $1}')" \
+cp "$QEMU/QEMU-SMOKE.txt" "$QEMU/QEMU-PROVENANCE.txt" \
+  "$QEMU/rootfs-verification.txt" "$QEMU/backend-smoke.txt" \
+  "$QEMU/audio-self-test.txt" "$QEMU/sync-self-test.txt" "$RELEASE/"
+printf 'build_commit=%s\nanki_commit=%s\nsource_date_epoch=%s\nrootfs_manifest_sha256=%s\nqemu_provenance_sha256=%s\narchive_sha256=%s\n' \
+  "$BUILD_COMMIT" "$ANKI_COMMIT" "$SOURCE_DATE_EPOCH" "$CANONICAL_MANIFEST_SHA256" \
+  "$(sha256sum "$QEMU/QEMU-PROVENANCE.txt" | awk '{print $1}')" \
+  "$(sha256sum "$ARCHIVE" | awk '{print $1}')" \
   > "$RELEASE/PACKAGE-PROVENANCE.txt"
 printf '%s\n' "$ARCHIVE"
