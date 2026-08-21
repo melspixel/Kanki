@@ -10,8 +10,7 @@ on:
       - 'assets/**'
       - 'scripts/**'
       - 'packaging/**'
-      - 'tools/build_kindle_package.sh'
-      - 'tools/install_kindlehf_toolchain.sh'
+      - 'tools/**'
       - 'third_party/anki'
       - 'third_party/kindle-sdk'
       - 'third_party/audiobook-koplugin'
@@ -24,8 +23,7 @@ on:
       - 'assets/**'
       - 'scripts/**'
       - 'packaging/**'
-      - 'tools/build_kindle_package.sh'
-      - 'tools/install_kindlehf_toolchain.sh'
+      - 'tools/**'
       - 'third_party/anki'
       - 'third_party/kindle-sdk'
       - 'third_party/audiobook-koplugin'
@@ -55,13 +53,17 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: kanki-rewrite-hw3
+          name: kanki-rewrite-hw3-${{ github.sha }}
           path: |
             out/local-kindle/Kanki-rewrite-hw3.zip
             out/local-kindle/Kanki-rewrite-hw3.zip.sha256
+            out/local-kindle/package/extensions/kanki/BUILD.json
+            out/local-kindle/package/extensions/kanki/MANIFEST.sha256
             out/local-kindle/package-contents.txt
             out/local-kindle/package-exports.txt
             out/local-kindle/package-glibc.txt
             out/local-kindle/sysroot-glibc.txt
             out/local-kindle/toolchain-info.txt
+            out/local-kindle/mathjax-info.txt
+            out/local-kindle/archive-info.txt
           if-no-files-found: warn

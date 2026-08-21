@@ -126,26 +126,59 @@ for required in [
 ]:
     if required not in package_recipe:
         errors.append(f"canonical package recipe lacks deterministic archive input: {required}")
-for workflow in (ROOT / ".github/workflows").glob("*.yml"):
-    workflow_text = workflow.read_text(encoding="utf-8")
-    if "releases/latest/download/kindlehf" in workflow_text:
-        errors.append(f"floating KindleHF toolchain URL in {workflow.relative_to(ROOT)}")
+workflow_dir = ROOT / ".github/workflows"
+workflows = {
+    path.name: path.read_text(encoding="utf-8")
+    for path in workflow_dir.glob("*.yml")
+}
+expected_workflows = {"actions-probe.yml", "ci.yml", "package.yml"}
+if set(workflows) != expected_workflows:
+    errors.append(
+        "workflow set must stay consolidated: expected "
+        f"{sorted(expected_workflows)}, found {sorted(workflows)}"
+    )
 
-# The host Anki bridge recipe is a repository script that can run locally or
-# in CI. The workflow may install runner prerequisites and upload evidence, but
-# must not grow a second copy of bridge injection/build/smoke logic.
-anki_bridge_workflow = (ROOT / ".github/workflows/anki-bridge.yml").read_text(
-    encoding="utf-8"
-)
-if "bash tools/run_anki_bridge_host.sh" not in anki_bridge_workflow:
-    errors.append("Anki bridge workflow does not call the canonical host recipe")
-for duplicated in [
-    "cp bridge/anki_bridge.rs",
-    "cargo build -p anki --release --features rustls",
-    "bridge/smoke.c -Ibridge",
-]:
-    if duplicated in anki_bridge_workflow:
-        errors.append(f"Anki bridge workflow duplicates canonical logic: {duplicated}")
+for workflow_name, workflow_text in workflows.items():
+    if "releases/latest/download/kindlehf" in workflow_text:
+        errors.append(f"floating KindleHF toolchain URL in .github/workflows/{workflow_name}")
+
+# Workflows own runner selection, prerequisites and evidence upload only. All
+# product compilation and behavioral gates remain callable repository scripts.
+required_workflow_calls = {
+    "ci.yml": [
+        "sh tools/run_host_gates.sh",
+        "sh tools/local_anki_bridge_docker.sh",
+    ],
+    "package.yml": ["bash tools/build_kindle_package.sh"],
+}
+for workflow_name, required_calls in required_workflow_calls.items():
+    workflow_text = workflows.get(workflow_name, "")
+    for required_call in required_calls:
+        if workflow_text.count(required_call) != 1:
+            errors.append(
+                f"{workflow_name} must call canonical entry point exactly once: "
+                f"{required_call}"
+            )
+
+duplicated_workflow_logic = [
+    "cargo build ",
+    "cargo test ",
+    "cargo run ",
+    "cargo fmt ",
+    "cargo clippy ",
+    "npm install ",
+    "node tests/",
+    "python3 tests/",
+    "cp bridge/",
+    "arm-kindlehf-linux-gnueabihf-gcc",
+    "tools/install_kindlehf_toolchain.sh",
+]
+for workflow_name, workflow_text in workflows.items():
+    for duplicated in duplicated_workflow_logic:
+        if duplicated in workflow_text:
+            errors.append(
+                f"{workflow_name} duplicates canonical script logic: {duplicated.strip()}"
+            )
 
 if errors:
     print("\n".join(errors), file=sys.stderr)
