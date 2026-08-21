@@ -90,7 +90,8 @@ const {JSDOM, VirtualConsole} = require('jsdom');
 
   assert.ok(!runtime.includes('textContent'),
     'privacy-safe diagnostics runtime should not scrape element text');
-  assert.ok(runtime.includes('RENDER_LIMIT = 12'), 'raw capture must be bounded');
+  assert.ok(runtime.includes('RAW_RENDER_LIMIT = 12'), 'raw capture must be bounded');
+  assert.ok(runtime.includes('METRIC_RENDER_LIMIT = 200'), 'session metrics must be bounded');
   assert.ok(runtime.includes('ELEMENT_LIMIT = 40'), 'computed element logging must be bounded');
 
   window.close();
