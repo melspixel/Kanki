@@ -223,14 +223,30 @@ separate ignored directory `out/workflow-validation-ca345e5/`; its ZIP SHA-256
 is `94915f0933d96105a96598446855cb3ec5e1c94836865c36d662797ce49a4c91`.
 That workflow-only validation is not promoted over candidate
 `7a0d83975d7f8180f22abec8cc7596e03622ce66`, whose complete same-SHA evidence
-and original ZIP remain intact. No real
-compiler, test or package failure was found. Hosted execution is still
+and original ZIP remain intact. No real compiler, test or package failure was
+found. Hosted execution is still
 unverified because the known runner-allocation failure occurs before steps.
-The next repository-cleanup command is:
+
+The recorded branch check found that `kindle-anki-port` was still actively
+advancing through `d27258cee6bef948809d12ac38c786e05870cd9f` at 00:21 +08:00,
+so it and PR #14 remain excluded from retirement. The next independent
+repository-cleanup command is:
 
 ```sh
-git ls-remote --heads origin kindle-anki-port
+git ls-tree --name-only HEAD
 ```
+
+### Documentation ownership checkpoint
+
+At exact documentation commit
+`98c5a427172e9add647158039aa6e259ff01dcb9`, `RESUME.md` was reduced from
+273 to 194 lines by replacing duplicated mutable build, diagnostics, parity,
+evidence, hardware and release checklists with links to the owners declared in
+`docs/README.md`. Its architectural invariants, source map, hosted/local entry
+points and session-handoff rules remain. All referenced owner files exist,
+`git diff --check` and `tools/check_policy.py` passed, and no product or package
+file changed. The first release failure and next candidate command therefore
+remain physical PW6 Gate E and the checksum command above.
 
 ### Baseline failure ledger
 

@@ -202,9 +202,9 @@ device, audio and diagnostics objects already covered by the package recipe.
 Policy rejects both extra workflow files and direct compiler/test bodies in
 YAML. Build logic belongs in versioned scripts under `tools/`.
 
-### 4.4 Documentation overlap
+### 4.4 Documentation ownership
 
-The current docs are useful but overlap:
+The current docs are useful only if each question has one owner:
 
 - `RESUME.md`
 - `STATUS.md`
@@ -214,7 +214,7 @@ The current docs are useful but overlap:
 - `ANKI_DESKTOP_PARITY.md`
 - `ARCHITECTURE.md`
 
-Do not delete information during cleanup. First make `docs/README.md` an index, then define one owner per question:
+`docs/README.md` is the index. The ownership split is:
 
 - What is happening now? → `STATUS.md`
 - I have zero context, where do I start? → `CODEX_HANDOFF.md` / `RESUME.md`
@@ -224,7 +224,11 @@ Do not delete information during cleanup. First make `docs/README.md` an index, 
 - What must match desktop Anki? → `ANKI_DESKTOP_PARITY.md`
 - How do maintainers operate/release? → `HANDOFF.md`
 
-After this ownership is clear, deduplicate repeated paragraphs rather than deleting whole documents impulsively.
+Commit `98c5a427172e9add647158039aa6e259ff01dcb9` converted the detailed
+build, diagnostics, parity, evidence, PW6 and release sections in `RESUME.md`
+into routes to these owners. Its zero-context invariants, source map and entry
+commands remain. Continue deduplicating one topic at a time; confirm the owner
+contains every fact before removing a repeated paragraph.
 
 ### 4.5 Production path vs scaffolding
 
