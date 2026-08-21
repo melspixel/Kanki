@@ -16,7 +16,8 @@ Updated: 2026-08-22 UTC
 | Web reviewer | **runtime-fixture green; device rendering pending** | static/ES5/CSS contracts plus 10-group public-API reviewer runtime matrix pass; real WebKit/e-ink remains device/rootfs work |
 | Audio | implementation integrated, device audio pending | GStreamer/mixersink worker self-test passes; real Bluetooth/audible route requires PW6 |
 | Sync | **deterministic decision/error fixture green; live-account pending** | collection/full/media/abort ABI plus shutdown/error matrix; conflicting full-sync directions now rejected |
-| Static/lifecycle tests | **green checkpoint plus new isolated fixture evidence** | prior complete gate green; 2026-08-22 sync Werror fixture and reviewer runtime matrix pass; full canonical-head gate rerun pending |
+| Launcher / collection ownership | **race reproduced and repaired; deterministic fixture green** | shared atomic launch/sync operation lock prevents double-launch and reviewer/sync concurrent collection opens; stale-lock recovery tested |
+| Static/lifecycle tests | **green checkpoint plus current isolated fixture evidence** | prior complete gate green; current sync/reviewer/lifecycle regressions pass exact-source local tests; full canonical-head gate rerun pending |
 | Host release build | **green checkpoint** | release `libanki.so` built and exports named `kap_*` ABI |
 | ARMHF cross-build | **fresh green checkpoint** | `kap-app`, `kap-audio`, `kap-sync`, `libanki-kindle.so` rebuilt as ARMv7 EABI5 hard-float |
 | ABI/GLIBC audit | **green against KindleHF sysroot** | workers GLIBC_2.4; backend max GLIBC_2.18; exact PW6 5.19.6 runtime libc ceiling independently pinned as GLIBC_2.35 |
@@ -34,13 +35,15 @@ The former 26-error Rust visibility blocker is resolved. The semantic port no lo
 
 The repository is also no longer dependent on split source archives for the independent port. Ordinary source materialization is complete, and the obsolete root/overlay archive staging was removed after verification.
 
+A launcher concurrency defect has also been removed. The original launcher checked the PID before manifest/backup work and only published the child PID afterwards, allowing two simultaneous launch requests to race and start two reviewer processes. A deterministic delayed-backup fixture reproduced two application starts. `scripts/launch.sh` and `scripts/sync.sh` now share an atomic operation-lock directory so single-instance startup is serialized through PID publication and sync exclusively owns the collection for its full lifetime.
+
 ## Verified VM evidence
 
 Detailed evidence is in:
 
 - `docs/VM_BUILD_20260821.md` — first green semantic/ARMHF/package checkpoint;
 - `docs/VM_CONTINUATION_20260821.md` — canonical source cleanup, exact PW6 runtime pin, fresh ARMHF/package rebuild and QEMU status;
-- `docs/VM_CONTINUATION_20260822.md` — sync hardening, deterministic shutdown/error coverage and executable reviewer runtime fixtures.
+- `docs/VM_CONTINUATION_20260822.md` — sync hardening, reviewer runtime fixtures, and deterministic launch/sync lifecycle-race repair.
 
 ### Full upstream backend tests
 
@@ -61,9 +64,9 @@ Five real decks passed the C ABI reviewer lifecycle test:
 - `新东方 雅思 乱序版.apkg` — AV observed;
 - `百词斩考研.apkg` — AV observed.
 
-### 2026-08-22 deterministic sync / reviewer evidence
+### 2026-08-22 deterministic sync / reviewer / lifecycle evidence
 
-The sync worker now rejects simultaneous `--full-upload` and `--full-download` instead of silently allowing the later option to select a destructive direction. Its deterministic fixture covers required-sync decisions, endpoint/timeout/server-USN propagation, open/sync/full/media errors, credential non-disclosure, and signal-driven `abort -> close -> core_free` shutdown ordering.
+The sync worker rejects simultaneous `--full-upload` and `--full-download` instead of silently allowing argument order to select a destructive direction. Its deterministic fixture covers required-sync decisions, endpoint/timeout/server-USN propagation, open/sync/full/media errors, credential non-disclosure, and signal-driven `abort -> close -> core_free` shutdown ordering.
 
 Validated exact GitHub blobs:
 
@@ -79,7 +82,7 @@ Result:
 test_sync_worker: ok
 ```
 
-A dependency-free Node/vm fake-DOM harness now drives production `web/reviewer.js` through the public `window.kapReviewer` API. Ten fixture groups cover mixed CJK/Latin rendering, card classes/CSS/intervals, typed input, inline-script replacement, desktop replay-control removal, AV marker/replay/TTS routing, nested-scroll flattening, answer separator behavior, state transitions, render/backend errors and touch paging.
+A dependency-free Node/vm fake-DOM harness drives production `web/reviewer.js` through the public `window.kapReviewer` API. Ten fixture groups cover mixed CJK/Latin rendering, card classes/CSS/intervals, typed input, inline-script replacement, desktop replay-control removal, AV marker/replay/TTS routing, nested-scroll flattening, answer separator behavior, state transitions, render/backend errors and touch paging.
 
 Result:
 
@@ -87,7 +90,24 @@ Result:
 test_reviewer_runtime_fixtures: ok (10 fixture groups)
 ```
 
-`testenv/scripts/run-static-gates.sh` includes the runtime reviewer fixture. The then-current reviewer/CSS files used for local execution were independently verified against their Git blob SHAs before the test.
+A deterministic lifecycle regression intentionally delays the pre-open backup, reproducing the former double-launch window. Before the fix, two app processes started. With the shared operation lock, the fixture requires exactly one `start` and one `raised`. It also verifies that launch fails closed while sync holds the lock, that sync releases it on completion/error paths covered by the script, and that a dead owner can be reclaimed.
+
+Current lifecycle blobs validated locally:
+
+```text
+scripts/launch.sh                  13bd8618773b0d53b2f92cc9221861629de2adf7
+scripts/sync.sh                    6c466df5364cc7ec72a9635fc5ce941080ba41fe
+tests/fake_app.c                   3964cbfbe639ea218fe8b538bc734ebbeb32167b
+tests/test_lifecycle.sh            5d9ea402c5353aa2ef411e2968b9498c0759383b
+```
+
+Result:
+
+```text
+test_lifecycle: ok
+```
+
+`testenv/scripts/run-static-gates.sh` includes the reviewer runtime fixture and the existing lifecycle/sync fixtures. A complete gate from the final canonical head still must be executed before release provenance is claimed.
 
 ### Fresh ARMHF / GLIBC checkpoint
 
@@ -127,7 +147,7 @@ The VM retains exact PW6 firmware/rootfs/runtime oracle reports and hashes but n
 
 1. Re-materialize/checkout the then-current canonical GitHub ordinary tree in a build-capable VM and rerun the complete static gate, full rslib, real-APKG, ARMHF and package gates so final provenance points to the canonical source head rather than a prior VM checkpoint.
 2. Obtain the exact checksum-verified PW6 5.19.6 rootfs bytes as a private test input, run `verify-pw6-rootfs.py`, then execute backend/audio/sync QEMU smoke.
-3. Extend renderer evidence from the new public-API fake-DOM runtime matrix toward target-WebKit/rootfs rendering and additional backend-rendered packet fixtures where useful.
+3. Continue deterministic lifecycle/reviewer/core review for state-machine and collection-ownership failures that do not require target hardware.
 4. Persist the final canonical-head `Kindle-Anki-Port-PW6-armhf.zip`, exact SHA-256, package contents, ABI/GLIBC reports and test report durably on GitHub.
 5. Begin PW6 hardware-in-the-loop acceptance only after all non-hardware gates above are green and persisted.
 
