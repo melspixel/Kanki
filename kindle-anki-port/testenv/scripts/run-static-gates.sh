@@ -37,12 +37,16 @@ run() {
 run python3 -m py_compile \
     "$ROOT/tools/inject_into_anki.py" "$ROOT/tools/audit_package.py" \
     "$ROOT/tools/audit_generated_services.py" \
+    "$ROOT/testenv/scripts/prepare-pw6-rootfs.py" \
+    "$ROOT/testenv/scripts/verify-pw6-rootfs.py" \
     "$ROOT/tests/test_injector.py" "$ROOT/tests/test_semantic_boundary.py" \
-    "$ROOT/tests/test_source_contract.py" "$ROOT/tests/test_package_audit.py"
+    "$ROOT/tests/test_source_contract.py" "$ROOT/tests/test_package_audit.py" \
+    "$ROOT/tests/test_prepare_pw6_rootfs.py"
 run python3 "$ROOT/tests/test_injector.py"
 run python3 "$ROOT/tests/test_semantic_boundary.py"
 run python3 "$ROOT/tests/test_source_contract.py"
 run python3 "$ROOT/tests/test_package_audit.py"
+run python3 "$ROOT/tests/test_prepare_pw6_rootfs.py"
 run node --check "$ROOT/web/bridge.js"
 run node --check "$ROOT/web/css_compat.js"
 run node --check "$ROOT/web/decks.js"
