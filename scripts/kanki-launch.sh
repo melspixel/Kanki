@@ -5,7 +5,9 @@ DIR=/mnt/us/extensions/kanki
 LOG="$DIR/kanki.log"
 LOCK="$DIR/.kanki.lock"
 AUDIO_PID_FILE="$DIR/.audio.pid"
+DIAG_PID_FILE="$DIR/.diag.pid"
 AUDIO_PID=
+DIAG_PID=
 START_SYNC_PAGE=0
 LAST_SYNC_STATUS=0
 
@@ -34,8 +36,18 @@ stop_audio() {
     rm -f "$AUDIO_PID_FILE"
 }
 
+stop_diag() {
+    if [ -n "${DIAG_PID:-}" ]; then
+        kill "$DIAG_PID" 2>/dev/null || true
+        wait "$DIAG_PID" 2>/dev/null || true
+        DIAG_PID=
+    fi
+    rm -f "$DIAG_PID_FILE"
+}
+
 cleanup() {
     stop_audio
+    stop_diag
     rm -rf "$LOCK"
 }
 trap cleanup EXIT INT TERM
@@ -51,7 +63,30 @@ export KANKI_MEDIA_DIR=/mnt/us/anki_data/collection.media
 export KANKI_GST_PLAYER="$DIR/kanki-gst-play"
 export KANKI_GST_LOADER=/lib/ld-linux-armhf.so.3
 export GST_PLUGIN_PATH=/usr/lib/gstreamer-0.10:/usr/lib/gstreamer-1.0
-chmod 755 "$DIR/kanki-device" "$DIR/kanki-audio" "$DIR/kanki-gst-play" "$DIR/kanki-raise" "$DIR/kanki-sync.sh" 2>/dev/null || true
+chmod 755 "$DIR/kanki-device" "$DIR/kanki-audio" "$DIR/kanki-diag" "$DIR/kanki-gst-play" "$DIR/kanki-raise" "$DIR/kanki-sync.sh" "$DIR/kanki-report.sh" 2>/dev/null || true
+
+start_diag() {
+    mkdir -p "$DIR/render-debug" || {
+        printf '%s diagnostic directory creation failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+        return 73
+    }
+    if [ -f "$DIAG_PID_FILE" ]; then
+        OLD_DIAG_PID=$(cat "$DIAG_PID_FILE" 2>/dev/null || true)
+        [ -n "$OLD_DIAG_PID" ] && kill "$OLD_DIAG_PID" 2>/dev/null || true
+    fi
+    "$DIR/kanki-diag" >>"$LOG" 2>&1 &
+    DIAG_PID=$!
+    printf '%s\n' "$DIAG_PID" >"$DIAG_PID_FILE"
+    sleep 1
+    if ! kill -0 "$DIAG_PID" 2>/dev/null; then
+        wait "$DIAG_PID" 2>/dev/null || true
+        DIAG_PID=
+        rm -f "$DIAG_PID_FILE"
+        printf '%s diagnostic service failed to start\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
+        return 74
+    fi
+    printf '%s diagnostic service started raw_capture=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$([ -f "$DIR/enable-render-capture" ] && echo enabled || echo disabled)" >>"$LOG"
+}
 
 start_audio() {
     if [ -f "$AUDIO_PID_FILE" ]; then
@@ -89,6 +124,7 @@ run_sync() {
     return "$STATUS"
 }
 
+start_diag
 while :; do
     start_audio
     if [ "$START_SYNC_PAGE" -eq 1 ]; then
