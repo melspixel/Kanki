@@ -38,6 +38,7 @@ Kanki equivalents:
 | Scheduler states | Queue-provided states; current custom_data copied to current state | Same pattern in bridge | Four-rating disposable integration passes |
 | Answer | Build `CardAnswer` from current queued states and rating | Same typed `CardAnswer` model | Again/Hard/Good/Easy revlog persistence passes |
 | Card body CSS | Note type CSS is authoritative | Note type CSS is authoritative; generic syntax compatibility only | Architectural invariant |
+| MathJax | Lazily load MathJax, clear prior typeset state and await typesetting scoped to `#qa` before the shown hook | Load pinned MathJax 2.7.9 once, clear prior jax and await SVG typesetting scoped to persistent `#qa` before UI state/diagnostics | Real vendor host contract passes; PW6 geometry/performance pending |
 | Platform scaling | Desktop Qt/WebEngine uses CSS pixels/device scale | Lab126 WebKit native CSS-pixel/pixel-density/full-content-zoom path | Implemented feature path; initial-view lifecycle audit below |
 | AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` after partial render and semantic `FrontSide` expansion | Synthetic sound/TTS integration passes; original APKG/PW6 evidence pending |
 | Replay button | Reviewer-owned semantic control | Reviewer-owned 40px semantic control | Implemented; unrelated SVG must stay untouched |
@@ -176,6 +177,22 @@ potentially sensitive URI.
 
 The host navigation contract passes. PW6 still needs to prove the native
 policy callback and persistent reviewer lifecycle under real WebKit.
+
+### 9. MathJax completion is part of the reviewer transition
+
+Pinned desktop Anki's `ts/reviewer/index.ts` detects inline/block delimiters,
+loads its MathJax runtime once, clears prior typeset state and awaits
+`typesetPromise([qa])` before publishing the shown side. Kanki preserves that
+lifecycle boundary while selecting MathJax 2.7.9 with SVG output for the older
+Kindle WebKit. Formula layout remains a reviewer capability; backend HTML and
+note CSS remain authoritative.
+
+At `4b11acb9cb2c029c1349093683ee1335a1295149`, the checksum-verified upstream
+distribution typesets inline and display formulas across successive dynamic
+updates of the same `#qa`. Host contracts also prove stale callbacks cannot
+publish state for a newer side and that ordinary SVG/image attributes remain
+unchanged. This is not PW6 acceptance: old-WebKit geometry, long-card scroll,
+formula performance and idle behavior remain hardware gates.
 
 ## Release gate
 

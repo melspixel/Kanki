@@ -14,8 +14,10 @@ A GitHub job that terminates with no step list is an infrastructure/account/repo
 - deck collapse model;
 - reviewer packet/body classes;
 - persistent `#qa` lifecycle;
+- real checksum-pinned MathJax inline/display SVG across successive dynamic
+  renders of the same `#qa`, with stale completion isolation;
 - no deck-specific selectors;
-- no global SVG/image/font overrides;
+- ordinary SVG/image preservation and no global SVG/image/font overrides;
 - backend-controlled autoplay and ordered answer-side AV replay, with autoplay/replay booleans covered both ways;
 - ES5 syntax check for Kindle JavaScript, including CSS and diagnostics runtimes;
 - generic CSS-variable/calc/flex compatibility contract;
@@ -76,7 +78,11 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
 - verify required standard and Lab126 symbols;
 - run loader/self-test against a mounted official rootfs where possible;
 - build `kanki-device`, `kanki-sync`, `kanki-diag`, `kanki-raise`, `kanki-audio`, `kanki-gst-play` and typed Anki backend;
-- produce one reproducible self-identifying ZIP from CI;
+- produce one reproducible self-identifying ZIP with the canonical package
+  recipe, whether the executor is hosted or local;
+- compare two clean canonical builds of the exact candidate byte-for-byte;
+- bind sorted archive paths, permissions and timestamps to source-controlled
+  inputs and record the source date epoch/archive hash;
 - verify `MANIFEST.sha256` and refusal of mixed/partial components;
 - verify package includes diagnostic/report runtime and does not include `extensions/ranki`, `collection.anki2` or user `config.ini`;
 - package contains no Amazon firmware or proprietary library bytes.

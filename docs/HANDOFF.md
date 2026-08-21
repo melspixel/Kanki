@@ -69,6 +69,8 @@ Every installable package must contain and expose:
 - Anki git commit;
 - Kindle SDK/toolchain reference commit;
 - native audio helper/reference commit where applicable;
+- packaged renderer dependency versions/checksums, including MathJax;
+- source commit epoch used for deterministic archive metadata;
 - target architecture;
 - minimum required GLIBC/GCC symbol versions;
 - reviewer protocol version;
@@ -96,6 +98,12 @@ Executors:
 A local package built from a **clean checkout**, with the pinned builder/toolchain, full manifest/ABI/GLIBC gates and recorded SHA-256 is valid build evidence. It is not automatically hardware acceptance. If hosted Actions are unavailable, release engineering may proceed with the local canonical builder rather than waiting indefinitely for GitHub, provided all remaining issue #11 gates are satisfied and the artifact identity/evidence are recorded.
 
 A manually assembled ZIP that bypasses `tools/build_kindle_package.sh` is never release evidence.
+
+The canonical recipe emits `archive-info.txt`, sorts regular-file paths, fixes
+package permissions and derives ZIP timestamps from the source commit epoch.
+`tools/create_reproducible_zip.py` is an internal helper of that recipe, not a
+second package recipe. Release evidence compares two clean full builds of the
+same candidate byte-for-byte; matching manifests alone are insufficient.
 
 Typed Anki native-host integration has a separate canonical test recipe:
 
@@ -146,6 +154,7 @@ When GitHub Actions is unavailable or untrusted, record at minimum:
 - builder platform (`linux/amd64` by default on Apple Silicon);
 - Rust version (`1.92.0` for this line);
 - `toolchain-info.txt` including koxtoolchain version/checksum;
+- `mathjax-info.txt` and `archive-info.txt`;
 - generated ZIP SHA-256;
 - `package-exports.txt` and GLIBC evidence;
 - package manifest verification result;

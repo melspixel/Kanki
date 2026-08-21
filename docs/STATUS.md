@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-21
-**Last fully recorded non-hardware baseline:** `c2a513f1acdcc1cf778515374e2aef58d9099eb2`
+**Last fully recorded non-hardware baseline:** `4b11acb9cb2c029c1349093683ee1335a1295149`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -20,6 +20,8 @@ The branch contains source-owned implementations for the major runtime paths:
 - semantic typed sync bridge;
 - deterministic review-domain state machine;
 - persistent Anki-style `#qa` reviewer shell with exact `cardN` classes;
+- checksum-pinned, source-owned MathJax 2.7.9 SVG runtime loaded once in the
+  persistent reviewer and scoped to `#qa` on each side;
 - generic deck-agnostic old-WebKit compatibility;
 - source-owned GTK2/WebKit Kindle application;
 - Lab126/WebKit CSS-pixel/full-content-zoom feature path;
@@ -74,6 +76,8 @@ out/local-kindle/package-exports.txt
 out/local-kindle/package-glibc.txt
 out/local-kindle/sysroot-glibc.txt
 out/local-kindle/toolchain-info.txt
+out/local-kindle/mathjax-info.txt
+out/local-kindle/archive-info.txt
 ```
 
 The canonical script refuses a dirty root checkout by default, validates source pins, restores temporary Anki bridge injection on exit, and records the exact build identity in `BUILD.json`.
@@ -81,7 +85,7 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware baseline is recorded for exact SHA
-`c2a513f1acdcc1cf778515374e2aef58d9099eb2`:
+`4b11acb9cb2c029c1349093683ee1335a1295149`:
 
 - host: macOS 26.4 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -89,7 +93,11 @@ The current clean local non-hardware baseline is recorded for exact SHA
   Node 24.19.0 and jsdom 24.1.3; fmt, clippy, policy, native/source
   syntax, 13 Rust unit tests, doc tests, renderer/CSS/diagnostics contracts,
   semantic ordered-audio and external-navigation contracts, and the app
-  self-test passed;
+  self-test passed. The real checksum-verified MathJax 2.7.9 distribution
+  produced inline and display SVG across two dynamic renders of the same
+  persistent `#qa`; ordinary SVG/image attributes, cloze DOM, long bilingual
+  content, answer scrolling and stale-render callback isolation passed. The
+  deterministic ZIP host contract also passed;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
   native x86-64 typed library; a backend-created disposable nine-card
   collection passed queue counts, question/answer rendering, semantic
@@ -113,19 +121,26 @@ The current clean local non-hardware baseline is recorded for exact SHA
   ARMHF native executables built, renderer/reproducibility policy passed,
   `MANIFEST.sha256` verified, forbidden archive paths were absent, and all 24
   required review/sync exports were individually present; required
-  GLIBC versions were within the pinned sysroot;
+  GLIBC versions were within the pinned sysroot. The package contains the
+  checksum-pinned MathJax runtime/license and records its identity;
+- two consecutive clean invocations of the same canonical package command on
+  this SHA produced byte-identical ZIPs, `BUILD.json`, manifests and archive
+  evidence. Both archives contain 1,296 sorted regular files, use source date
+  epoch `1787321203`, and have the same SHA-256;
 - package SHA-256:
-  `c76d57f36bb58a7ff1a848bbb8f986cc761506411b518bb461f22e3ea4d6eb52`;
+  `f0ba4c91d3f8bf7f5e8eda29f508cbaafa3ec0a995b898e7e256af2b9a114c37`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
   `62edf76feb1b7f4af2f01754957e8d57eb3e7d67` and KindleHF 2026.08 SHA-256
-  `8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0`.
+  `8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0`;
+  MathJax 2.7.9 archive SHA-256 is
+  `7131e739848edc14aa661a5516995866b81a477fab8b039d7cc324930e71f786`.
 
 This evidence is non-hardware baseline evidence, not release acceptance. It
-does not prove native audio output on PW6/AirPods, typed-answer focus/scroll on
-Kindle WebKit, live AnkiWeb/PW6 sync, reproducibility across two clean builds or
-PW6 behavior.
+does not prove native audio output on PW6/AirPods, typed-answer focus/scroll or
+MathJax geometry/performance on Kindle WebKit, live AnkiWeb/PW6 sync,
+independent cross-host reproducibility, or PW6 behavior.
 
 ### Baseline failure ledger
 
@@ -188,10 +203,32 @@ PW6 behavior.
   was one rustfmt line wrap in the host-only fixture. Formatting that fixture
   was the complete fix. Clean host, Anki and ARMHF package runs then passed at
   the exact commit.
+- Commit `57095b034020ea24c3525878abf307e0d5f0e7bc` closed the next source-owned
+  renderer gap: pinned Anki correctly left MathJax delimiters in card HTML, but
+  Kanki's reviewer supplied no formula runtime. The fixed upstream MathJax
+  2.7.9 SVG distribution is now checksum verified, loaded once, and typesets
+  only the persistent `#qa` with render-generation isolation. The first real
+  vendor-contract failure was an over-strong oracle expecting optional
+  `data-mathml` output from the selected config; actual SVG and semantic TeX
+  were correct, so the oracle was narrowed without changing the runtime. The
+  next navigation-contract failure showed its host fixture had not loaded the
+  new adapter; aligning that host oracle was the complete behavioral fix.
+  Clean host, Anki and ARMHF package gates then passed at the exact commit.
+- The first repeated canonical builds of `57095b034020ea24c3525878abf307e0d5f0e7bc`
+  produced hashes `a15f35eaa027d7ad0c27f492ad7113aeb6361e9c72f2f44fa1f3d5d9b92254a8`
+  and `dc316855fcf12d490dc13fa5a18d0787f39708f879f1b5010daf88f9a852184f`.
+  Their `BUILD.json` and 1,290-entry content manifests were identical; only ZIP
+  build timestamps/order metadata differed. Commit
+  `4b11acb9cb2c029c1349093683ee1335a1295149` binds archive time to the source
+  commit, sorts paths, fixes file modes/ZIP metadata, records archive identity
+  and adds an executable host contract. Two subsequent clean ARMHF builds were
+  byte-identical at `f0ba4c91d3f8bf7f5e8eda29f508cbaafa3ec0a995b898e7e256af2b9a114c37`.
 - There is no red canonical local software gate at this checkpoint. The first
-  missing executable category in the requested closure sequence is
-  the generic renderer parity corpus. Audit and extend
-  `tests/renderer_contract.test.cjs`, then rerun `sh tools/run_host_gates.sh`.
+  missing executable renderer category is backend/render/device evidence from
+  original, unmodified representative APKGs. The synthetic generic host corpus
+  now covers scripts, images, unrelated/replay SVG, inline/display MathJax,
+  cloze, type answer, long bilingual DOM, flex/gap/CSS variables and `cardN`.
+  Kindle computed geometry and original-deck evidence remain open.
 
 ## Current GitHub-hosted Actions blocker
 
@@ -213,6 +250,9 @@ The direct audit against pinned Anki 26.08.1 corrected and clarified several ite
 - the pinned-backend disposable fixture now proves enabled and disabled packet values plus filtered-card original-deck inheritance; native PW6 playback remains open;
 - the pinned v3 scheduler uses four rating buttons, so the Kindle four-button bar is not a parity defect for this pin;
 - external navigation is blocked by both reviewer JavaScript and native WebKit policy while same-document navigation remains allowed; PW6 policy-callback evidence remains pending;
+- upstream MathJax 2.7.9 SVG output is packaged and exercised across dynamic
+  persistent-reviewer renders; real Kindle WebKit geometry/performance remains
+  pending;
 - Lab126 CSS-pixel lifecycle behavior still requires PW6 proof.
 
 See `docs/ANKI_DESKTOP_PARITY.md` for the exact source-level rationale.
@@ -254,7 +294,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 - end-to-end ordered AV autoplay and answer-side question replay on PW6/AirPods;
 - typed-answer focus, keyboard and answer-scroll behavior on PW6 WebKit;
 - live AnkiWeb sync and normal/full/media sync acceptance on PW6;
-- repeated clean-build comparison and reproducibility evidence;
+- independent cross-host reproducibility confirmation;
 - runtime ABI/loader proof against an audited PW6 rootfs or device;
 - native GTK/WebKit shell and CSS-pixel behavior on PW6;
 - audio sequence behavior on PW6/AirPods;
@@ -267,10 +307,14 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 ## Immediate next actions
 
-1. Extend `tests/renderer_contract.test.cjs` with generic renderer fixtures, then rerun `sh tools/run_host_gates.sh`.
-2. Add original, unmodified representative APKGs to the evidence corpus without deck-specific product CSS.
-3. Repeat the clean canonical package build on the eventual candidate and compare manifests/artifact characteristics.
-4. Freeze one candidate only after non-hardware gates are green.
+1. Inventory available original APKG evidence with
+   `rg --files -g '*.apkg' -g '*.colpkg' -g '!out/**'`, then add a generic,
+   privacy-reviewed import/render evidence path without modifying the decks.
+2. Capture pinned-backend packets plus desktop expectations for original COCA
+   and at least one unrelated representative deck; never add deck-specific CSS.
+3. Audit runtime ABI/loader requirements against an official PW6 rootfs or the
+   device, then retain the exact evidence.
+4. Freeze one candidate only after remaining non-hardware gates are green.
 5. Install that exact ZIP on PW6 and run hardware acceptance, renderer metrics and live audio/sync tests.
 6. Repair/rerun hosted Actions later as independent confirmation, not as a separate build definition.
 

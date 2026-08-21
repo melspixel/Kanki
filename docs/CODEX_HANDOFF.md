@@ -64,7 +64,7 @@ Current top-level responsibilities are:
 - `crates/` — Rust application/domain abstractions;
 - `bridge/` — semantic C ABI embedded into the pinned Anki Rust backend;
 - `device/` — source-owned Kindle native C executables;
-- `assets/` — device pages and persistent reviewer runtime;
+- `assets/` — device pages, persistent reviewer runtime and scoped MathJax adapter;
 - `scripts/` — scripts that run on the Kindle after installation;
 - `tools/` — developer/build/test tooling;
 - `packaging/` — install-facing config and Kindle-home shortcuts;
@@ -289,6 +289,11 @@ Kanki-rewrite-hw3.zip
 
 Do not install a build merely because the ZIP exists. Check package/ABI/manifest gates first.
 
+The package recipe checksum-verifies MathJax through
+`tools/install_mathjax.sh` and emits `mathjax-info.txt`. It creates the final
+ZIP through the internal `tools/create_reproducible_zip.py` helper and emits
+`archive-info.txt`; this helper is not an alternative package recipe.
+
 ## 8. First takeover session — exact sequence
 
 Execute this sequence before broad refactoring:
@@ -348,7 +353,8 @@ Issue #11 is authoritative, but expect work in these areas:
 - native GTK2/WebKit app launch on PW6;
 - Lab126 CSS pixel/full-content zoom on the actual device;
 - old-WebKit generic CSS compatibility corpus;
-- scripts/images/SVG/audio/MathJax/cloze/long-card/cardN behavior;
+- scripts/images/SVG/audio/cloze/long-card/cardN behavior and MathJax geometry
+  on actual Kindle WebKit (the generic host MathJax lifecycle contract passes);
 - original COCA and other representative APKGs without modifying them;
 - diagnostics directory/metrics/raw-capture limits and privacy;
 - clean install, historical upgrade, rollback and duplicate/sleep/USB lifecycle;

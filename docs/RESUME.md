@@ -73,6 +73,7 @@ If a proposed fix violates any invariant above, stop and redesign it.
 - `assets/reviewer/reviewer.css` — minimal reviewer-owned CSS only
 - `assets/reviewer/css_compat.js` — deterministic CSS source compatibility transform
 - `assets/reviewer/css_runtime.js` — old-WebKit runtime compatibility behavior
+- `assets/reviewer/mathjax_runtime.js` — persistent-`#qa` MathJax lifecycle adapter
 - `assets/reviewer/diagnostics.js` — bounded privacy-safe computed-layout metrics and opt-in raw source capture
 
 ### Packaging/operations
@@ -82,6 +83,8 @@ If a proposed fix violates any invariant above, stop and redesign it.
 - `scripts/kanki-report.sh` — redacted diagnostic bundle; does not include raw card captures
 - `packaging/` — config example and Kindle-home shortcuts
 - `tools/install_kindlehf_toolchain.sh` — pinned/checksummed KindleHF toolchain installer
+- `tools/install_mathjax.sh` — pinned/checksummed source-owned formula runtime installer
+- `tools/create_reproducible_zip.py` — deterministic archive helper used only by the canonical package recipe
 - `tools/run_host_gates.sh` — one-command host verification path
 - `tools/build_kindle_package.sh` — canonical ARMHF build/package/ABI recipe used by CI and local builds
 - `tools/local-builder.Dockerfile` — Ubuntu 24.04 + Rust 1.92.0 local builder environment
@@ -165,6 +168,8 @@ out/local-kindle/package-exports.txt
 out/local-kindle/package-glibc.txt
 out/local-kindle/sysroot-glibc.txt
 out/local-kindle/toolchain-info.txt
+out/local-kindle/mathjax-info.txt
+out/local-kindle/archive-info.txt
 ```
 
 The script refuses a dirty root checkout by default, validates source gitlinks, installs/reuses the checksum-pinned KindleHF toolchain, restores temporary Anki source injection on exit, performs manifest/export/GLIBC gates, and records the exact build identity inside the package.
@@ -185,12 +190,14 @@ Do not treat visual similarity alone as completion. `docs/ANKI_DESKTOP_PARITY.md
 
 Current important state:
 
-- typed-answer `{{FrontSide}}` separator placement was re-audited and the current bridge is structurally equivalent to desktop Anki; source guard exists, executable fixtures still pending;
+- typed-answer `{{FrontSide}}` separator placement and basic/cloze/empty/unknown-field behavior have pinned-backend executable fixtures; PW6 input/scroll remains pending;
 - autoplay must come from effective deck config (`!disable_autoplay`) and is represented in the rewrite design/packet path;
 - answer-side replay must honor effective `!skip_question_when_replaying_answer`, including filtered-card original-deck behavior;
 - the pinned Anki v3 scheduler uses four answer buttons, so the four-button Kindle bar is not a parity defect for this pin;
 - Lab126 CSS-pixel policy still needs lifecycle/device verification;
 - ordinary reviewer HTTP(S) links are explicitly prevented from replacing the persistent reviewer document and need device-policy acceptance.
+- checksum-pinned MathJax SVG output is exercised across dynamic persistent
+  `#qa` renders; real PW6 geometry/performance remains open.
 
 ## 10. Evidence rules
 

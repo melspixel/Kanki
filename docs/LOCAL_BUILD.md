@@ -13,7 +13,7 @@ On Apple Silicon Macs the wrapper forces `linux/amd64`, because the pinned Kindl
 1. A local checkout of `melspixel/Kanki` on branch `rewrite-v1`.
 2. Git submodules initialized for the pinned project references.
 3. Docker-compatible CLI and daemon: Docker Desktop, OrbStack, or Colima.
-4. Internet access for the first build to obtain Ubuntu packages, Rust 1.92.0 dependencies, the checksum-pinned KindleHF toolchain, Anki translation submodules, Cargo crates, and pinned miniaudio source.
+4. Internet access for the first build to obtain Ubuntu packages, Rust 1.92.0 dependencies, the checksum-pinned KindleHF toolchain, Anki translation submodules, Cargo crates, pinned miniaudio source, and the checksum-pinned MathJax 2.7.9 archive.
 
 Initialize the project gitlinks once:
 
@@ -52,9 +52,17 @@ out/local-kindle/package-exports.txt
 out/local-kindle/package-glibc.txt
 out/local-kindle/sysroot-glibc.txt
 out/local-kindle/toolchain-info.txt
+out/local-kindle/mathjax-info.txt
+out/local-kindle/archive-info.txt
 ```
 
-`BUILD.json` inside the ZIP records the exact repository commit, Anki pin, Kindle SDK pin, audiobook helper pin, miniaudio pin, koxtoolchain version/checksum, target triple and the canonical builder script.
+`BUILD.json` inside the ZIP records the exact repository commit, Anki pin, Kindle SDK pin, audiobook helper pin, miniaudio pin, MathJax version/checksum, source commit epoch, koxtoolchain version/checksum, target triple and the canonical builder script. `archive-info.txt` records that epoch, the sorted archive file count and the final archive SHA-256.
+
+The canonical recipe creates the ZIP from sorted regular-file paths with fixed
+permissions and the source commit time. Source checkout mtimes and package-tree
+creation order therefore do not affect the archive. A host contract checks
+this property, but release evidence still requires two clean full builds of
+the exact candidate and a byte comparison.
 
 ## Typed Anki host bridge and disposable collection
 
@@ -157,6 +165,7 @@ For every meaningful local build, record:
 - builder platform (`linux/amd64` by default);
 - Rust version;
 - `toolchain-info.txt`;
+- `mathjax-info.txt` and `archive-info.txt`;
 - ZIP SHA-256;
 - package exported-symbol and GLIBC evidence files;
 - manifest verification result;
