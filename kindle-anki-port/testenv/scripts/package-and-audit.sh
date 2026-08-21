@@ -57,8 +57,10 @@ ARMHF_ANKI_COMMIT=$(sed -n 's/^anki_commit=//p' "$ARMHF/BUILD-PROVENANCE.txt")
 
 # A release package is only valid after exact-rootfs QEMU has passed for these
 # exact ARMHF bytes. Bind packaging to that evidence instead of relying on an
-# operator to remember an ordering convention.
-for required in QEMU-SMOKE.txt QEMU-PROVENANCE.txt rootfs-verification.txt backend-smoke.txt audio-self-test.txt sync-self-test.txt; do
+# operator to remember an ordering convention. The QEMU runtime itself must
+# have been re-extracted from the verified retained image; older evidence that
+# only paired an arbitrary extracted tree with the image hash is rejected.
+for required in QEMU-SMOKE.txt QEMU-PROVENANCE.txt rootfs-verification.txt input-rootfs-verification.txt backend-smoke.txt audio-self-test.txt sync-self-test.txt; do
   [ -s "$QEMU/$required" ] || {
     echo "missing/non-empty QEMU evidence: $QEMU/$required" >&2
     exit 66
@@ -68,8 +70,12 @@ grep -qx 'QEMU smoke: PASS' "$QEMU/QEMU-SMOKE.txt" || {
   echo "QEMU-SMOKE.txt does not record PASS" >&2
   exit 66
 }
+grep -Fqx 'PW6 rootfs verification: PASS' "$QEMU/input-rootfs-verification.txt" || {
+  echo "input-rootfs-verification.txt does not record supplied PW6 rootfs verification PASS" >&2
+  exit 66
+}
 grep -Fqx 'PW6 rootfs verification: PASS' "$QEMU/rootfs-verification.txt" || {
-  echo "rootfs-verification.txt does not record exact PW6 verification PASS" >&2
+  echo "rootfs-verification.txt does not record image-derived PW6 verification PASS" >&2
   exit 66
 }
 grep -Fqx 'qemu backend smoke: ok' "$QEMU/backend-smoke.txt" || {
@@ -91,7 +97,9 @@ grep -Fqx 'kap-sync self-test: ok' "$QEMU/sync-self-test.txt" || {
 QEMU_BUILD_COMMIT=$(sed -n 's/^source_commit=//p' "$QEMU/QEMU-PROVENANCE.txt")
 QEMU_ANKI_COMMIT=$(sed -n 's/^anki_commit=//p' "$QEMU/QEMU-PROVENANCE.txt")
 QEMU_MANIFEST_SHA256=$(sed -n 's/^rootfs_manifest_sha256=//p' "$QEMU/QEMU-PROVENANCE.txt")
+QEMU_ROOTFS_INPUT_VERIFIED=$(sed -n 's/^rootfs_input_verified=//p' "$QEMU/QEMU-PROVENANCE.txt")
 QEMU_ROOTFS_VERIFIED=$(sed -n 's/^rootfs_verified=//p' "$QEMU/QEMU-PROVENANCE.txt")
+QEMU_ROOTFS_RUNTIME_SOURCE=$(sed -n 's/^rootfs_runtime_source=//p' "$QEMU/QEMU-PROVENANCE.txt")
 QEMU_ROOTFS_IMAGE_SHA256=$(sed -n 's/^rootfs_image_sha256=//p' "$QEMU/QEMU-PROVENANCE.txt")
 CANONICAL_MANIFEST_SHA256=$(sha256sum "$CANONICAL_ROOTFS_MANIFEST" | awk '{print $1}')
 EXPECTED_ROOTFS_IMAGE_SHA256=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["rootfs_image"]["sha256"])' "$CANONICAL_ROOTFS_MANIFEST")
@@ -107,12 +115,24 @@ EXPECTED_ROOTFS_IMAGE_SHA256=$(python3 -c 'import json,sys; print(json.load(open
   echo "QEMU rootfs manifest hash mismatch: $QEMU_MANIFEST_SHA256 != $CANONICAL_MANIFEST_SHA256" >&2
   exit 66
 }
+[ "$QEMU_ROOTFS_INPUT_VERIFIED" = true ] || {
+  echo "QEMU provenance does not record rootfs_input_verified=true" >&2
+  exit 66
+}
 [ "$QEMU_ROOTFS_VERIFIED" = true ] || {
   echo "QEMU provenance does not record rootfs_verified=true" >&2
   exit 66
 }
+[ "$QEMU_ROOTFS_RUNTIME_SOURCE" = verified-image-rdump ] || {
+  echo "QEMU provenance does not prove runtime came from verified-image-rdump" >&2
+  exit 66
+}
 [ "$QEMU_ROOTFS_IMAGE_SHA256" = "$EXPECTED_ROOTFS_IMAGE_SHA256" ] || {
   echo "QEMU rootfs image hash mismatch: $QEMU_ROOTFS_IMAGE_SHA256 != $EXPECTED_ROOTFS_IMAGE_SHA256" >&2
+  exit 66
+}
+grep -Fqx "rootfs image sha256: PASS $EXPECTED_ROOTFS_IMAGE_SHA256" "$QEMU/input-rootfs-verification.txt" || {
+  echo "input-rootfs-verification.txt does not bind the supplied rootfs check to the canonical image SHA-256" >&2
   exit 66
 }
 grep -Fqx "rootfs image sha256: PASS $EXPECTED_ROOTFS_IMAGE_SHA256" "$QEMU/rootfs-verification.txt" || {
@@ -214,9 +234,9 @@ cp "$ARMHF/file.txt" "$ARMHF/exports.txt" "$ARMHF/ARMHF-GATES.txt" \
   "$ARMHF/BUILD-PROVENANCE.txt" "$RELEASE/"
 cp "$ARMHF"/*.abi.txt "$ARMHF"/*.glibc.txt "$RELEASE/"
 cp "$QEMU/QEMU-SMOKE.txt" "$QEMU/QEMU-PROVENANCE.txt" \
-  "$QEMU/rootfs-verification.txt" "$QEMU/backend-smoke.txt" \
-  "$QEMU/audio-self-test.txt" "$QEMU/sync-self-test.txt" "$RELEASE/"
-printf 'build_commit=%s\nanki_commit=%s\nsource_date_epoch=%s\nrootfs_manifest_sha256=%s\nrootfs_image_sha256=%s\nqemu_provenance_sha256=%s\narchive_sha256=%s\n' \
+  "$QEMU/rootfs-verification.txt" "$QEMU/input-rootfs-verification.txt" \
+  "$QEMU/backend-smoke.txt" "$QEMU/audio-self-test.txt" "$QEMU/sync-self-test.txt" "$RELEASE/"
+printf 'build_commit=%s\nanki_commit=%s\nsource_date_epoch=%s\nrootfs_manifest_sha256=%s\nrootfs_image_sha256=%s\nrootfs_input_verified=true\nrootfs_runtime_source=verified-image-rdump\nqemu_provenance_sha256=%s\narchive_sha256=%s\n' \
   "$BUILD_COMMIT" "$ANKI_COMMIT" "$SOURCE_DATE_EPOCH" "$CANONICAL_MANIFEST_SHA256" \
   "$EXPECTED_ROOTFS_IMAGE_SHA256" \
   "$(sha256sum "$QEMU/QEMU-PROVENANCE.txt" | awk '{print $1}')" \
