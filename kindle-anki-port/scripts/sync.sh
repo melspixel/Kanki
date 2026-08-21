@@ -42,8 +42,7 @@ release_operation_lock() {
     if [ "$op_lock_owned" = 1 ]; then
         current_owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
         if [ -n "$lock_owner_pid" ] && [ "$current_owner" = "$lock_owner_pid" ]; then
-            rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
-            rmdir "$OP_LOCK" 2>/dev/null || true
+            rm -rf "$OP_LOCK" 2>/dev/null || true
         fi
         op_lock_owned=0
         lock_owner_pid=
