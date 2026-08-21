@@ -8,6 +8,7 @@ PID_FILE=${KAP_PID_FILE:-$APP/.kap.pid}
 LOG=${KAP_LOG_FILE:-$APP/kindle-anki-port.log}
 SYNC_REQUEST=${KAP_SYNC_REQUEST:-$APP/.sync-request}
 OPENED_BUILD=${KAP_OPENED_BUILD_FILE:-$APP/.opened-build}
+OP_LOCK=${KAP_OPERATION_LOCK_DIR:-$APP/.kap-operation.lock}
 
 mkdir -p "$APP" "$DATA" "$DATA/backups"
 umask 077
@@ -41,16 +42,63 @@ remove_pid_if_owned() {
     [ "$current" = "$expected" ] && rm -f "$PID_FILE"
 }
 
-if [ -f "$PID_FILE" ]; then
-    old_pid=$(cat "$PID_FILE" 2>/dev/null || true)
-    if verified_app_pid "$old_pid"; then
-        kill -USR1 "$old_pid" 2>/dev/null || true
-        log "raised existing instance pid=$old_pid"
-        exit 0
+op_lock_owned=0
+release_operation_lock() {
+    if [ "$op_lock_owned" = 1 ]; then
+        rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
+        rmdir "$OP_LOCK" 2>/dev/null || true
+        op_lock_owned=0
     fi
-    rm -f "$PID_FILE"
-    log "removed stale or foreign pid file"
-fi
+}
+
+acquire_launch_lock() {
+    attempts=0
+    while ! mkdir "$OP_LOCK" 2>/dev/null; do
+        owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
+        mode=$(cat "$OP_LOCK/mode" 2>/dev/null || true)
+        case "$owner" in
+            ''|*[!0-9]*) owner_alive=0 ;;
+            *) if kill -0 "$owner" 2>/dev/null; then owner_alive=1; else owner_alive=0; fi ;;
+        esac
+        if [ "$owner_alive" = 1 ] && [ "$mode" = sync ]; then
+            log "launch refused while sync is running owner=$owner"
+            return 74
+        fi
+        attempts=$((attempts + 1))
+        if [ "$owner_alive" = 0 ] && [ "$attempts" -ge 10 ]; then
+            rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
+            rmdir "$OP_LOCK" 2>/dev/null || true
+            attempts=0
+            continue
+        fi
+        if [ "$attempts" -ge 3000 ]; then
+            log "launch operation lock remained busy: $OP_LOCK"
+            return 75
+        fi
+        sleep 0.02
+    done
+    printf '%s\n' "$$" >"$OP_LOCK/pid"
+    printf '%s\n' launch >"$OP_LOCK/mode"
+    op_lock_owned=1
+}
+
+prepare_launch() {
+    acquire_launch_lock
+    if [ -f "$PID_FILE" ]; then
+        old_pid=$(cat "$PID_FILE" 2>/dev/null || true)
+        if verified_app_pid "$old_pid"; then
+            kill -USR1 "$old_pid" 2>/dev/null || true
+            log "raised existing instance pid=$old_pid"
+            release_operation_lock
+            exit 0
+        fi
+        rm -f "$PID_FILE"
+        log "removed stale or foreign pid file"
+    fi
+}
+
+prepare_launch
+trap 'release_operation_lock' 0
 
 if [ ! -x "$BIN" ]; then
     log "application binary is missing or not executable: $BIN"
@@ -94,10 +142,12 @@ trap 'forward_signal INT' INT
 trap 'forward_signal HUP' HUP
 
 while :; do
+    if [ "$op_lock_owned" != 1 ]; then prepare_launch; fi
     rm -f "$SYNC_REQUEST"
     "$BIN" --backend "$APP/libanki-kindle.so" >>"$LOG" 2>&1 &
     child=$!
     printf '%s\n' "$child" >"$PID_FILE"
+    release_operation_lock
     log "started pid=$child build=$build_id"
     status=0
     wait "$child" || status=$?
