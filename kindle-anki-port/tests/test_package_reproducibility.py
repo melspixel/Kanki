@@ -84,6 +84,8 @@ def write_qemu_provenance(
     *,
     source_commit: str = BUILD_COMMIT,
     anki_commit: str = ANKI_COMMIT,
+    rootfs_input_verified: str = "true",
+    rootfs_runtime_source: str = "verified-image-rdump",
     rootfs_image_sha256: str = ROOTFS_IMAGE_SHA256,
     binary_hash_overrides: dict[str, str] | None = None,
 ) -> None:
@@ -95,7 +97,9 @@ def write_qemu_provenance(
         f"anki_commit={anki_commit}",
         "rootfs_manifest_id=pw6-5.19.6-rootfs-manifest.json",
         f"rootfs_manifest_sha256={sha256(manifest)}",
+        f"rootfs_input_verified={rootfs_input_verified}",
         "rootfs_verified=true",
+        f"rootfs_runtime_source={rootfs_runtime_source}",
         f"rootfs_image_sha256={rootfs_image_sha256}",
     ]
     for name in ("libanki-kindle.so", "kap-app", "kap-audio", "kap-sync"):
@@ -107,10 +111,9 @@ def make_qemu(root: Path, armhf: Path, project: Path) -> Path:
     qemu = root / "qemu"
     qemu.mkdir()
     (qemu / "QEMU-SMOKE.txt").write_text("QEMU smoke: PASS\n", encoding="utf-8")
-    (qemu / "rootfs-verification.txt").write_text(
-        f"rootfs image sha256: PASS {ROOTFS_IMAGE_SHA256}\nPW6 rootfs verification: PASS\n",
-        encoding="utf-8",
-    )
+    verification = f"rootfs image sha256: PASS {ROOTFS_IMAGE_SHA256}\nPW6 rootfs verification: PASS\n"
+    (qemu / "input-rootfs-verification.txt").write_text(verification, encoding="utf-8")
+    (qemu / "rootfs-verification.txt").write_text(verification, encoding="utf-8")
     (qemu / "backend-smoke.txt").write_text("qemu backend smoke: ok\n", encoding="utf-8")
     (qemu / "audio-self-test.txt").write_text("kap-audio self-test: ok\n", encoding="utf-8")
     (qemu / "sync-self-test.txt").write_text("kap-sync self-test: ok\n", encoding="utf-8")
@@ -207,6 +210,7 @@ def main() -> int:
         for evidence in (
             "QEMU-SMOKE.txt",
             "QEMU-PROVENANCE.txt",
+            "input-rootfs-verification.txt",
             "rootfs-verification.txt",
             "backend-smoke.txt",
             "audio-self-test.txt",
@@ -246,6 +250,14 @@ def main() -> int:
         write_qemu_provenance(qemu, armhf, project, anki_commit="c" * 40)
         wrong_qemu_anki = run_package(project, armhf, qemu, dist, release, tz="UTC", mask=0o022)
         assert_provenance_rejected(wrong_qemu_anki, "QEMU anki_commit mismatch")
+
+        write_qemu_provenance(qemu, armhf, project, rootfs_input_verified="false")
+        wrong_input_verification = run_package(project, armhf, qemu, dist, release, tz="UTC", mask=0o022)
+        assert_provenance_rejected(wrong_input_verification, "rootfs_input_verified=true")
+
+        write_qemu_provenance(qemu, armhf, project, rootfs_runtime_source="caller-extracted-tree")
+        wrong_runtime_source = run_package(project, armhf, qemu, dist, release, tz="UTC", mask=0o022)
+        assert_provenance_rejected(wrong_runtime_source, "runtime came from verified-image-rdump")
 
         write_qemu_provenance(qemu, armhf, project, rootfs_image_sha256="a" * 64)
         wrong_rootfs_image = run_package(project, armhf, qemu, dist, release, tz="UTC", mask=0o022)
@@ -296,6 +308,10 @@ def main() -> int:
             raise AssertionError("package provenance omitted rootfs manifest hash")
         if f"rootfs_image_sha256={ROOTFS_IMAGE_SHA256}\n" not in provenance:
             raise AssertionError("package provenance omitted canonical rootfs image hash")
+        if "rootfs_input_verified=true\n" not in provenance:
+            raise AssertionError("package provenance omitted supplied-rootfs verification")
+        if "rootfs_runtime_source=verified-image-rdump\n" not in provenance:
+            raise AssertionError("package provenance omitted image-derived runtime source")
         if "qemu_provenance_sha256=" not in provenance:
             raise AssertionError("package provenance omitted QEMU provenance hash")
 
