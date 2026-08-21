@@ -192,7 +192,9 @@ printf '%s\n' '== build Kindle native executables =='
     -Wl,-e,_start -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3 \
     device/kanki_raise.c -ldl -o "$SCRATCH/kanki-raise"
 "$TRIPLE-gcc" -std=c11 -D_XOPEN_SOURCE=700 -O2 -Wall -Wextra -Werror \
-    -I"$SCRATCH" device/audio/kanki_audio_server.c -o "$SCRATCH/kanki-audio" -lm -latomic
+    -I"$SCRATCH" -Idevice/audio \
+    device/audio/kanki_audio_server.c device/audio/kanki_audio_protocol.c \
+    device/audio/kanki_tts_player.c -o "$SCRATCH/kanki-audio" -lm -latomic -ldl
 "$TRIPLE-gcc" -std=gnu11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L \
     -O2 -Wall -Wextra -Werror -DKGP_NATIVE_GLIBC \
     third_party/audiobook-koplugin/kindle/gst-play.c -o "$SCRATCH/kanki-gst-play" -ldl

@@ -81,6 +81,12 @@ for fragment in [
     "mixersink=found",
     "ttssrc=found",
     "wavparse=not_found",
+    "/usr/bin/gst-inspect-1.0 ttssrc",
+    "audio-ttssrc-inspect.txt",
+    "for property in textsource voicelang speed",
+    "/opt/kanki-audit/kanki-audio --tts-runtime-probe",
+    "tts_protocol_properties=pass",
+    "tts_runtime_pipeline=pass",
 ]:
     require(AUDIT, fragment, f"PW6 audio/rootfs audit is missing: {fragment}")
 

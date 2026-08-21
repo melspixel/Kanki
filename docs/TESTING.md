@@ -24,6 +24,9 @@ A GitHub job that terminates with no step list is an infrastructure/account/repo
 - no deck-specific selectors;
 - ordinary SVG/image preservation and no global SVG/image/font overrides;
 - backend-controlled autoplay and ordered answer-side AV replay, with autoplay/replay booleans covered both ways;
+- direct and ordered TTS protocol preservation for text/language/voices/speed,
+  plus executable native GObject property setting on a constant `ttssrc` to
+  `mixersink` pipeline;
 - ES5 syntax check for Kindle JavaScript, including CSS and diagnostics runtimes;
 - generic CSS-variable/calc/flex compatibility contract, including safe
   non-negative `order` conversion without invalid legacy groups for negative
@@ -105,6 +108,9 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
   the UI/backend/audio capability probes through that rootfs's ARMHF loader;
 - model the firmware's authenticated TTS squashfs mount when checking
   `mixersink`/`ttssrc`, without packaging proprietary bytes;
+- execute fixed-rootfs `gst-inspect-1.0` and require writable `textsource`,
+  `voicelang` and `speed` properties, then construct the packaged Kanki TTS
+  pipeline through the PW6 loader without entering PLAYING state;
 - build `kanki-device`, `kanki-sync`, `kanki-diag`, `kanki-raise`, `kanki-audio`, `kanki-gst-play` and typed Anki backend;
 - produce one reproducible self-identifying ZIP with the canonical package
   recipe, whether the executor is hosted or local;

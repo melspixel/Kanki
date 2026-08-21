@@ -14,6 +14,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "kanki_audio_protocol.h"
+#include "kanki_tts_player.h"
+
 #define MA_NO_DEVICE_IO
 #define MA_NO_ENCODING
 #define MA_NO_GENERATION
@@ -28,13 +31,6 @@
 #define AUDIO_PORT 17392
 #define REQUEST_CAPACITY 16384
 #define PATH_CAPACITY 4096
-#define TEXT_CAPACITY 8192
-#define MAX_SEQUENCE_ITEMS 16
-
-struct sequence_item {
-    int tts;
-    char value[TEXT_CAPACITY];
-};
 
 static volatile sig_atomic_t keep_running = 1;
 static pid_t active_job = -1;
@@ -52,56 +48,6 @@ static void on_signal(int signal_number) {
     (void)signal_number;
     keep_running = 0;
     if (active_job > 0) (void)kill(-active_job, SIGTERM);
-}
-
-static int hex_value(char value) {
-    if (value >= '0' && value <= '9') return value - '0';
-    if (value >= 'a' && value <= 'f') return value - 'a' + 10;
-    if (value >= 'A' && value <= 'F') return value - 'A' + 10;
-    return -1;
-}
-
-static int decode_component(const char *source, size_t length, char *output, size_t capacity) {
-    size_t input_index = 0;
-    size_t output_index = 0;
-    if (!source || !output || capacity == 0) return 0;
-    while (input_index < length && output_index + 1 < capacity) {
-        if (source[input_index] == '%' && input_index + 2 < length) {
-            int high = hex_value(source[input_index + 1]);
-            int low = hex_value(source[input_index + 2]);
-            if (high >= 0 && low >= 0) {
-                output[output_index++] = (char)((high << 4) | low);
-                input_index += 3;
-                continue;
-            }
-        }
-        output[output_index++] = source[input_index] == '+' ? ' ' : source[input_index];
-        input_index++;
-    }
-    output[output_index] = '\0';
-    return input_index == length;
-}
-
-static int query_value(const char *target, const char *key, char *output, size_t capacity) {
-    const char *query = strchr(target, '?');
-    size_t key_length = strlen(key);
-    if (!query) return 0;
-    query++;
-    while (*query) {
-        const char *pair_end = strchr(query, '&');
-        const char *equals = strchr(query, '=');
-        size_t pair_length = pair_end ? (size_t)(pair_end - query) : strlen(query);
-        if (equals && equals < query + pair_length && (size_t)(equals - query) == key_length &&
-            strncmp(query, key, key_length) == 0) {
-            return decode_component(equals + 1,
-                                    pair_length - (size_t)(equals + 1 - query),
-                                    output,
-                                    capacity);
-        }
-        if (!pair_end) break;
-        query = pair_end + 1;
-    }
-    return 0;
 }
 
 static int is_remote(const char *source) {
@@ -307,24 +253,26 @@ static int play_source(const char *source) {
     return result;
 }
 
-static int play_tts(const char *text) {
-    if (!text || !*text) return 50;
-    return run_player("--ttssrc", text);
+static int play_tts(const struct kanki_audio_item *item) {
+    if (!item || !item->value[0]) return 50;
+    request_music_focus();
+    return kanki_tts_play(item->value, item->language, item->voices, item->speed);
 }
 
 static void reap_active_job(void) {
     if (active_job > 0 && waitpid(active_job, NULL, WNOHANG) == active_job) active_job = -1;
 }
 
-static int start_job(const char *value, int tts) {
+static int start_job(const struct kanki_audio_item *item) {
     pid_t child;
+    if (!item || !item->value[0]) return 0;
     stop_active_job();
     child = fork();
     if (child == 0) {
         (void)setpgid(0, 0);
         signal(SIGTERM, SIG_DFL);
         signal(SIGINT, SIG_DFL);
-        _exit(tts ? play_tts(value) : play_source(value));
+        _exit(item->kind == KANKI_AUDIO_ITEM_TTS ? play_tts(item) : play_source(item->value));
     }
     if (child < 0) return 0;
     (void)setpgid(child, child);
@@ -332,42 +280,9 @@ static int start_job(const char *value, int tts) {
     return 1;
 }
 
-static int parse_sequence(const char *target,
-                          struct sequence_item items[MAX_SEQUENCE_ITEMS],
-                          size_t *count) {
-    char count_value[32];
-    char kind[16];
-    char key[32];
-    char *end = NULL;
-    long parsed_count;
-    size_t i;
-
-    if (!target || !items || !count ||
-        !query_value(target, "count", count_value, sizeof(count_value))) return 0;
-    errno = 0;
-    parsed_count = strtol(count_value, &end, 10);
-    if (errno != 0 || !end || *end != '\0' || parsed_count < 1 ||
-        parsed_count > MAX_SEQUENCE_ITEMS) return 0;
-
-    *count = (size_t)parsed_count;
-    for (i = 0; i < *count; i += 1) {
-        if (snprintf(key, sizeof(key), "kind%lu", (unsigned long)i) >= (int)sizeof(key) ||
-            !query_value(target, key, kind, sizeof(kind))) return 0;
-        if (strcmp(kind, "sound") == 0) {
-            items[i].tts = 0;
-        } else if (strcmp(kind, "tts") == 0) {
-            items[i].tts = 1;
-        } else {
-            return 0;
-        }
-        if (snprintf(key, sizeof(key), "value%lu", (unsigned long)i) >= (int)sizeof(key) ||
-            !query_value(target, key, items[i].value, sizeof(items[i].value)) ||
-            !items[i].value[0]) return 0;
-    }
-    return 1;
-}
-
-static int start_sequence_job(const struct sequence_item items[MAX_SEQUENCE_ITEMS], size_t count) {
+static int start_sequence_job(
+    const struct kanki_audio_item items[KANKI_AUDIO_MAX_SEQUENCE_ITEMS],
+    size_t count) {
     pid_t pid;
     size_t i;
     stop_active_job();
@@ -378,7 +293,8 @@ static int start_sequence_job(const struct sequence_item items[MAX_SEQUENCE_ITEM
         signal(SIGTERM, SIG_DFL);
         signal(SIGINT, SIG_DFL);
         for (i = 0; i < count; i += 1) {
-            result = items[i].tts ? play_tts(items[i].value) : play_source(items[i].value);
+            result = items[i].kind == KANKI_AUDIO_ITEM_TTS ? play_tts(&items[i])
+                                                           : play_source(items[i].value);
             if (result != 0) break;
         }
         _exit(result >= 0 && result <= 255 ? result : 1);
@@ -408,8 +324,8 @@ static void handle_client(int descriptor) {
     char request[REQUEST_CAPACITY];
     char method[16];
     char target[REQUEST_CAPACITY];
-    char value[TEXT_CAPACITY];
-    struct sequence_item sequence[MAX_SEQUENCE_ITEMS];
+    struct kanki_audio_item item;
+    struct kanki_audio_item sequence[KANKI_AUDIO_MAX_SEQUENCE_ITEMS];
     size_t sequence_count = 0;
     ssize_t length = read(descriptor, request, sizeof(request) - 1);
     if (length <= 0) return;
@@ -422,7 +338,7 @@ static void handle_client(int descriptor) {
         stop_active_job();
         reply_http(descriptor, 200, "stopped");
     } else if (strncmp(target, "/sequence?", 10) == 0) {
-        if (!parse_sequence(target, sequence, &sequence_count)) {
+        if (!kanki_audio_parse_sequence(target, sequence, &sequence_count)) {
             reply_http(descriptor, 400, "invalid sequence");
         } else if (!start_sequence_job(sequence, sequence_count)) {
             reply_http(descriptor, 400, "unable to start sequence");
@@ -430,17 +346,20 @@ static void handle_client(int descriptor) {
             reply_http(descriptor, 200, "playing sequence");
         }
     } else if (strncmp(target, "/play?", 6) == 0) {
-        if (!query_value(target, "src", value, sizeof(value)) || !*value) {
+        memset(&item, 0, sizeof(item));
+        item.kind = KANKI_AUDIO_ITEM_SOUND;
+        if (!kanki_audio_query_value(target, "src", item.value, sizeof(item.value)) ||
+            !item.value[0]) {
             reply_http(descriptor, 400, "missing src");
-        } else if (!start_job(value, 0)) {
+        } else if (!start_job(&item)) {
             reply_http(descriptor, 400, "unable to start playback");
         } else {
             reply_http(descriptor, 200, "playing");
         }
     } else if (strncmp(target, "/tts?", 5) == 0) {
-        if (!query_value(target, "text", value, sizeof(value)) || !*value) {
-            reply_http(descriptor, 400, "missing text");
-        } else if (!start_job(value, 1)) {
+        if (!kanki_audio_parse_tts_request(target, &item)) {
+            reply_http(descriptor, 400, "invalid tts request");
+        } else if (!start_job(&item)) {
             reply_http(descriptor, 400, "unable to start tts");
         } else {
             reply_http(descriptor, 200, "speaking");
@@ -452,10 +371,20 @@ static void handle_client(int descriptor) {
     }
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     int server_descriptor;
     int enabled = 1;
     struct sockaddr_in address;
+
+    if (argc == 2 && strcmp(argv[1], "--tts-runtime-probe") == 0) {
+        int result = kanki_tts_runtime_probe();
+        if (result == 0) puts("kanki-tts-runtime=pass");
+        return result;
+    }
+    if (argc != 1) {
+        fprintf(stderr, "usage: %s [--tts-runtime-probe]\n", argv[0]);
+        return 64;
+    }
 
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);

@@ -688,6 +688,54 @@ grep -Fq 'gst-play: preloaded /usr/lib/tts/libIvonaEInkCommon.so.1.0' \
     "$EVIDENCE/audio-probe.txt" ||
     fail "PW6 audio probe did not preload the TTS common runtime"
 
+if ! env -i \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    HOME=/var/tmp \
+    TMPDIR=/var/tmp \
+    LD_LIBRARY_PATH=/usr/lib/tts:/usr/lib:/lib \
+    GST_PLUGIN_PATH=/usr/lib/gstreamer-1.0 \
+    GST_PLUGIN_SYSTEM_PATH=/usr/lib/gstreamer-1.0 \
+    GST_REGISTRY=/var/tmp/kanki-gstreamer-registry.bin \
+    GST_REGISTRY_FORK=no \
+    GST_DEBUG_NO_COLOR=1 \
+    /usr/sbin/chroot "$CHROOT" /usr/bin/qemu-arm-static \
+    /usr/bin/gst-inspect-1.0 ttssrc \
+    > "$EVIDENCE/audio-ttssrc-inspect.txt" 2>&1; then
+    fail "PW6 gst-inspect failed for ttssrc"
+fi
+for property in textsource voicelang speed; do
+    if ! grep -A1 "^  $property[[:space:]]*:" \
+        "$EVIDENCE/audio-ttssrc-inspect.txt" \
+        | grep -Fq 'flags: readable, writable'; then
+        fail "PW6 ttssrc lacks writable property $property"
+    fi
+done
+for unsupported in content-texts text; do
+    if grep -Eq "^  $unsupported[[:space:]]*:" \
+        "$EVIDENCE/audio-ttssrc-inspect.txt"; then
+        fail "PW6 ttssrc unexpectedly exposes unsupported property $unsupported"
+    fi
+done
+
+if ! env -i \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    HOME=/var/tmp \
+    TMPDIR=/var/tmp \
+    LD_LIBRARY_PATH=/usr/lib/tts:/usr/lib:/lib \
+    GST_PLUGIN_PATH=/usr/lib/gstreamer-1.0 \
+    GST_PLUGIN_SYSTEM_PATH=/usr/lib/gstreamer-1.0 \
+    GST_REGISTRY=/var/tmp/kanki-gstreamer-registry.bin \
+    GST_REGISTRY_FORK=no \
+    GST_DEBUG_NO_COLOR=1 \
+    /usr/sbin/chroot "$CHROOT" /usr/bin/qemu-arm-static \
+    /opt/kanki-audit/kanki-audio --tts-runtime-probe \
+    > "$EVIDENCE/audio-tts-runtime-probe.txt" 2>&1; then
+    cat "$EVIDENCE/audio-tts-runtime-probe.txt" >&2
+    fail "packaged Kanki TTS pipeline probe failed under the PW6 loader"
+fi
+grep -Fxq 'kanki-tts-runtime=pass' "$EVIDENCE/audio-tts-runtime-probe.txt" ||
+    fail "packaged Kanki TTS pipeline probe lacks success marker"
+
 {
     printf 'pw6_rootfs_audit=pass\n'
     printf 'candidate=%s\n' "$CANDIDATE"
@@ -706,6 +754,8 @@ grep -Fq 'gst-play: preloaded /usr/lib/tts/libIvonaEInkCommon.so.1.0' \
     printf 'ui_backend_dlopen_dlsym=pass\n'
     printf 'lab126_css_pixel_symbols=pass\n'
     printf 'gstreamer_mixersink_ttssrc=pass\n'
+    printf 'tts_protocol_properties=pass\n'
+    printf 'tts_runtime_pipeline=pass\n'
     printf 'hardware_execution=not_run\n'
 } > "$EVIDENCE/SUMMARY.txt"
 (

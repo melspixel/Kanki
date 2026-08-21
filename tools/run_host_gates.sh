@@ -48,6 +48,8 @@ cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsynt
 cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_sync_cli.c -Ibridge
 cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_raise.c
 cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_diag_server.c
+cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/audio/kanki_audio_protocol.c -Idevice/audio
+cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/audio/kanki_tts_player.c -Idevice/audio
 node --check assets/device/decks.js
 node --check assets/reviewer/reviewer.js
 node --check assets/reviewer/css_compat.js
@@ -59,6 +61,7 @@ node --check tests/mathjax_vendor_contract.test.cjs
 node --check tests/apkg_reviewer_contract.test.cjs
 node --check tests/css_compat.test.cjs
 node --check tests/diagnostics_contract.test.cjs
+node --check tests/audio_protocol_contract.test.cjs
 sh -n scripts/kanki-launch.sh
 sh -n scripts/kanki-sync.sh
 sh -n scripts/kanki-report.sh
@@ -99,12 +102,14 @@ node tests/renderer_contract.test.cjs
 node tests/navigation_contract.test.cjs
 node tests/css_compat.test.cjs
 node tests/diagnostics_contract.test.cjs
+node tests/audio_protocol_contract.test.cjs
 
 printf '%s\n' '== reproducible package archive contract =='
 python3 tests/reproducible_zip_contract.py
 sh tests/install_integrity_contract.sh
 sh tests/operation_lock_contract.sh
 sh tests/device_css_lifecycle_contract.sh
+sh tests/audio_runtime_contract.sh
 python3 tests/runtime_preflight_contract.py
 python3 tests/report_privacy_contract.py
 

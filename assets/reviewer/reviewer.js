@@ -55,6 +55,9 @@
       } else if (tag.kind === 'tts' && tag.text) {
         values['kind' + index] = 'tts';
         values['value' + index] = tag.text;
+        values['lang' + index] = tag.lang || '';
+        values['voices' + index] = tag.voices && tag.voices.length ? tag.voices.join(',') : '';
+        values['speed' + index] = typeof tag.speed === 'number' ? tag.speed : 1.0;
       } else {
         continue;
       }

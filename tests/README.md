@@ -7,6 +7,10 @@ Tests in this directory are cross-layer contracts for the rewrite. They are inte
 - reviewer contracts cover the persistent `#qa`, card classes, script
   execution, semantic AV ordering, navigation, generic old-WebKit CSS,
   bounded diagnostics and real pinned MathJax SVG;
+- audio contracts execute browser encoding, bounded native parsing and the
+  source-owned TTS adapter against fake GStreamer/GObject ABIs, including the
+  fixed PW6 `textsource`/`voicelang`/`speed` properties and `mixersink`
+  pipeline lifecycle;
 - bridge integrations cover a pinned-Anki disposable collection, review/type
   answer/bury/reopen behavior, normal/full/media sync and the seven unchanged
   upstream APKG fixtures;

@@ -26,6 +26,8 @@ Kanki equivalents:
 - `assets/reviewer/reviewer.js`
 - `assets/device/reviewer-shell.html`
 - `device/kanki_device.c`
+- `device/audio/kanki_audio_protocol.c`
+- `device/audio/kanki_tts_player.c`
 
 ## Parity matrix
 
@@ -42,6 +44,7 @@ Kanki equivalents:
 | MathJax | Lazily load MathJax, clear prior typeset state and await typesetting scoped to `#qa` before the shown hook | Load pinned MathJax 2.7.9 once, clear prior jax and await SVG typesetting scoped to persistent `#qa` before UI state/diagnostics | Real vendor host contract passes; PW6 geometry/performance pending |
 | Platform scaling | Desktop Qt/WebEngine uses CSS pixels/device scale | Lab126 WebKit native CSS-pixel/pixel-density/full-content-zoom path configured once per persistent WebView | Executable native lifecycle contract and fixed-rootfs symbol/loader audit pass; PW6 computed geometry pending |
 | AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` after partial render and semantic `FrontSide` expansion | Synthetic sound/TTS plus fixed upstream `media.apkg` sound pass; COCA/user/PW6 evidence pending |
+| TTS metadata/runtime | Preserve text, language, preferred voices and speed; select an available host voice | Direct and ordered protocols preserve all fields; fixed-PW6 adapter sets `textsource`, `voicelang` and clamped native `speed` on `ttssrc` before `mixersink` | Executable browser/parser/fake-runtime contracts pass; PW6 exposes no voice-ID property, and audible language/routing evidence remains open |
 | Replay button | Reviewer-owned semantic control | Reviewer-owned 40px semantic control | Implemented; unrelated SVG must stay untouched |
 | Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Basic/cloze plus known-empty/unknown-field disposable fixtures pass; PW6 pending |
 | Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` and replaces marker in place | Basic and backend-extracted cloze comparisons pass; PW6 pending |

@@ -56,6 +56,17 @@ descriptor, while audio and diagnostics do not. PID/mode files are diagnostic
 metadata and never authorize stale-lock deletion. See
 `adr/0005-kernel-owned-collection-operation-lock.md`.
 
+The reviewer sends bounded semantic AV requests to the loopback audio service.
+Sound tags resolve only inside `collection.media`, decode to PCM and use the
+pinned source-built WAV helper. TTS tags retain text, language, voice
+preferences and speed through a source-owned C protocol. On the fixed PW6
+runtime, Kanki sets the authenticated `ttssrc` plugin's writable `textsource`,
+`voicelang` and `speed` properties through GObject and connects a constant
+pipeline to `mixersink`; card text is never parsed as a command or pipeline.
+The firmware exposes no voice-ID property, so voice preferences remain typed
+but device voice-name selection is an explicit platform limitation. See
+`adr/0006-pw6-typed-tts-runtime.md`.
+
 ## Data flow
 
 ```text
@@ -63,6 +74,8 @@ Anki Backend -> semantic bridge JSON -> native device controller
                                       -> reviewer JSON packet
 persistent WebKit #qa <- evaluate_script <--- native device controller
 Kindle button/touch -> native device controller -> semantic bridge -> Anki Backend
+typed AV tags -> reviewer loopback request -> native audio protocol
+              -> sound decode / PW6 ttssrc -> mixersink
 ```
 
 ## Failure boundaries
