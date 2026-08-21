@@ -174,6 +174,38 @@ It therefore does not prove native audio output on PW6/AirPods, typed-answer
 focus/scroll, MathJax geometry/performance, live AnkiWeb/PW6 sync, independent
 cross-host reproducibility, or any real-device lifecycle behavior.
 
+### Repository maintenance checkpoint
+
+Repository cleanup through exact rewrite SHA
+`a7b779a73c11a15c4980a1294a284a285c4a8672` passed
+`sh tools/run_host_gates.sh` with the existing project-local Rust 1.92.0,
+Node 20.18.2 and locked jsdom/MathJax dependencies. The first invocation after
+session restoration stopped before tests because `cargo` was absent from the
+restored shell PATH; selecting the already-installed project-local toolchain
+resolved the environment precondition. No compiler, test or package failure
+was introduced by the cleanup.
+
+The useful ownership documentation was integrated, obsolete UI migration
+scripts and the sole obsolete Rust backend scaffold were removed after
+reference/dependency audits, and 15 static historical/temporary remote
+branches were deleted atomically with exact-SHA leases. Superseded PRs #8, #9,
+#12, #13 and #17 were closed without merge. `main` remains unchanged at
+`f9d2c884a3e191f5975d484675a3283d1bbb4c3d` and PR #10 remains Draft.
+`kindle-anki-port` advanced repeatedly during deletion (observed through
+`3c0f59d6bc159c86d24748f87677499ed9515bb7`), so that branch and PR #14 were
+excluded pending stabilization and a fresh audit.
+
+This maintenance SHA has host evidence but is not promoted over the fully
+recorded non-hardware candidate `313d52d8aeb7b37b6b421b69609d059b30916ecb`:
+its canonical package/rootfs evidence has not yet been rerun. The first open
+release-evidence failure remains physical PW6 Gate E
+(`hardware_execution=not_run`), and no original COCA/user APKG is locally
+available. The next verification command for the cleanup head is:
+
+```sh
+bash tools/local_package_docker.sh
+```
+
 ### Baseline failure ledger
 
 - Initial audited SHA: `6e8330a4384af20af2c4404a12f8521638265147`.

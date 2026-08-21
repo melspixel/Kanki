@@ -240,6 +240,19 @@ A green build is not hardware acceptance. A device screenshot is not backend/syn
 
 PR #10 stays Draft until host, Anki bridge, ARMHF, renderer/package and PW6 acceptance evidence all belong to the release candidate.
 
+Historical branch retirement is a provenance-sensitive operation:
+
+1. commit a branch-name to exact-tip-SHA ledger before deletion;
+2. audit every unique commit/tree and integrate or explicitly reject its
+   behavior on `rewrite-v1`;
+3. close superseded PRs without merging rejected experimental architecture;
+4. immediately before deletion, read the remote tips again and delete the
+   reviewed set atomically with an exact-SHA force-with-lease for every ref;
+5. exclude any ref that moved, preserve its live name, and repeat the content
+   audit only after the writer and tip have stabilized.
+
+Never include `main` or `rewrite-v1` in a historical deletion set.
+
 ## Session-end protocol
 
 Before handing the project to another maintainer or ending a substantial implementation session:
