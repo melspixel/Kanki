@@ -37,8 +37,8 @@ def main() -> int:
 
     # Exact-rootfs QEMU must execute before package construction. Missing private
     # rootfs bytes must return an ARMHF checkpoint without invoking packaging.
-    qemu_gate = text.index('"qemu-exact-rootfs"')
-    package_gate = text.index('"package-audit"')
+    qemu_gate = text.index('if not gate(\n        "qemu-exact-rootfs",')
+    package_gate = text.index('if not gate(\n        "package-audit",')
     assert qemu_gate < package_gate, "vm-advance packages before exact-rootfs QEMU"
 
     no_rootfs = text.index("if not args.rootfs:")
