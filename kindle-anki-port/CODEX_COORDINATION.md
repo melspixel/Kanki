@@ -1,16 +1,18 @@
 # Kindle Anki Port — Codex Coordination Channel
 
-Last updated: 2026-08-21 UTC
+Last updated: 2026-08-22 UTC
 
 ## Purpose
 
-This file is the asynchronous coordination surface between VM-side porting work and any Codex/local-machine worker. Read `HANDOFF.md`, `PROGRESS.md`, `docs/VM_BUILD_20260821.md`, `docs/VM_CONTINUATION_20260821.md`, and `docs/TEST_ENVIRONMENT.md` first. Do not import code from Ranki, `rewrite-v1`, historical card-template patches or preload runtimes into the independent port.
+This file is the asynchronous coordination surface between VM-side porting work and any Codex/local-machine worker. Read `HANDOFF.md`, `PROGRESS.md`, `docs/VM_BUILD_20260821.md`, `docs/VM_CONTINUATION_20260821.md`, `docs/VM_CONTINUATION_20260822.md`, and `docs/TEST_ENVIRONMENT.md` first. Do not import code from Ranki, `rewrite-v1`, historical card-template patches or preload runtimes into the independent port.
 
 ## Current constraints and status
 
 GitHub Actions runtime is exhausted. Iterative builds run in the isolated Linux VM/container and all meaningful source, scripts, diagnostics, checksums, reports and final binaries must be persisted back to `melspixel/Kanki:kindle-anki-port`.
 
-The ordinary independent source tree is now materialized in GitHub and obsolete split archive staging has been removed. Host semantic evidence, five real-APKG C-ABI integrations, a fresh ARMHF rebuild, package audit, QEMU static ARM sanity and an exact PW6 5.19.6 runtime manifest are present. Remaining non-hardware work is primarily a canonical-head rebuild, exact-rootfs QEMU execution, broader sync/renderer fixtures and final binary/report persistence.
+The ordinary independent source tree is materialized in GitHub and obsolete split archive staging has been removed. Host semantic evidence, five real-APKG C-ABI integrations, an ARMHF checkpoint, package audit, QEMU static ARM sanity and an exact PW6 5.19.6 runtime manifest are present. The 2026-08-22 continuation additionally hardened sync decisions/error cleanup, added executable reviewer runtime fixtures, reproduced a double-launch race and repaired launcher/sync collection ownership with a shared atomic operation lock.
+
+Remaining non-hardware work is primarily a full rebuild from the then-current canonical source head, exact-rootfs QEMU execution, further deterministic state/lifecycle review where useful, and final binary/report persistence.
 
 ## Canonical pins
 
@@ -39,7 +41,11 @@ These are hardware-in-the-loop tests, not compilation prerequisites.
 
 - full official Anki rslib persisted checkpoint: `539 passed; 0 failed`;
 - five real APKG C-ABI reviewer fixtures pass;
-- fresh `kap-app`, `kap-audio`, `kap-sync`, `libanki-kindle.so`: ARM EABI5 hard-float;
+- sync decision/error/shutdown deterministic fixture: pass;
+- reviewer public-API runtime fixture matrix: `10` groups pass;
+- double-launch defect: reproduced before repair; deterministic one-start/one-raise regression passes after repair;
+- launch/sync exclusive collection operation lock and stale-lock recovery: deterministic lifecycle fixture pass;
+- fresh `kap-app`, `kap-audio`, `kap-sync`, `libanki-kindle.so` checkpoint: ARM EABI5 hard-float;
 - cross-toolchain sysroot ceiling: GLIBC_2.18;
 - exact PW6 5.19.6 target libc ceiling: GLIBC_2.35;
 - fresh audited VM package SHA-256: `9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225` (checkpoint only);
@@ -52,7 +58,7 @@ Only claim a task by appending a dated entry under **Worker log** before editing
 
 ### Task A — canonical-source independent verification
 
-Compare the materialized `kindle-anki-port/` source at the current branch head with the files consumed by `.github/workflows/kindle-anki-port.yml`. Verify that no `part-*`, restore archive or `kindle-anki-port-overlay` input is required, and that legacy root `src/`, `scripts/`, `tools/` are not package inputs. Output a sanitized report; do not change the Anki pin.
+Compare materialized `kindle-anki-port/` source at the current branch head with files consumed by `.github/workflows/kindle-anki-port.yml`. Verify that no `part-*`, restore archive or `kindle-anki-port-overlay` input is required, and that legacy root `src/`, `scripts/`, `tools/` are not package inputs. Output a sanitized report; do not change the Anki pin.
 
 Acceptance: build inputs resolve entirely from ordinary `kindle-anki-port/` plus explicitly pinned public upstream/toolchain sources.
 
@@ -102,6 +108,15 @@ No device serial, credentials, Wi-Fi state or user content may enter the report.
 ### Task C — independent package/lifecycle audit
 
 Review `native/app.c` plus `app_part*.inc`, `native/audio.c`, `native/sync.c`, `scripts/launch.sh`, `scripts/sync.sh`, packaging and test scripts for repeated launch/raise/exit, stale PID validation, clean shutdown, Bluetooth reroute, credentials/state exclusion and absence of historical runtime dependencies.
+
+The current source intentionally uses `${KAP_OPERATION_LOCK_DIR:-$APP/.kap-operation.lock}` for launch/sync mutual exclusion. Audit this mechanism specifically for:
+
+- TOCTOU gaps before child PID publication;
+- stale/dead owner reclamation;
+- live sync owner refusal behavior;
+- launcher-triggered sync followed by relaunch;
+- signal/error cleanup of lock ownership;
+- exclusion of transient lock files from release archives.
 
 Acceptance: report exact source commit and either PASS or file/line-specific defects. Do not mark the project complete.
 
