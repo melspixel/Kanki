@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           PROJECT="$PROJECT" OUT="$RUNNER_TEMP/qemu-host-sanity" \
-            "$PROJECT/testenv/scripts/run-qemu-host-sanity.sh"
+            bash "$PROJECT/testenv/scripts/run-qemu-host-sanity.sh"
 
       - name: ARMHF cross-build and ABI audit
         env:
