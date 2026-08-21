@@ -5,12 +5,14 @@ on:
     branches: [rewrite-v1]
     paths:
       - 'bridge/**'
+      - 'tools/run_anki_bridge_host.sh'
       - '.github/workflows/anki-bridge.yml'
       - 'third_party/anki'
   pull_request:
     branches: [main]
     paths:
       - 'bridge/**'
+      - 'tools/run_anki_bridge_host.sh'
       - '.github/workflows/anki-bridge.yml'
       - 'third_party/anki'
   workflow_dispatch:
@@ -29,68 +31,17 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: 1.92.0
-      - name: Build prerequisites and Anki translations
+      - name: Install host prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config protobuf-compiler python3 perl make git gcc
-          git -C third_party/anki submodule update --init --depth 1 ftl/core-repo ftl/qt-repo
-          mkdir -p third_party/anki/out/rslib/proto
-          mkdir -p third_party/anki/out/extracted/protoc/bin
-          ln -sf /usr/bin/protoc third_party/anki/out/extracted/protoc/bin/protoc
-      - name: Embed semantic Kanki bridges in pinned Anki
-        run: |
-          cp bridge/anki_bridge.rs third_party/anki/rslib/src/kanki_bridge.rs
-          cp bridge/sync_bridge.rs third_party/anki/rslib/src/kanki_sync_bridge.rs
-          python3 - <<'PY'
-          from pathlib import Path
-          lib = Path('third_party/anki/rslib/src/lib.rs')
-          text = lib.read_text()
-          needle = 'pub mod version;'
-          assert needle in text
-          lib.write_text(text.replace(
-              needle,
-              needle + '\npub mod kanki_bridge;\npub mod kanki_sync_bridge;',
-              1,
-          ))
-
-          cargo = Path('third_party/anki/rslib/Cargo.toml')
-          text = cargo.read_text()
-          if '[lib]' not in text:
-              text += '\n[lib]\ncrate-type = ["cdylib"]\n'
-          cargo.write_text(text)
-          PY
-      - name: Compile typed backend library
-        working-directory: third_party/anki
+      - name: Run canonical typed Anki host bridge gate
         env:
           PROTOC: /usr/bin/protoc
-        run: cargo build -p anki --release --features rustls
-      - name: C ABI smoke test with disposable collection
-        run: |
-          LIB=third_party/anki/target/release/libanki.so
-          test -f "$LIB"
-          mkdir -p /tmp/kanki-smoke/media
-          gcc -O2 -Wall -Wextra -Werror bridge/smoke.c -Ibridge -L"$(dirname "$LIB")" -lanki -Wl,-rpath,"$(realpath $(dirname "$LIB"))" -o /tmp/kanki-bridge-smoke
-          /tmp/kanki-bridge-smoke /tmp/kanki-smoke/collection.anki2 /tmp/kanki-smoke/media /tmp/kanki-smoke/media.db2 | tee bridge-smoke.txt
-          grep -q 'build={"ok":true' bridge-smoke.txt
-          grep -q 'open={"ok":true' bridge-smoke.txt
-          grep -q 'decks={"ok":true' bridge-smoke.txt
-          grep -q 'close={"ok":true' bridge-smoke.txt
-          grep -q 'sync_open={"ok":true' bridge-smoke.txt
-          grep -q 'sync_close={"ok":true' bridge-smoke.txt
-      - name: Audit ABI and semantic exports
-        run: |
-          LIB=third_party/anki/target/release/libanki.so
-          nm -D "$LIB" | grep -E ' kanki_(build_info_json|core_new|open_collection_json|deck_tree_json|next_card_json|prepare_answer_json|answer_json|bury_current_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee bridge-exports.txt
-          grep -q ' kanki_prepare_answer_json$' bridge-exports.txt
-          readelf -d "$LIB" > bridge-dynamic.txt
-          sha256sum "$LIB" > bridge-library.sha256
+        run: bash tools/run_anki_bridge_host.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: typed-anki-bridge-evidence
-          path: |
-            bridge-smoke.txt
-            bridge-exports.txt
-            bridge-dynamic.txt
-            bridge-library.sha256
+          path: out/host-anki/
           if-no-files-found: warn

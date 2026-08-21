@@ -12,6 +12,7 @@ need() {
 }
 
 need cargo
+need bash
 need python3
 need node
 need npm
@@ -46,6 +47,8 @@ sh -n scripts/kanki-launch.sh
 sh -n scripts/kanki-sync.sh
 sh -n scripts/kanki-report.sh
 sh -n tools/install_kindlehf_toolchain.sh
+bash -n tools/run_anki_bridge_host.sh
+sh -n tools/local_anki_bridge_docker.sh
 
 printf '%s\n' '== host unit/integration =='
 cargo test --workspace

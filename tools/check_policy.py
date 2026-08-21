@@ -91,6 +91,22 @@ for workflow in (ROOT / ".github/workflows").glob("*.yml"):
     if "releases/latest/download/kindlehf" in workflow_text:
         errors.append(f"floating KindleHF toolchain URL in {workflow.relative_to(ROOT)}")
 
+# The host Anki bridge recipe is a repository script that can run locally or
+# in CI. The workflow may install runner prerequisites and upload evidence, but
+# must not grow a second copy of bridge injection/build/smoke logic.
+anki_bridge_workflow = (ROOT / ".github/workflows/anki-bridge.yml").read_text(
+    encoding="utf-8"
+)
+if "bash tools/run_anki_bridge_host.sh" not in anki_bridge_workflow:
+    errors.append("Anki bridge workflow does not call the canonical host recipe")
+for duplicated in [
+    "cp bridge/anki_bridge.rs",
+    "cargo build -p anki --release --features rustls",
+    "bridge/smoke.c -Ibridge",
+]:
+    if duplicated in anki_bridge_workflow:
+        errors.append(f"Anki bridge workflow duplicates canonical logic: {duplicated}")
+
 if errors:
     print("\n".join(errors), file=sys.stderr)
     raise SystemExit(1)
