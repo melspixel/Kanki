@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-22
-**Current fully recorded non-hardware candidate:** `202c020154386c56ef8f0f6dcdf7a888d9681210`
+**Current fully recorded non-hardware candidate:** `3fed2a3419d1f63cba49f1fe4389be19262a1b2e`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -86,7 +86,7 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware candidate is recorded for exact SHA
-`202c020154386c56ef8f0f6dcdf7a888d9681210`:
+`3fed2a3419d1f63cba49f1fe4389be19262a1b2e`:
 
 - host: macOS 26.4.1 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -108,7 +108,11 @@ The current clean local non-hardware candidate is recorded for exact SHA
   manifest are rejected with distinct failures. The runtime-preflight contract
   also proves launch, standalone sync and reporting authenticate and execute
   the verifier before log, lock or report-input access, and symlinks are
-  rejected before manifest paths are hashed;
+  rejected before manifest paths are hashed. The report privacy contract proves
+  private modes, unique staging, atomic publication, cleanup after failure and
+  exclusion of config/raw captures. The pinned-Anki i18n determinism contract
+  authenticates the one build-only `HashMap` to `BTreeMap` normalization and
+  rejects drift on either side;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
   native x86-64 typed library; a backend-created disposable nine-card
   collection passed queue counts, question/answer rendering, semantic
@@ -127,7 +131,7 @@ The current clean local non-hardware candidate is recorded for exact SHA
   idle abort. Its evidence and server log passed a scan for the synthetic
   username, password and derived hkey. All 24 C ABI exports declared by the
   review and sync headers were present; library SHA-256 was
-  `066193df0ca31fe6a52d5fd6c837433bc68d350a4a25c9273f9035467d74de0d`;
+  `6312283a7354f096b49d1e2e639a8fd29cede4b2b9b413dd0ada26136db55b8c`;
 - the same clean typed-Anki run checksum-verified all seven unmodified APKGs
   available in the pinned Anki test corpus, imported each into its own
   backend-created disposable collection, selected a queued deck, rendered a
@@ -144,17 +148,24 @@ The current clean local non-hardware candidate is recorded for exact SHA
   required review/sync exports were individually present; required
   GLIBC versions were within the pinned sysroot. The package contains the
   checksum-pinned MathJax runtime/license and records its identity;
-- two consecutive clean invocations of the same canonical package command on
-  this SHA produced byte-identical ZIPs, `BUILD.json`, manifests and archive
-  evidence. Both archives contain 1,297 sorted regular files, use source date
-  epoch `1787333389`, and have the same SHA-256;
+- two canonical builds used distinct, previously unused Cargo target volumes.
+  Their complete package trees and ZIPs were byte-identical, as were
+  `libanki-kanki.so`, `BUILD.json`, manifests, archive evidence and authenticated
+  Anki-i18n normalization evidence. Both archives contain 1,297 sorted regular
+  files and use source date epoch `1787335632`;
 - package SHA-256:
-  `9ce905be17f8b4ecd6eb4337727c7efb6c5e842607876575d18a121776c04075`;
-- byte-identical companion evidence hashes are `319bc66c50e042fb3c036b30952c9066e5565ab9a2b761001ddc6032744ce11c`
-  for `BUILD.json`, `6dbc766d7957e206df7db448bee256138c72e739a4ce26aa5af7ded8e194c677`
-  for the 1,291-entry manifest, and
-  `353d978f680359806d5e8a49a296ccbca139ebd0c3496d8e17be90d28c7a631b`
-  for `archive-info.txt`;
+  `44dd56ee31c46e0ea2eb998729eabebce40ecd37d10ccd23b3161c1aff45612b`;
+- byte-identical companion hashes are
+  `f9eb906595dbd3edb7c63a3bda3a556b83f71c9c74d7c0558571a3257ba69e69`
+  for the ARMHF backend,
+  `db0d2749be79c5ea6c5fcb6306073a25686bc9d511d79baae70ace99cedc1923`
+  for `BUILD.json`,
+  `77d4471689c1462eb4c581abd85f3471c951b618ce8fc7bd32a25c71c6331e2e`
+  for the 1,291-entry manifest,
+  `aa5d153375d271b4cc403bdb9f7b9eb0e7be8f58b46eff4a4785053e05aa8ce2`
+  for `archive-info.txt`, and
+  `624e4be4d450a5d5d0bb7d4dc23c358a82f3286eff474d3ca809dedab0b6e92a`
+  for `anki-i18n-info.txt`;
 - `bash tools/local_pw6_rootfs_audit.sh` — **PASS** against the authenticated
   official PW6 5.19.6 recovery bundle. The audit verified the 412,492,749-byte
   firmware SHA-256
@@ -172,8 +183,16 @@ The current clean local non-hardware candidate is recorded for exact SHA
   GObject, WebKitGTK, X11 and the typed Anki backend, resolved all required UI
   symbols plus all four Lab126 CSS-pixel/zoom symbols, and instantiated
   `mixersink` and `ttssrc` after modeling the firmware's `/usr/lib/tts` mount.
+  The packaged report script also ran under that target BusyBox against
+  synthetic safe log/metric controls and secret/config/raw-capture sentinels.
+  It published a 0700 report tree and 0600 archive atomically, retained the
+  safe controls, excluded private inputs, leaked no sentinel and left no work
+  or partial file. `redacted-report-privacy.txt` SHA-256 is
+  `17adb0ddec66739cf46164ca2e28b2b1598a3a3db95d13186f8563d63a67bc8d`.
   Evidence is under ignored
-  `out/firmware/pw6-5.19.6/evidence/202c020154386c56ef8f0f6dcdf7a888d9681210/`;
+  `out/firmware/pw6-5.19.6/evidence/3fed2a3419d1f63cba49f1fe4389be19262a1b2e/`;
+  its self-verifying `EVIDENCE.sha256` SHA-256 is
+  `4d02dedc26e71a23d38d68dcb6e6588a4734bb182dcad0036789f7736258bf97`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -380,6 +399,43 @@ global package was installed. The first open failure remains physical PW6
 launch (`hardware_execution=not_run`), followed by real-device clean install,
 historical upgrade and rollback evidence.
 
+### Private-report and fresh-target reproducibility checkpoint
+
+A report-path audit then found a separate privacy/reliability failure: the
+diagnostic script created predictable staging paths and wrote the final archive
+directly, without owning private directory/file modes or guaranteed cleanup of
+partial state. Commit `4013f148257ecd86f2635e0bf1cbfead87dc942e`
+is the minimum runtime fix: unique process-owned staging, `umask 077`, explicit
+0700/0600 modes, signal/exit cleanup and a hidden partial archive renamed into
+place only after `tar` succeeds. Commit
+`2261278cd11956ea7ca551a8b7d3c19af410d937` adds execution of that exact
+packaged report under the fixed PW6 BusyBox, with synthetic privacy sentinels
+and safe controls. It does not read or write real `/mnt/us` data.
+
+The first truly independent package rebuild on `2261278` then exposed a
+reproducibility failure that two builds sharing one Cargo target had hidden:
+the cached-target ZIP was
+`a493e1b0903eb4f376fe6ca3a527f82e880efad32b868738aafb47665bda9724`,
+while a previously unused target produced
+`43a9e1bea3d0fa6370bb2270f8aac1be3b62a08d09ffe01d0945e5f5b347edfd`.
+Only `libanki-kanki.so` and its manifest record differed. The first differing
+backend bytes were reordered Fluent translation data generated by pinned
+Anki's build script, whose filesystem traversal and randomized `HashMap`
+iteration were not deterministic across fresh processes.
+
+Commit `6f48df98ae0c33adff3062ec9011faaf6392e6bc` is the minimum build-only fix.
+The canonical host and package recipes authenticate the exact pinned
+`gather.rs`, temporarily normalize its three translation maps to `BTreeMap`,
+record both hashes and restore the submodule on exit. It does not patch or
+change Anki runtime scheduling, rendering, sync or collection semantics. ADR
+0004 records this boundary. Documentation commit
+`3fed2a3419d1f63cba49f1fe4389be19262a1b2e` is the formal candidate audited
+above. On that one SHA, host gates, typed-Anki disposable review/APKG/sync, two
+distinct empty-target ARMHF builds, byte-identical package trees/ZIPs and the
+official PW6 rootfs/BusyBox report audit all pass. The first open failure is
+now physical PW6 launch (`hardware_execution=not_run`); no compiler, test,
+package, ABI or rootfs error remains in this category.
+
 ### Baseline failure ledger
 
 - Initial audited SHA: `6e8330a4384af20af2c4404a12f8521638265147`.
@@ -562,7 +618,8 @@ Because behavior-changing commits landed afterward, these do not close the curre
 - end-to-end ordered AV autoplay and answer-side question replay on PW6/AirPods;
 - typed-answer focus, keyboard and answer-scroll behavior on PW6 WebKit;
 - live AnkiWeb sync and normal/full/media sync acceptance on PW6;
-- independent cross-host reproducibility confirmation;
+- independent cross-host reproducibility confirmation; two distinct empty
+  Cargo targets on this host are byte-identical;
 - native GTK/WebKit window behavior and computed CSS-pixel geometry on PW6;
 - audio sequence behavior on PW6/AirPods;
 - renderer diagnostics daemon behavior on ARMHF/PW6;
@@ -570,7 +627,8 @@ Because behavior-changing commits landed afterward, these do not close the curre
   geometry; the seven small pinned-Anki APKG fixtures pass on host;
 - physical clean install / historical upgrade / rollback; host/package mixed-
   install integrity passes;
-- diagnostic privacy review;
+- physical-device diagnostic capture/privacy confirmation; the host contract
+  and synthetic PW6 BusyBox archive inspection pass;
 - PW6 review/sync/scroll/sleep-wake/USB lifecycle acceptance;
 - independent maintainer reproduction from repository docs only.
 
@@ -578,7 +636,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 1. Preserve candidate identity before device transfer with
    `shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip`; the expected value
-   is `9ce905be17f8b4ecd6eb4337727c7efb6c5e842607876575d18a121776c04075`.
+   is `44dd56ee31c46e0ea2eb998729eabebce40ecd37d10ccd23b3161c1aff45612b`.
 2. Obtain explicit local test access to original COCA and at least one
    unrelated representative APKG, then run the same privacy-reviewed path
    without modifying or committing the decks and without adding deck CSS.
