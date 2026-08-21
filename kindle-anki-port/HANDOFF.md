@@ -24,8 +24,10 @@ VM_RUNBOOK.md
 Latest detailed reports:
 
 ```text
+docs/VM_RELEASE_GATE_POLICY_HARDENING_20260822.md
 docs/VM_PACKAGE_QEMU_BINDING_20260822.md
 docs/VM_RELEASE_ENTRYPOINT_HARDENING_20260822.md
+docs/logs/KAP_RELEASE_GATE_POLICY_20260822.log
 docs/logs/KAP_RELEASE_ENTRYPOINT_AUDIT_20260822.log
 docs/logs/KAP_RELEASE_POLICY_DOC_ALIGNMENT_20260822.log
 ```
@@ -196,54 +198,61 @@ VM_RUNBOOK.md                             b00d067e33245ab971c46378d6a81760a02252
 
 ## Test-policy documentation drift found and fixed
 
-The same audit then found two required test-environment documents still describing the obsolete order:
-
-- `docs/TEST_ENVIRONMENT.md` placed installation-archive audit inside L1, before exact-rootfs L2;
-- `testenv/README.md` explicitly listed `package-and-audit.sh` as step 4 and `run-qemu-smoke.sh` as step 5.
-
-Both now encode the production invariant:
+The release policy is now aligned across `docs/TEST_ENVIRONMENT.md`, `testenv/README.md`, and `docs/RELEASE_GATES.md`:
 
 ```text
 L0 host/static
 -> L1 ARMHF/ABI
 -> L2 exact PW6 rootfs QEMU
--> L2.5 QEMU-bound package/privacy/reproducibility
+-> L2.5 package/privacy/reproducibility
 -> durable artifacts
 -> separate L5 PW6 HIL
 ```
 
-`tests/test_build_entrypoints.py` now reads both docs and fails static gates if package ordering drifts ahead of exact-rootfs QEMU again.
+`tests/test_build_entrypoints.py` reads all three policy surfaces and fails static gates if package ordering drifts ahead of exact-rootfs QEMU or if `RELEASE_GATES.md` folds HIL back into the software-delivery chain.
 
-Current blobs:
+Current release-policy blobs:
 
 ```text
 docs/TEST_ENVIRONMENT.md          86bf0ce922844fcbb74c9af4996d7dbf61635e80
 testenv/README.md                 979e45d878a3255f7ea429b17dec0dd36050f2d9
-tests/test_build_entrypoints.py   2f562fe953202736bb75a870cc6d7d188a5ab6d5
+docs/RELEASE_GATES.md             6b40202cc35115270e72811933fe781b379f8fff
+tests/test_build_entrypoints.py   009872702acab56cb1cd9ca62ce599f9d8352b6a
 ```
 
-Follow-on commits:
+Newest targeted regression evidence:
 
 ```text
-226a91a4432f9209cc201358a1cd59f9d963528a  docs: enforce QEMU-before-package test layering
-e47a4493b2360f0eb6eb4973eee902a25330175d  test: lock QEMU-before-package test layering
-79a92947096b9488003f9eb3016fd40c2bf8b2bd  docs: fix testenv gate order to QEMU before package
-d6587acd129c0af9b10eec64d4353fd3b10bd9c7  test: keep testenv docs on QEMU-before-package order
-2312494b74e17e2b7445b860360c1831bd0cbc99  docs: persist release-policy documentation audit
+old RELEASE_GATES contract: FAIL
+new RELEASE_GATES contract: PASS
+test_build_entrypoints.py py_compile: PASS
+KAP_RELEASE_GATE_POLICY_20260822.log SHA-256
+503bc75f03c1648ec7031eb7919f8a3cdf04a81f159234902a51b4134648218d
+```
+
+Detailed report: `docs/VM_RELEASE_GATE_POLICY_HARDENING_20260822.md`.
+
+Newest commits:
+
+```text
+70e939954f193e7fb70dfb7c9be295156ad6393f  docs: align release gates with exact-rootfs QEMU policy
+1baf30a181c6438c08770dce4a29ccc10e750ed0  test: lock release-gate QEMU and HIL ordering
+5d99fbaf1d0679135001e32609fe90ee677c128d  test: persist release-gate policy regression evidence
+61695cc717681c1de64b6bd212465fb7c76b5ae1  docs: record release-gate policy hardening
 ```
 
 ## Current validation limitation
 
 No fresh **complete current-head** build is claimed. The direct execution container still cannot perform a normal GitHub clone/fetch because `github.com` DNS resolution fails (`git clone` rc `128`). The private PW6 rootfs is also absent.
 
-A GitHub Actions run at checkpoint `68d0541d5ff2653f393bdbfe0ac8e451db817fea` concluded failure before any recorded job step; the job returned zero steps and no downloadable log. Treat that as unavailable Actions capacity, not as current code validation.
+The canonical GitHub Actions run for code head `1baf30a181c6438c08770dce4a29ccc10e750ed0` failed before any recorded job step; job `96929703461` returned zero steps and no usable log blob. A rerun request was accepted, but no step-level result was available in this continuation. Treat this as unavailable Actions capacity, not as code validation.
 
 Historical/synthetic evidence remains labelled as such and must not be promoted to final provenance.
 
 ## Ordered next actions
 
 1. Materialize the then-current clean branch head in a network-capable build VM with exact pinned Anki, Cargo cache, protoc and KindleHF inputs.
-2. Run complete static gates, including QEMU/package, VM-driver, workflow and documentation-order contracts.
+2. Run complete static gates, including release-entrypoint, VM-driver, QEMU/package and all three documentation-order contracts.
 3. From the same clean source/Anki identity, run full official backend tests and five real APKG integrations including typed-answer coverage.
 4. Run ARMHF cross-build plus ELF/ABI/GLIBC/export audit.
 5. Supply the checksum-matching private PW6 5.19.6 rootfs and run exact-rootfs QEMU against those exact fresh ARMHF outputs.
