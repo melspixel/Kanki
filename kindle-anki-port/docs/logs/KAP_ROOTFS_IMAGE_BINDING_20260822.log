@@ -1,0 +1,4 @@
+matching_rootfs_image_rc=0
+wrong_rootfs_image_rc=66
+rootfs_verified_false_rc=66
+missing_image_verification_marker_rc=66
