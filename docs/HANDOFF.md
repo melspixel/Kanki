@@ -118,7 +118,7 @@ Typed Anki native-host integration has a separate canonical test recipe:
 tools/run_anki_bridge_host.sh
 ```
 
-`.github/workflows/anki-bridge.yml` and
+The `typed-anki-host` job in `.github/workflows/ci.yml` and
 `tools/local_anki_bridge_docker.sh` are executors for that recipe. Its
 disposable collection is always created under `mktemp`; it must never point at
 `/mnt/us/anki_data`. The recipe also starts the pinned Anki sync server on a
@@ -155,13 +155,10 @@ must retain `hardware_execution=not_run` until the exact ZIP runs on PW6.
 ## Build and CI ownership map
 
 - `.github/workflows/actions-probe.yml` — hosted runner/account execution probe only
-- `.github/workflows/ci.yml` — host workspace, policy, reviewer contract, self-test, ARM scaffold
-- `.github/workflows/anki-bridge.yml` — typed Anki host integration
-- `.github/workflows/anki-bridge-arm.yml` — typed Anki ARMHF build and ABI
-- `.github/workflows/device.yml` — Kindle GTK/WebKit native shell
-- `.github/workflows/audio.yml` — loopback audio service and native player
-- `.github/workflows/css-compat.yml` — old-WebKit generic CSS compatibility
-- `.github/workflows/package.yml` — hosted executor for the canonical package script
+- `.github/workflows/ci.yml` — invokes the canonical host gate and typed-Anki
+  Docker executor; it contains no product build/test recipe
+- `.github/workflows/package.yml` — invokes the canonical ARMHF package script
+  and uploads the SHA-named ZIP plus build/manifest/archive evidence
 - `tools/run_host_gates.sh` — local host gate entry point
 - `tools/run_anki_bridge_host.sh` — canonical native-host typed Anki/disposable collection recipe
 - `tools/install_host_node.sh` / `tools/install_host_jsdom.sh` — pinned host-test runtime installers below `out/`
@@ -171,7 +168,12 @@ must retain `hardware_execution=not_run` until the exact ZIP runs on PW6.
 - `tools/audit_pw6_rootfs.sh` — canonical fixed-firmware PW6 rootfs ABI audit
 - `tools/local_pw6_rootfs_audit.sh` — local Docker executor for the rootfs audit
 
-If a workflow and the canonical script disagree, the workflow must be reduced to invoking the script; do not create another embedded copy of the package recipe.
+The former component ARM bridge, device, audio, CSS and standalone Anki
+workflows were removed after the same-SHA local host/Anki/package/rootfs matrix
+passed. Their direct compiler/test bodies duplicated the scripts above.
+`tools/check_policy.py` now rejects extra workflow sprawl and direct
+`cargo`/cross-GCC/npm/test commands in YAML. If a workflow and a canonical
+script disagree, reduce the workflow to invoking the script.
 
 ## Local build evidence
 

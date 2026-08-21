@@ -178,8 +178,9 @@ out/host-anki/bridge-library.sha256
 
 This is executable synthetic review/sync/ownership/ABI evidence plus fixed
 upstream APKG structural evidence, not original COCA/user-deck, live AnkiWeb or
-PW6 evidence. The Anki bridge workflow invokes the same canonical script
-instead of embedding its own injection/build/test recipe.
+PW6 evidence. The `typed-anki-host` job in the consolidated CI workflow invokes
+the same Docker/canonical script path instead of embedding its own
+injection/build/test recipe.
 
 ## Canonical Linux recipe without Docker
 

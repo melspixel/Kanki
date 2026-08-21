@@ -34,7 +34,8 @@ The branch contains source-owned implementations for the major runtime paths:
 - duplicate-instance/reactivation helper;
 - build identity, manifest verification, rollback/data boundaries;
 - redacted diagnostic report path;
-- host/bridge/ARM/device/audio/CSS/package workflows and handoff docs.
+- three thin hosted executor workflows plus canonical host/Anki/ARMHF scripts
+  and handoff docs.
 
 Implementation presence is not the same as verification. Issue #11 remains the closure authority.
 
@@ -203,6 +204,32 @@ available. Before transferring the candidate, the next command is:
 
 ```sh
 shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip
+```
+
+### CI orchestration checkpoint
+
+At exact maintenance SHA
+`ca345e5f7c6abb126833e55d3eebe52098d64bf4`, the eight hosted workflows were
+reduced to `actions-probe.yml`, `ci.yml` and `package.yml`. The host workflow
+now calls only the canonical host gate and typed-Anki Docker executor; the
+package workflow calls only the canonical package recipe and uploads an
+exact-SHA-named artifact with `BUILD.json`, manifest and archive evidence. The
+ARM bridge, device, audio, CSS and standalone Anki YAML compiler/test bodies
+were removed. Policy rejects their reintroduction or a fourth workflow.
+
+All three YAML files parsed successfully, `sh tools/run_host_gates.sh` passed,
+and a clean canonical package validation at this exact SHA passed in the
+separate ignored directory `out/workflow-validation-ca345e5/`; its ZIP SHA-256
+is `94915f0933d96105a96598446855cb3ec5e1c94836865c36d662797ce49a4c91`.
+That workflow-only validation is not promoted over candidate
+`7a0d83975d7f8180f22abec8cc7596e03622ce66`, whose complete same-SHA evidence
+and original ZIP remain intact. No real
+compiler, test or package failure was found. Hosted execution is still
+unverified because the known runner-allocation failure occurs before steps.
+The next repository-cleanup command is:
+
+```sh
+git ls-remote --heads origin kindle-anki-port
 ```
 
 ### Baseline failure ledger

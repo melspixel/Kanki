@@ -184,16 +184,23 @@ gate rejects their reintroduction; the release build has no undocumented
 
 ### 4.3 CI workflow sprawl
 
-`.github/workflows/` currently contains separate host, Anki bridge, ARM bridge, audio, device, CSS, package and Actions-probe workflows.
+After exact SHA `7a0d83975d7f8180f22abec8cc7596e03622ce66`
+passed host, typed-Anki/APKG/sync, two reproducible ARMHF package builds and
+the official PW6 rootfs audit, the eight workflows were consolidated to three:
 
-Component workflows were useful while discovering the architecture, but they duplicate setup and make the project look more fragmented than it is. Do **not** collapse them before real local baselines exist. After the local build is healthy, consolidate toward a smaller model, for example:
+- `ci.yml` invokes `tools/run_host_gates.sh` and the canonical typed-Anki
+  Docker executor;
+- `package.yml` invokes `tools/build_kindle_package.sh` and uploads the
+  SHA-named artifact plus build identity/manifest/archive evidence;
+- `actions-probe.yml` remains temporarily isolated while hosted runner
+  allocation is broken.
 
-- `ci.yml` — host/source/unit/renderer contracts;
-- `kindle.yml` — typed Anki ARMHF + native device/audio/diagnostics + ABI checks;
-- `package.yml` — invokes the canonical package script and uploads the artifact;
-- `actions-probe.yml` — temporary only while hosted runner infrastructure is broken; remove once no longer useful.
-
-Build logic belongs in versioned scripts under `tools/`, not copied into YAML.
+The standalone Anki, ARM bridge, device, audio and CSS workflows were removed;
+their useful gates are already owned by the canonical scripts. A separate
+`kindle.yml` was not added because it would rebuild the same ARMHF backend,
+device, audio and diagnostics objects already covered by the package recipe.
+Policy rejects both extra workflow files and direct compiler/test bodies in
+YAML. Build logic belongs in versioned scripts under `tools/`.
 
 ### 4.4 Documentation overlap
 

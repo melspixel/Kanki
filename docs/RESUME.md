@@ -102,19 +102,19 @@ If a proposed fix violates any invariant above, stop and redesign it.
 Hosted workflows remain useful evidence/executors:
 
 - `.github/workflows/actions-probe.yml` — minimal hosted-runner/account execution probe
-- `.github/workflows/ci.yml` — Rust workspace, policy, reviewer contract, host self-test, ARM scaffold
-- `.github/workflows/anki-bridge.yml` — typed Anki host bridge/integration
-- `.github/workflows/anki-bridge-arm.yml` — typed Anki ARMHF build/ABI
-- `.github/workflows/device.yml` — native Kindle device/diagnostics shell
-- `.github/workflows/audio.yml` — audio service/helper
-- `.github/workflows/css-compat.yml` — legacy WebKit CSS compatibility corpus
-- `.github/workflows/package.yml` — hosted executor for `tools/build_kindle_package.sh`
+- `.github/workflows/ci.yml` — thin executor for canonical host and typed-Anki gates
+- `.github/workflows/package.yml` — thin executor/artifact uploader for `tools/build_kindle_package.sh`
+
+The detailed ownership map is maintained only in `docs/HANDOFF.md`; do not
+restore the former component-workflow list here.
 
 Local entry points:
 
 ```sh
 sh tools/run_host_gates.sh
+sh tools/local_anki_bridge_docker.sh
 bash tools/local_package_docker.sh
+bash tools/local_pw6_rootfs_audit.sh
 ```
 
 `docs/TESTING.md` defines the closure gates. PW6 acceptance still requires the real device.
