@@ -33,6 +33,15 @@ def main() -> int:
     ):
         require(top_make, needle, "top-level Makefile")
 
+    # Release entrypoints must preserve the source -> ARMHF -> exact-rootfs QEMU
+    # -> package chain. A plain `make package` must never silently package ARMHF
+    # bytes that have not passed the current QEMU release gate.
+    require(top_make, "QEMU ?= $(PROJECT_ROOT)/$(BUILD)/qemu", "top-level Makefile")
+    require(top_make, 'OUT="$(QEMU)"', "top-level Makefile qemu-smoke")
+    require(top_make, 'BUILD_COMMIT="$(BUILD_COMMIT)"', "top-level Makefile qemu-smoke")
+    require(top_make, 'QEMU=<fresh run-qemu-smoke output directory> is required', "top-level Makefile package")
+    require(top_make, 'QEMU="$(QEMU)"', "top-level Makefile package")
+
     require(env_make, 'ANKI="$(ANKI_ROOT)"', "testenv Makefile")
     require(env_make, 'TOOLCHAIN_BIN="$(TOOLCHAIN_BIN)"', "testenv Makefile")
     require(env_make, 'python3 scripts/package_audit.py --package "$(PACKAGE)"', "testenv Makefile")
@@ -51,6 +60,18 @@ def main() -> int:
         'bash "$PROJECT/testenv/scripts/run-qemu-host-sanity.sh"',
         "canonical workflow",
     )
+    # Public CI has no proprietary PW6 rootfs bytes. It must persist an explicit
+    # non-release build checkpoint instead of creating a final-looking ZIP that
+    # bypasses the exact-rootfs QEMU gate.
+    require(workflow, "Persist non-hardware build checkpoint", "canonical workflow")
+    require(workflow, "NOT-A-RELEASE.txt", "canonical workflow")
+    require(workflow, "It intentionally contains no Kindle-Anki-Port-PW6-armhf.zip.", "canonical workflow")
+    require(workflow, "Final packaging requires checksum-verified PW6 5.19.6 exact-rootfs QEMU", "canonical workflow")
+    if workflow.count("package-and-audit.sh") != 2:
+        raise AssertionError(
+            "canonical workflow should mention package-and-audit.sh only in the two explanatory checkpoint lines"
+        )
+    forbid(workflow, '"$PROJECT/testenv/scripts/package-and-audit.sh"', "canonical workflow")
 
     print("test_build_entrypoints: ok")
     return 0
