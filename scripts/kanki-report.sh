@@ -4,8 +4,12 @@ set -eu
 DIR=/mnt/us/extensions/kanki
 OUT_ROOT=/mnt/us/kanki_reports
 STAMP=$(date '+%Y%m%d-%H%M%S' 2>/dev/null || echo unknown-time)
-WORK="$OUT_ROOT/kanki-report-$STAMP"
-ARCHIVE="$OUT_ROOT/kanki-report-$STAMP.tar.gz"
+WORK="$OUT_ROOT/kanki-report-$STAMP-$$"
+WORK_NAME=${WORK##*/}
+ARCHIVE="$OUT_ROOT/kanki-report-$STAMP-$$.tar.gz"
+ARCHIVE_PART="$OUT_ROOT/.kanki-report-$STAMP-$$.tar.gz.partial"
+WORK_CREATED=0
+ARCHIVE_PART_OWNED=0
 LOG="$DIR/kanki.log"
 RENDER_DEBUG="$DIR/render-debug"
 RENDER_PREVIOUS="$DIR/render-debug.previous"
@@ -32,7 +36,53 @@ else
     exit "$STATUS"
 fi
 
-mkdir -p "$WORK"
+umask 077
+if [ -L "$OUT_ROOT" ]; then
+    printf '%s\n' 'kanki-report: symbolic report output root refused' >&2
+    exit 72
+fi
+if [ ! -d "$OUT_ROOT" ]; then
+    if ! mkdir "$OUT_ROOT"; then
+        printf '%s\n' 'kanki-report: unable to create report output root' >&2
+        exit 72
+    fi
+fi
+if [ -L "$OUT_ROOT" ] || [ ! -d "$OUT_ROOT" ]; then
+    printf '%s\n' 'kanki-report: report output root is not a real directory' >&2
+    exit 72
+fi
+if ! chmod 700 "$OUT_ROOT"; then
+    printf '%s\n' 'kanki-report: unable to protect report output root' >&2
+    exit 72
+fi
+for OUTPUT_PATH in "$WORK" "$ARCHIVE" "$ARCHIVE_PART"; do
+    if [ -e "$OUTPUT_PATH" ] || [ -L "$OUTPUT_PATH" ]; then
+        printf 'kanki-report: refusing existing output path: %s\n' \
+            "$OUTPUT_PATH" >&2
+        exit 72
+    fi
+done
+
+cleanup_report() {
+    if [ "$WORK_CREATED" -eq 1 ]; then
+        case "$WORK" in
+            "$OUT_ROOT"/kanki-report-*) rm -rf "$WORK" ;;
+        esac
+    fi
+    if [ "$ARCHIVE_PART_OWNED" -eq 1 ]; then
+        case "$ARCHIVE_PART" in
+            "$OUT_ROOT"/.kanki-report-*.tar.gz.partial) rm -f "$ARCHIVE_PART" ;;
+        esac
+    fi
+}
+trap cleanup_report EXIT
+trap 'exit 74' HUP INT TERM
+
+if ! mkdir "$WORK"; then
+    printf '%s\n' 'kanki-report: unable to create private report work tree' >&2
+    exit 72
+fi
+WORK_CREATED=1
 
 copy_if_readable() {
     SOURCE=$1
@@ -184,11 +234,19 @@ redact_log "$LOG" "$WORK/kanki.redacted.log"
 # the default report. Renderer metrics contain geometry/style metadata but
 # deliberately contain no element text.
 if command -v tar >/dev/null 2>&1; then
-    (cd "$OUT_ROOT" && tar -czf "$ARCHIVE" "$(basename "$WORK")")
+    ARCHIVE_PART_OWNED=1
+    if ! (cd "$OUT_ROOT" && tar -czf "$ARCHIVE_PART" "$WORK_NAME"); then
+        printf '%s\n' 'kanki-report: archive creation failed' >&2
+        exit 73
+    fi
+    if ! mv "$ARCHIVE_PART" "$ARCHIVE"; then
+        printf '%s\n' 'kanki-report: archive publication failed' >&2
+        exit 73
+    fi
+    ARCHIVE_PART_OWNED=0
 else
-    echo "kanki-report: tar is unavailable; report directory left at $WORK" >&2
+    echo 'kanki-report: tar is unavailable; private staging removed' >&2
     exit 69
 fi
 
-rm -rf "$WORK"
 printf 'Kanki report created: %s\n' "$ARCHIVE"

@@ -40,7 +40,7 @@ require_before("sync", sync, sync_verify, '>>"$LOG"')
 
 report = (ROOT / "scripts/kanki-report.sh").read_text(encoding="utf-8")
 report_verify = 'if sh "$DIR/kanki-verify.sh" "$DIR"'
-require_before("report", report, report_verify, 'mkdir -p "$WORK"')
+require_before("report", report, report_verify, "umask 077")
 require_before("report", report, report_verify, 'copy_if_readable "$DIR/BUILD.json"')
 
 verifier = (ROOT / "scripts/kanki-verify.sh").read_text(encoding="utf-8")

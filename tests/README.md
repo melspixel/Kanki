@@ -20,6 +20,8 @@ Tests in this directory are cross-layer contracts for the rewrite. They are inte
   state allowlist, and rejects tampering, stale files and symlinks;
 - `runtime_preflight_contract.py` keeps log, lock and report paths behind the
   authenticated install verifier;
+- `report_privacy_contract.py` keeps redacted-report staging private, unique,
+  failure-cleaned and atomically published without raw capture/user data;
 - `reproducible_zip_contract.py` checks deterministic archive mechanics; two
   full canonical package builds remain the release evidence.
 
