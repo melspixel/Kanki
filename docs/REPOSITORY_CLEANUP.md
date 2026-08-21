@@ -33,6 +33,33 @@ Branches visible at the start of cleanup:
 
 Most non-`main`/`rewrite-v1` branches are historical experiments. Do not delete branch refs in the first cleanup phase. A local maintainer should first record `branch -> tip SHA`, determine whether any unique source is still required by `rewrite-v1`, and preserve archival tags or another durable map before deleting stale refs.
 
+### Initial branch containment audit
+
+The following comparison uses `rewrite-v1` as the base and asks whether the historical branch has commits not already contained in the rewrite.
+
+| Branch | Ahead of `rewrite-v1` | Initial classification | Action |
+|---|---:|---|---|
+| `main` | n/a | concurrent/legacy integration line | **Do not touch from cleanup workstream** |
+| `rewrite-v1` | n/a | active rewrite | cleanup PR base only |
+| `repo-cleanup-v1` | n/a | isolated cleanup | active |
+| `ci-validation` | 4 | divergent; changes old build/audio paths and may belong to another workstream | **Do not touch** until owner confirms |
+| `desktop-anki-kindle-port` | 0 | fully contained in rewrite history | retirement candidate after tip SHA is recorded |
+| `kindleanki-v1-closure` | 0 | fully contained in rewrite history | retirement candidate after tip SHA is recorded |
+| `refactor-anki-compat` | 0 | fully contained in rewrite history | retirement candidate after tip SHA is recorded |
+| `test3-native-audio` | 0 | fully contained in rewrite history | retirement candidate after tip SHA is recorded |
+| `test4-audio-ui` | 0 | fully contained in rewrite history | retirement candidate after tip SHA is recorded |
+| `test4-final` | 0 | fully contained in rewrite history | retirement candidate after tip SHA is recorded |
+| `test5-coca-layout` | 0 | fully contained in rewrite history | retirement candidate after tip SHA is recorded |
+| `test2-ci` | 1 | only unique file is `ci-test2.txt` | retirement candidate; record tip first |
+| `anki-26.08-backend` | 10 | unique historical backend-redirect experiment | archive-only; do not merge into rewrite |
+| `renderer-adaptive-v2` | 38 | unique historical renderer/firmware-audit patch stack | archive-only; do not merge wholesale |
+| `dropin-native-renderer` | 42 | unique historical drop-in renderer/oracle work | archive-only; inspect only for missing evidence/docs |
+| `kanki-next-bootstrap` | 42 | previous standalone `projects/kanki-next` experiment | archive-only; do not resurrect parallel product tree |
+| `kindle-anki-port` | 14 | previous overlay/source-archive port experiment | archive-only; contains split overlay/source artifacts |
+| `handoff-codex-cleanup` | divergent | superseded first cleanup branch | retire after PR #16 is closed and `repo-cleanup-v1` is confirmed |
+
+The important distinction is **contained vs divergent**, not branch age. Contained branches can normally be removed after tip capture. Divergent branches should be preserved as historical tags or a committed branch→SHA map before deletion; they should not be merged wholesale into the source-owned rewrite.
+
 ## What is actually one project
 
 The rewrite is a monorepo, not several unrelated applications. Current ownership is:
@@ -66,7 +93,9 @@ Behavior-preserving only.
 Completed on `repo-cleanup-v1` so far:
 
 - removed `tools/patch_sync_ui.py`; its sync-page/state/dispatch changes already exist in `device/kanki_device.c` and the script has no repository references;
-- removed `tools/patch_type_answer_ui.py`; its typed-answer device/reviewer/test changes already exist in canonical source and the script has no repository references.
+- removed `tools/patch_type_answer_ui.py`; its typed-answer device/reviewer/test changes already exist in canonical source and the script has no repository references;
+- added ownership README files for `tools/`, `bridge/`, `device/`, `tests/` and `crates/`;
+- performed the first branch containment audit without deleting historical refs.
 
 ### Phase 2 — local baseline before structural moves
 
