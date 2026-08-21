@@ -234,9 +234,7 @@ static int load_ui(App *app) {
     return 1;
 }
 
-static int load_backend(App *app, const char *path) {
-    char *error = NULL;
-    char *response;
+static int load_backend_api(App *app, const char *path) {
     app->backend_lib = dlopen(path, RTLD_NOW | RTLD_LOCAL);
     if (!app->backend_lib) {
         app->startup_error = duplicate_string(dlerror());
@@ -256,6 +254,13 @@ static int load_backend(App *app, const char *path) {
     LOAD_REQUIRED(app->backend_lib, &app->backend, answer, "kanki_answer_json");
     LOAD_REQUIRED(app->backend_lib, &app->backend, bury_current, "kanki_bury_current_json");
     LOAD_REQUIRED(app->backend_lib, &app->backend, health, "kanki_health_json");
+    return 1;
+}
+
+static int load_backend(App *app, const char *path) {
+    char *error = NULL;
+    char *response;
+    if (!load_backend_api(app, path)) return 0;
 
     response = app->backend.build_info();
     if (response) {
@@ -836,6 +841,7 @@ static void cleanup(App *app) {
 int main(int argc, char **argv) {
     App app;
     const char *backend_path = DEFAULT_BACKEND;
+    int abi_probe = 0;
     int i;
     int exit_status;
     memset(&app, 0, sizeof(app));
@@ -846,12 +852,16 @@ int main(int argc, char **argv) {
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) backend_path = argv[++i];
+        else if (strcmp(argv[i], "--abi-probe") == 0) abi_probe = 1;
         else if (strcmp(argv[i], "--start-sync") == 0) app.start_sync = 1;
         else if (strcmp(argv[i], "--sync-status") == 0 && i + 1 < argc) {
             app.last_sync_status = atoi(argv[++i]);
             app.have_sync_status = 1;
         } else {
-            fprintf(stderr, "usage: %s [--backend PATH] [--start-sync] [--sync-status CODE]\n", argv[0]);
+            fprintf(stderr,
+                    "usage: %s [--backend PATH] [--abi-probe] [--start-sync] "
+                    "[--sync-status CODE]\n",
+                    argv[0]);
             cleanup(&app);
             return 64;
         }
@@ -859,6 +869,22 @@ int main(int argc, char **argv) {
     if (!load_ui(&app)) {
         cleanup(&app);
         return 2;
+    }
+    if (abi_probe) {
+        if (!load_backend_api(&app, backend_path)) {
+            fprintf(stderr, "failed to load typed Anki backend: %s\n",
+                    app.startup_error ? app.startup_error : "unknown error");
+            cleanup(&app);
+            return 2;
+        }
+        printf("kanki_ui_abi=pass\n");
+        printf("kanki_backend_abi=pass\n");
+        printf("webkit_w3c_css_pixels=%d\n", app.ui.set_w3c_css_pixels != NULL);
+        printf("webkit_pixel_density=%d\n", app.ui.get_pixel_density != NULL);
+        printf("webkit_full_content_zoom=%d\n", app.ui.set_full_content_zoom != NULL);
+        printf("webkit_zoom_level=%d\n", app.ui.set_zoom_level != NULL);
+        cleanup(&app);
+        return 0;
     }
     app.deck_html = read_file(DECK_PAGE);
     app.reviewer_html = read_file(REVIEWER_PAGE);

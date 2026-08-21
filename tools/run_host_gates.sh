@@ -39,6 +39,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 python3 tools/check_policy.py
 python3 tests/bridge_source_contract.py
 python3 tests/audio_source_contract.py
+python3 tests/rootfs_audit_source_contract.py
 
 printf '%s\n' '== native/source syntax =='
 cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_device.c -Ibridge
@@ -66,11 +67,14 @@ sh -n tools/install_host_jsdom.sh
 bash -n tools/run_anki_bridge_host.sh
 sh -n tools/local_anki_bridge_docker.sh
 sh -n tools/local_package_docker.sh
+sh -n tools/local_pw6_rootfs_audit.sh
+bash -n tools/audit_pw6_rootfs.sh
 python3 -c 'compile(open("tests/anki_bridge_integration.py", encoding="utf-8").read(), "tests/anki_bridge_integration.py", "exec")'
 python3 -c 'compile(open("tests/apkg_bridge_integration.py", encoding="utf-8").read(), "tests/apkg_bridge_integration.py", "exec")'
 python3 -c 'compile(open("tests/sync_bridge_integration.py", encoding="utf-8").read(), "tests/sync_bridge_integration.py", "exec")'
 python3 -c 'compile(open("tools/create_reproducible_zip.py", encoding="utf-8").read(), "tools/create_reproducible_zip.py", "exec")'
 python3 -c 'compile(open("tests/reproducible_zip_contract.py", encoding="utf-8").read(), "tests/reproducible_zip_contract.py", "exec")'
+python3 -c 'compile(open("tests/rootfs_audit_source_contract.py", encoding="utf-8").read(), "tests/rootfs_audit_source_contract.py", "exec")'
 
 printf '%s\n' '== host unit/integration =='
 cargo test --workspace
