@@ -5,6 +5,7 @@
   var deckStyle = document.getElementById('kanki-deck-style');
   var currentCard = null;
   var shownAt = 0;
+  var renderGeneration = 0;
 
   function command(name, values) {
     var parts = [];
@@ -117,6 +118,13 @@
 
   function clearNode(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function clearReviewer() {
+    if (window.kankiMathjax && window.kankiMathjax.clear) {
+      window.kankiMathjax.clear(qa);
+    }
+    clearNode(qa);
   }
 
   function navigationScheme(value) {
@@ -258,7 +266,8 @@
   }
 
   function showError(error) {
-    clearNode(qa);
+    renderGeneration += 1;
+    clearReviewer();
     var box = document.createElement('div');
     box.className = 'kanki-render-error';
     box.appendChild(document.createTextNode('Card rendering failed: ' + String(error)));
@@ -266,7 +275,8 @@
   }
 
   function showMessage(message) {
-    clearNode(qa);
+    renderGeneration += 1;
+    clearReviewer();
     var box = document.createElement('div');
     box.className = 'kanki-review-message';
     box.appendChild(document.createTextNode(message));
@@ -293,35 +303,59 @@
     if (input.focus) input.focus();
   }
 
-  function showCard(packet) {
-    try {
-      document.body.className = packet.body_class;
-      deckStyle.textContent = packet.css || '';
-      qa.innerHTML = packet.html || '';
-      executeScripts(qa);
-      installSemanticAudio(packet);
-      if (packet.side === 'question') wireTypeAnswer();
-      if (packet.side === 'answer') {
-        var answer = document.getElementById('answer');
-        if (answer && answer.scrollIntoView) answer.scrollIntoView(true);
-        else window.scrollTo(0, 0);
-      } else {
-        window.scrollTo(0, 0);
-      }
-      if (window.kankiRendererDiagnostics && window.kankiRendererDiagnostics.begin) {
-        window.kankiRendererDiagnostics.begin(
-          packet,
-          currentCard && currentCard.card_id != null ? currentCard.card_id : null
-        );
-      }
-      if (window.kankiBridge && window.kankiBridge.renderComplete) {
-        window.kankiBridge.renderComplete(packet.side, qa.scrollWidth, qa.scrollHeight);
-      }
-    } catch (error) {
+  function showCard(packet, afterRender) {
+    var generation = renderGeneration + 1;
+
+    function failed(error) {
+      if (generation !== renderGeneration) return;
       showError(error);
       if (window.kankiBridge && window.kankiBridge.renderFailed) {
         window.kankiBridge.renderFailed(String(error));
       }
+    }
+
+    function complete() {
+      if (generation !== renderGeneration) return;
+      try {
+        if (packet.side === 'answer') {
+          var answer = document.getElementById('answer');
+          if (answer && answer.scrollIntoView) answer.scrollIntoView(true);
+          else window.scrollTo(0, 0);
+        } else {
+          window.scrollTo(0, 0);
+        }
+        if (window.kankiRendererDiagnostics && window.kankiRendererDiagnostics.begin) {
+          window.kankiRendererDiagnostics.begin(
+            packet,
+            currentCard && currentCard.card_id != null ? currentCard.card_id : null
+          );
+        }
+        if (window.kankiBridge && window.kankiBridge.renderComplete) {
+          window.kankiBridge.renderComplete(packet.side, qa.scrollWidth, qa.scrollHeight);
+        }
+        if (afterRender) afterRender();
+      } catch (error) {
+        failed(error);
+      }
+    }
+
+    renderGeneration = generation;
+    try {
+      document.body.className = packet.body_class;
+      deckStyle.textContent = packet.css || '';
+      if (window.kankiMathjax && window.kankiMathjax.clear) {
+        window.kankiMathjax.clear(qa);
+      }
+      qa.innerHTML = packet.html || '';
+      executeScripts(qa);
+      installSemanticAudio(packet);
+      if (packet.side === 'question') wireTypeAnswer();
+      if (!window.kankiMathjax || !window.kankiMathjax.typeset) {
+        throw new Error('Kanki MathJax adapter is unavailable');
+      }
+      window.kankiMathjax.typeset(qa, complete, failed);
+    } catch (error) {
+      failed(error);
     }
   }
 
@@ -347,8 +381,9 @@
   function showQuestion(card) {
     currentCard = card;
     shownAt = new Date().getTime();
-    showCard(packet(card, 'question'));
-    command('ui/state', {mode: 'question'});
+    showCard(packet(card, 'question'), function () {
+      command('ui/state', {mode: 'question'});
+    });
   }
 
   function showPreparedAnswer(prepared) {
@@ -370,14 +405,15 @@
       answer_audio: answerAudio,
       autoplay: prepared.autoplay === true,
       autoplay_audio: autoplayAudio
-    });
-    command('ui/state', {
-      mode: 'answer',
-      again: currentCard.intervals && currentCard.intervals[0] || '',
-      hard: currentCard.intervals && currentCard.intervals[1] || '',
-      good: currentCard.intervals && currentCard.intervals[2] || '',
-      easy: currentCard.intervals && currentCard.intervals[3] || '',
-      ms: Math.max(0, new Date().getTime() - shownAt)
+    }, function () {
+      command('ui/state', {
+        mode: 'answer',
+        again: currentCard.intervals && currentCard.intervals[0] || '',
+        hard: currentCard.intervals && currentCard.intervals[1] || '',
+        good: currentCard.intervals && currentCard.intervals[2] || '',
+        easy: currentCard.intervals && currentCard.intervals[3] || '',
+        ms: Math.max(0, new Date().getTime() - shownAt)
+      });
     });
   }
 

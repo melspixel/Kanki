@@ -10,6 +10,8 @@ ANKI_COMMIT=${ANKI_COMMIT:-e5a6fbe27fdd4d57d5f712191b4a753032e57853}
 KINDLE_SDK_COMMIT=${KINDLE_SDK_COMMIT:-b4a6c99d718a7cf74935f36105c62491b4336a61}
 AUDIOBOOK_COMMIT=${AUDIOBOOK_COMMIT:-62edf76feb1b7f4af2f01754957e8d57eb3e7d67}
 MINIAUDIO_COMMIT=${MINIAUDIO_COMMIT:-4a5b74bef029b3592c54b6048650ee5f972c1a48}
+MATHJAX_VERSION=2.7.9
+MATHJAX_SHA256=7131e739848edc14aa661a5516995866b81a477fab8b039d7cc324930e71f786
 KOX_VERSION=${KOX_VERSION:-2026.08}
 KOX_SHA256=${KOX_SHA256:-8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0}
 PROTOC=${PROTOC:-/usr/bin/protoc}
@@ -25,7 +27,7 @@ need() {
     }
 }
 
-for command in git cargo rustc curl python3 perl make cmake clang protoc file readelf nm zip unzip zstd sha256sum; do
+for command in git cargo rustc curl python3 perl make cmake clang protoc file readelf nm zip unzip zstd sha256sum tar; do
     need "$command"
 done
 
@@ -59,7 +61,7 @@ rm -rf "$OUT_DIR/package"
 rm -f "$OUT_DIR/$PACKAGE_NAME.zip" "$OUT_DIR/$PACKAGE_NAME.zip.sha256" \
       "$OUT_DIR/package-contents.txt" "$OUT_DIR/package-exports.txt" \
       "$OUT_DIR/package-glibc.txt" "$OUT_DIR/sysroot-glibc.txt" \
-      "$OUT_DIR/toolchain-info.txt"
+      "$OUT_DIR/toolchain-info.txt" "$OUT_DIR/mathjax-info.txt"
 
 ANKI_LIB_RS=third_party/anki/rslib/src/lib.rs
 ANKI_CARGO=third_party/anki/rslib/Cargo.toml
@@ -117,6 +119,12 @@ printf '%s\n' '== fetch pinned miniaudio =='
 MINIAUDIO_H="$SCRATCH/miniaudio.h"
 curl -fL --retry 3 "https://raw.githubusercontent.com/mackron/miniaudio/$MINIAUDIO_COMMIT/miniaudio.h" -o "$MINIAUDIO_H"
 
+printf '%s\n' '== install pinned MathJax renderer =='
+MATHJAX_SOURCE="$ROOT/out/kindle-package-vendor/mathjax-$MATHJAX_VERSION"
+sh tools/install_mathjax.sh "$MATHJAX_SOURCE" | tee "$OUT_DIR/mathjax-info.txt"
+grep -q "KANKI_MATHJAX_VERSION=$MATHJAX_VERSION" "$OUT_DIR/mathjax-info.txt"
+grep -q "KANKI_MATHJAX_SHA256=$MATHJAX_SHA256" "$OUT_DIR/mathjax-info.txt"
+
 printf '%s\n' '== embed semantic Kanki bridges in pinned Anki =='
 cp bridge/anki_bridge.rs "$ANKI_BRIDGE_RS"
 cp bridge/sync_bridge.rs "$ANKI_SYNC_RS"
@@ -173,14 +181,18 @@ fi
 printf '%s\n' '== assemble self-identifying package =='
 ROOT_PACKAGE="$OUT_DIR/package"
 EXT="$ROOT_PACKAGE/extensions/kanki"
-mkdir -p "$EXT/assets/device" "$EXT/assets/reviewer" "$ROOT_PACKAGE/documents"
+MATHJAX_DEST="$EXT/assets/vendor/mathjax-$MATHJAX_VERSION"
+mkdir -p "$EXT/assets/device" "$EXT/assets/reviewer" "$MATHJAX_DEST" \
+         "$ROOT_PACKAGE/documents"
 cp "third_party/anki/target/$TARGET/release/libanki.so" "$EXT/libanki-kanki.so"
 cp "$SCRATCH"/kanki-device "$SCRATCH"/kanki-sync "$SCRATCH"/kanki-diag \
    "$SCRATCH"/kanki-raise "$SCRATCH"/kanki-audio "$SCRATCH"/kanki-gst-play "$EXT/"
 cp assets/device/* "$EXT/assets/device/"
 cp assets/reviewer/reviewer.css assets/reviewer/reviewer.js \
    assets/reviewer/css_compat.js assets/reviewer/css_runtime.js \
-   assets/reviewer/diagnostics.js "$EXT/assets/reviewer/"
+   assets/reviewer/mathjax_runtime.js assets/reviewer/diagnostics.js \
+   "$EXT/assets/reviewer/"
+cp -R "$MATHJAX_SOURCE/." "$MATHJAX_DEST/"
 cp scripts/kanki-launch.sh scripts/kanki-sync.sh scripts/kanki-report.sh "$EXT/"
 cp packaging/config.example.ini "$EXT/"
 cp THIRD_PARTY_NOTICES.md docs/INSTALL.md "$EXT/"
@@ -193,6 +205,8 @@ cat > "$EXT/BUILD.json" <<EOF
   "kindle_sdk_commit": "$KINDLE_SDK_COMMIT",
   "audiobook_commit": "$AUDIOBOOK_COMMIT",
   "miniaudio_commit": "$MINIAUDIO_COMMIT",
+  "mathjax_version": "$MATHJAX_VERSION",
+  "mathjax_sha256": "$MATHJAX_SHA256",
   "koxtoolchain_version": "$KOX_VERSION",
   "koxtoolchain_sha256": "$KOX_SHA256",
   "target": "$TARGET",
@@ -215,10 +229,17 @@ test -x "$EXT/kanki-diag"
 test -x "$EXT/kanki-report.sh"
 test -f "$EXT/assets/reviewer/css_compat.js"
 test -f "$EXT/assets/reviewer/css_runtime.js"
+test -f "$EXT/assets/reviewer/mathjax_runtime.js"
 test -f "$EXT/assets/reviewer/diagnostics.js"
+test -f "$MATHJAX_DEST/MathJax.js"
+test -f "$MATHJAX_DEST/config/TeX-AMS_SVG-full.js"
+test -f "$MATHJAX_DEST/jax/output/SVG/jax.js"
+test -f "$MATHJAX_DEST/LICENSE"
 test -f "$EXT/assets/device/sync.html"
 grep -q 'css_compat.js' "$EXT/assets/device/reviewer-shell.html"
 grep -q 'css_runtime.js' "$EXT/assets/device/reviewer-shell.html"
+grep -q 'MathJax.js?config=TeX-AMS_SVG-full' "$EXT/assets/device/reviewer-shell.html"
+grep -q 'mathjax_runtime.js' "$EXT/assets/device/reviewer-shell.html"
 grep -q 'diagnostics.js' "$EXT/assets/device/reviewer-shell.html"
 grep -q 'kanki://sync/run?mode=normal' "$EXT/assets/device/sync.html"
 grep -q 'kanki://sync/run?mode=upload' "$EXT/assets/device/sync.html"
@@ -228,6 +249,8 @@ grep -q 'render-debug' "$EXT/kanki-launch.sh"
 grep -q 'enable-render-capture' "$EXT/kanki-diag"
 grep -q "\"koxtoolchain_version\": \"$KOX_VERSION\"" "$EXT/BUILD.json"
 grep -q "\"koxtoolchain_sha256\": \"$KOX_SHA256\"" "$EXT/BUILD.json"
+grep -q "\"mathjax_version\": \"$MATHJAX_VERSION\"" "$EXT/BUILD.json"
+grep -q "\"mathjax_sha256\": \"$MATHJAX_SHA256\"" "$EXT/BUILD.json"
 python3 tools/check_policy.py
 (cd "$EXT" && sha256sum -c MANIFEST.sha256)
 unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" | tee "$OUT_DIR/package-contents.txt"

@@ -18,6 +18,8 @@ need python3
 need node
 need npm
 need cc
+need curl
+need tar
 
 printf '%s\n' '== source pins =='
 test "$(git -C third_party/anki rev-parse HEAD)" = e5a6fbe27fdd4d57d5f712191b4a753032e57853
@@ -42,14 +44,17 @@ node --check assets/device/decks.js
 node --check assets/reviewer/reviewer.js
 node --check assets/reviewer/css_compat.js
 node --check assets/reviewer/css_runtime.js
+node --check assets/reviewer/mathjax_runtime.js
 node --check assets/reviewer/diagnostics.js
 node --check tests/renderer_contract.test.cjs
+node --check tests/mathjax_vendor_contract.test.cjs
 node --check tests/css_compat.test.cjs
 node --check tests/diagnostics_contract.test.cjs
 sh -n scripts/kanki-launch.sh
 sh -n scripts/kanki-sync.sh
 sh -n scripts/kanki-report.sh
 sh -n tools/install_kindlehf_toolchain.sh
+sh -n tools/install_mathjax.sh
 bash -n tools/run_anki_bridge_host.sh
 sh -n tools/local_anki_bridge_docker.sh
 sh -n tools/local_package_docker.sh
@@ -65,6 +70,12 @@ if [ ! -d node_modules/jsdom ]; then
 fi
 
 printf '%s\n' '== reviewer contracts =='
+MATHJAX_EVIDENCE="$ROOT/out/host-mathjax"
+MATHJAX_ROOT="$MATHJAX_EVIDENCE/vendor"
+mkdir -p "$MATHJAX_EVIDENCE"
+sh tools/install_mathjax.sh "$MATHJAX_ROOT" | tee "$MATHJAX_EVIDENCE/install.txt"
+node tests/mathjax_vendor_contract.test.cjs "$MATHJAX_ROOT" \
+    | tee "$MATHJAX_EVIDENCE/vendor-contract.txt"
 node tests/renderer_contract.test.cjs
 node tests/navigation_contract.test.cjs
 node tests/css_compat.test.cjs

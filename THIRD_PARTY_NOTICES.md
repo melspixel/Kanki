@@ -40,6 +40,16 @@ Kanki compiles the pinned source as a native Kindle GStreamer/mixersink helper.
 
 The header is fetched from the pinned revision during CI and used only for media decoding in `kanki-audio`.
 
+## MathJax
+
+- Project: MathJax
+- Source: https://registry.npmjs.org/mathjax/-/mathjax-2.7.9.tgz
+- Pinned release: `2.7.9`
+- SHA-256: `7131e739848edc14aa661a5516995866b81a477fab8b039d7cc324930e71f786`
+- License: Apache-2.0
+
+Kanki packages the checksum-verified upstream JavaScript distribution as a source-owned reviewer dependency. The persistent reviewer loads it once with the `TeX-AMS_SVG-full` configuration and scopes subsequent formula typesetting to its persistent `#qa`; ordinary card SVG and images are not rewritten. This runtime is not copied from or loaded through RAnki.
+
 ## RAnki reference
 
 - Project: RAnki

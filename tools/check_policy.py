@@ -10,6 +10,7 @@ renderer_assets = [
     ROOT / "assets/reviewer/reviewer.js",
     ROOT / "assets/reviewer/css_compat.js",
     ROOT / "assets/reviewer/css_runtime.js",
+    ROOT / "assets/reviewer/mathjax_runtime.js",
     ROOT / "assets/reviewer/diagnostics.js",
     ROOT / "assets/device/reviewer-shell.html",
 ]
@@ -54,7 +55,14 @@ if re.search(r"(?m)^\s*img\s*\{[^}]*\b(width|height)\s*:", css, re.S):
 shell = (ROOT / "assets/device/reviewer-shell.html").read_text(encoding="utf-8")
 if 'id="qa"' not in shell:
     errors.append("persistent #qa root is missing from device reviewer shell")
-for required in ["css_compat.js", "css_runtime.js", "diagnostics.js", "reviewer.js"]:
+for required in [
+    "css_compat.js",
+    "css_runtime.js",
+    "MathJax.js?config=TeX-AMS_SVG-full",
+    "mathjax_runtime.js",
+    "diagnostics.js",
+    "reviewer.js",
+]:
     if required not in shell:
         errors.append(f"device reviewer shell does not load required runtime: {required}")
 
@@ -86,6 +94,24 @@ if "KOX_VERSION=2026.08" not in toolchain:
     errors.append("KindleHF koxtoolchain release is not pinned")
 if "8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0" not in toolchain:
     errors.append("KindleHF koxtoolchain checksum is not pinned")
+
+# Formula rendering is a source-owned, checksum-pinned part of the persistent
+# reviewer. It must not silently float to another npm release or disappear
+# from the canonical Kindle package recipe.
+mathjax_installer = (ROOT / "tools/install_mathjax.sh").read_text(encoding="utf-8")
+if "VERSION=2.7.9" not in mathjax_installer:
+    errors.append("MathJax renderer release is not pinned")
+if "7131e739848edc14aa661a5516995866b81a477fab8b039d7cc324930e71f786" not in mathjax_installer:
+    errors.append("MathJax renderer checksum is not pinned")
+package_recipe = (ROOT / "tools/build_kindle_package.sh").read_text(encoding="utf-8")
+for required in [
+    "sh tools/install_mathjax.sh",
+    "assets/vendor/mathjax-$MATHJAX_VERSION",
+    '"mathjax_version": "$MATHJAX_VERSION"',
+    '"mathjax_sha256": "$MATHJAX_SHA256"',
+]:
+    if required not in package_recipe:
+        errors.append(f"canonical package recipe lacks MathJax identity/runtime: {required}")
 for workflow in (ROOT / ".github/workflows").glob("*.yml"):
     workflow_text = workflow.read_text(encoding="utf-8")
     if "releases/latest/download/kindlehf" in workflow_text:

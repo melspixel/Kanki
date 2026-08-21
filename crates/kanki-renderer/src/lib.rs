@@ -8,6 +8,7 @@ use thiserror::Error;
 
 pub const REVIEWER_HTML: &str = include_str!("../../../assets/reviewer/reviewer.html");
 pub const REVIEWER_CSS: &str = include_str!("../../../assets/reviewer/reviewer.css");
+pub const MATHJAX_RUNTIME_JS: &str = include_str!("../../../assets/reviewer/mathjax_runtime.js");
 pub const REVIEWER_JS: &str = include_str!("../../../assets/reviewer/reviewer.js");
 
 #[derive(Debug, Error)]
@@ -28,6 +29,7 @@ struct CardPacket<'a> {
 pub fn bootstrap_document() -> String {
     REVIEWER_HTML
         .replace("/*__KANKI_REVIEWER_CSS__*/", REVIEWER_CSS)
+        .replace("/*__KANKI_MATHJAX_RUNTIME_JS__*/", MATHJAX_RUNTIME_JS)
         .replace("/*__KANKI_REVIEWER_JS__*/", REVIEWER_JS)
 }
 
@@ -53,6 +55,7 @@ pub fn runtime_sha256() -> String {
     let mut hasher = Sha256::new();
     hasher.update(REVIEWER_HTML);
     hasher.update(REVIEWER_CSS);
+    hasher.update(MATHJAX_RUNTIME_JS);
     hasher.update(REVIEWER_JS);
     hex::encode(hasher.finalize())
 }

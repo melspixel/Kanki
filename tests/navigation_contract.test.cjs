@@ -5,6 +5,10 @@ const {JSDOM, VirtualConsole} = require('jsdom');
 
 (() => {
   const root = path.resolve(__dirname, '..');
+  const mathjaxRuntime = fs.readFileSync(
+    path.join(root, 'assets/reviewer/mathjax_runtime.js'),
+    'utf8',
+  );
   const reviewer = fs.readFileSync(path.join(root, 'assets/reviewer/reviewer.js'), 'utf8');
   const device = fs.readFileSync(path.join(root, 'device/kanki_device.c'), 'utf8');
   const logs = [];
@@ -14,6 +18,7 @@ const {JSDOM, VirtualConsole} = require('jsdom');
 
   const dom = new JSDOM(`<!doctype html><html><body class="card card1 isLin kindle">
     <style id="kanki-deck-style"></style><main id="qa"></main>
+    <script>${mathjaxRuntime}</script>
     <script>${reviewer}</script></body></html>`, {
     runScripts: 'dangerously',
     url: 'file:///mnt/us/extensions/kanki/assets/device/reviewer-shell.html',
