@@ -10,6 +10,7 @@ on:
       - 'bridge/*.h'
       - 'scripts/kanki-launch.sh'
       - 'scripts/kanki-sync.sh'
+      - 'tools/install_kindlehf_toolchain.sh'
       - '.github/workflows/device.yml'
   pull_request:
     branches: [main]
@@ -20,6 +21,7 @@ on:
       - 'bridge/*.h'
       - 'scripts/kanki-launch.sh'
       - 'scripts/kanki-sync.sh'
+      - 'tools/install_kindlehf_toolchain.sh'
       - '.github/workflows/device.yml'
   workflow_dispatch:
 
@@ -38,8 +40,11 @@ jobs:
           gcc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_raise.c
           node --check assets/device/decks.js
           node --check assets/reviewer/reviewer.js
+          node --check assets/reviewer/css_compat.js
+          node --check assets/reviewer/css_runtime.js
           sh -n scripts/kanki-launch.sh
           sh -n scripts/kanki-sync.sh
+          sh -n tools/install_kindlehf_toolchain.sh
       - name: Architectural prohibitions
         run: |
           ! grep -R -E 'LD_PRELOAD|420px|LOGICAL_VIEWPORT_PX|service[_ -]?index|method[_ -]?index' device assets/device scripts/kanki-launch.sh scripts/kanki-sync.sh
@@ -47,15 +52,17 @@ jobs:
           ! grep -R -E '^[[:space:]]*svg[[:space:]]*\{' assets/reviewer/*.css
           ! grep -R -E 'log_message\([^;]*hkey|fprintf\([^;]*hkey[[:space:]]*=' device
           ! grep -R -E '(>>|>)[[:space:]]*"?\$LOG"?.*\$HKEY|\$HKEY.*(>>|>)[[:space:]]*"?\$LOG"?' scripts
+          ! grep -R -F 'releases/latest/download/kindlehf' .github/workflows tools
 
   armhf-shell:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install KindleHF toolchain
+      - name: Install pinned KindleHF toolchain
         run: |
-          wget -q https://github.com/KindleModding/koxtoolchain/releases/latest/download/kindlehf.tar.gz -O /tmp/kindlehf.tar.gz
-          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          bash tools/install_kindlehf_toolchain.sh
           echo "$HOME/x-tools/arm-kindlehf-linux-gnueabihf/bin" >> "$GITHUB_PATH"
       - name: Build dynamic Kindle UI, sync and reactivation clients
         run: |
