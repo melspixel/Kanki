@@ -59,6 +59,34 @@
     }
   };
 
+  /* Old Kindle WebKit may expose no HTML5 Audio constructor at all. Card
+     templates are still allowed to use `new Audio(src).play()`, so Kanki
+     supplies that standard-shaped entry point and routes it through the same
+     native service used for semantic Anki AV tags. */
+  function KankiAudio(source) {
+    this.src = source || '';
+    this.currentSrc = this.src;
+    this.paused = true;
+    this.ended = false;
+  }
+
+  KankiAudio.prototype.play = function () {
+    this.currentSrc = this.src || this.currentSrc || '';
+    this.paused = false;
+    this.ended = false;
+    window.kankiBridge.playAudio(this.currentSrc);
+  };
+
+  KankiAudio.prototype.pause = function () {
+    this.paused = true;
+    window.kankiBridge.stopAudio();
+  };
+
+  KankiAudio.prototype.load = function () {};
+  KankiAudio.prototype.addEventListener = function () {};
+  KankiAudio.prototype.removeEventListener = function () {};
+  window.Audio = KankiAudio;
+
   function clearNode(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
   }
