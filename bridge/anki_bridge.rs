@@ -8,13 +8,15 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use anki_proto::backend::BackendInit;
 use anki_proto::card_rendering::{
-    av_tag, rendered_template_node, ExtractAvTagsRequest, RenderExistingCardRequest,
-    RenderedTemplateNode,
+    av_tag, rendered_template_node, CompareAnswerRequest, ExtractAvTagsRequest,
+    ExtractClozeForTypingRequest, RenderExistingCardRequest, RenderedTemplateNode,
 };
 use anki_proto::collection::{CloseCollectionRequest, OpenCollectionRequest};
 use anki_proto::decks::{
     set_deck_collapsed_request, DeckId, DeckTreeNode, DeckTreeRequest, SetDeckCollapsedRequest,
 };
+use anki_proto::notes::NoteId;
+use anki_proto::notetypes::NotetypeId;
 use anki_proto::scheduler::{
     bury_or_suspend_cards_request, card_answer, BuryOrSuspendCardsRequest, CardAnswer,
     GetQueuedCardsRequest, SchedulingStates,
@@ -24,8 +26,12 @@ use serde::Serialize;
 
 use crate::backend::{init_backend, Backend};
 use crate::services::{
-    BackendCollectionService, CardRenderingService, DecksService, SchedulerService,
+    BackendCollectionService, CardRenderingService, DecksService, NotesService, NotetypesService,
+    SchedulerService,
 };
+
+const TYPE_PREFIX: &str = "[[type:";
+const TYPE_SUFFIX: &str = "]]";
 
 #[repr(C)]
 pub struct KankiCore {
@@ -38,6 +44,24 @@ struct CurrentReview {
     card_id: i64,
     states: SchedulingStates,
     started: Instant,
+    answer_html: String,
+    answer_audio: Vec<AvDto>,
+    type_answer: Option<TypeAnswerState>,
+    had_type_marker: bool,
+}
+
+#[derive(Clone)]
+struct TypeAnswerState {
+    expected: String,
+    font: String,
+    size: u32,
+    combining: bool,
+}
+
+struct ParsedTypeSpec {
+    field: String,
+    cloze: bool,
+    combining: bool,
 }
 
 #[derive(Serialize)]
@@ -71,7 +95,7 @@ struct DeckDto {
     children: Vec<DeckDto>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum AvDto {
     Sound {
@@ -97,6 +121,13 @@ struct ReviewDto {
     answer_audio: Vec<AvDto>,
     counts: CountsDto,
     intervals: Vec<String>,
+    type_answer: bool,
+}
+
+#[derive(Serialize)]
+struct PreparedAnswerDto {
+    html: String,
+    audio: Vec<AvDto>,
 }
 
 fn response<T: Serialize>(result: Result<T, String>) -> *mut c_char {
@@ -207,6 +238,179 @@ fn now_millis() -> i64 {
         .unwrap_or_default()
         .as_millis()
         .min(i64::MAX as u128) as i64
+}
+
+fn html_escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+fn first_type_spec(text: &str) -> Option<String> {
+    let start = text.find(TYPE_PREFIX)? + TYPE_PREFIX.len();
+    let close = text[start..].find(TYPE_SUFFIX)? + start;
+    Some(text[start..close].to_owned())
+}
+
+fn replace_type_markers(text: &str, replacement: &str) -> String {
+    let mut out = String::with_capacity(text.len() + replacement.len());
+    let mut cursor = 0;
+    while let Some(relative_start) = text[cursor..].find(TYPE_PREFIX) {
+        let marker_start = cursor + relative_start;
+        let spec_start = marker_start + TYPE_PREFIX.len();
+        out.push_str(&text[cursor..marker_start]);
+        let Some(relative_close) = text[spec_start..].find(TYPE_SUFFIX) else {
+            out.push_str(&text[marker_start..]);
+            return out;
+        };
+        out.push_str(replacement);
+        cursor = spec_start + relative_close + TYPE_SUFFIX.len();
+    }
+    out.push_str(&text[cursor..]);
+    out
+}
+
+fn parse_type_spec(spec: &str) -> ParsedTypeSpec {
+    let mut field = spec.to_owned();
+    let mut cloze = false;
+    let mut combining = true;
+    loop {
+        if let Some(rest) = field.strip_prefix("cloze:") {
+            cloze = true;
+            field = rest.to_owned();
+            continue;
+        }
+        if let Some(rest) = field.strip_prefix("nc:") {
+            combining = false;
+            field = rest.to_owned();
+            continue;
+        }
+        break;
+    }
+    ParsedTypeSpec {
+        field,
+        cloze,
+        combining,
+    }
+}
+
+fn type_input_html(font: &str, size: u32) -> String {
+    format!(
+        "<center><input type=\"text\" id=\"typeans\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" style=\"font-family:'{}';font-size:{}px\"></center>",
+        html_escape(font),
+        size
+    )
+}
+
+fn prepare_type_question(
+    backend: &Backend,
+    html: String,
+    note_id: i64,
+    template_idx: u32,
+) -> Result<(String, Option<TypeAnswerState>, bool), String> {
+    let Some(spec_text) = first_type_spec(&html) else {
+        return Ok((html, None, false));
+    };
+    let spec = parse_type_spec(&spec_text);
+    if spec.field.is_empty() {
+        return Ok((
+            replace_type_markers(&html, "<span class=\"kanki-type-warning\">Type answer field is empty.</span>"),
+            None,
+            true,
+        ));
+    }
+
+    let (note, notetype) = backend
+        .with_col(|col| {
+            let note = NotesService::get_note(col, NoteId { nid: note_id })?;
+            let notetype = NotetypesService::get_notetype(
+                col,
+                NotetypeId {
+                    ntid: note.notetype_id,
+                },
+            )?;
+            Ok((note, notetype))
+        })
+        .map_err(|err| err.to_string())?;
+
+    let Some(field_index) = notetype
+        .fields
+        .iter()
+        .position(|field| field.name == spec.field)
+    else {
+        let warning = format!(
+            "<span class=\"kanki-type-warning\">Type answer field not found: {}</span>",
+            html_escape(&spec.field)
+        );
+        return Ok((replace_type_markers(&html, &warning), None, true));
+    };
+
+    let mut expected = note.fields.get(field_index).cloned().unwrap_or_default();
+    if spec.cloze {
+        expected = backend
+            .with_col(|col| {
+                CardRenderingService::extract_cloze_for_typing(
+                    col,
+                    ExtractClozeForTypingRequest {
+                        text: expected,
+                        ordinal: template_idx.saturating_add(1),
+                    },
+                )
+            })
+            .map_err(|err| err.to_string())?
+            .val;
+    }
+    if expected.is_empty() {
+        return Ok((replace_type_markers(&html, ""), None, true));
+    }
+
+    let config = notetype.fields[field_index].config.as_ref();
+    let font = config
+        .map(|config| config.font_name.clone())
+        .filter(|font| !font.is_empty())
+        .unwrap_or_else(|| "Arial".to_owned());
+    let size = config
+        .map(|config| config.font_size)
+        .filter(|size| *size > 0)
+        .unwrap_or(20);
+    let state = TypeAnswerState {
+        expected,
+        font: font.clone(),
+        size,
+        combining: spec.combining,
+    };
+    Ok((
+        replace_type_markers(&html, &type_input_html(&font, size)),
+        Some(state),
+        true,
+    ))
+}
+
+fn render_type_answer(answer_html: &str, state: &TypeAnswerState, comparison: &str) -> String {
+    let had_answer_separator = answer_html.contains("<hr id=answer>");
+    let without_separator = answer_html.replace("<hr id=answer>", "");
+    if had_answer_separator && first_type_spec(&without_separator).is_none() {
+        return answer_html.to_owned();
+    }
+    let mut replacement = format!(
+        "<div style=\"font-family:'{}';font-size:{}px\">{}</div>",
+        html_escape(&state.font),
+        state.size,
+        comparison
+    );
+    if had_answer_separator {
+        replacement.insert_str(0, "<hr id=answer>");
+    }
+    replace_type_markers(&without_separator, &replacement)
 }
 
 #[no_mangle]
@@ -394,6 +598,7 @@ pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
                 answer_audio: vec![],
                 counts,
                 intervals: vec![],
+                type_answer: false,
             });
         };
         let card = queued.card.ok_or("queued card had no card payload")?;
@@ -421,6 +626,12 @@ pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
             extract_av(&core.backend, render_nodes(rendered.question_nodes), true)?;
         let (answer_html, answer_audio) =
             extract_av(&core.backend, render_nodes(rendered.answer_nodes), false)?;
+        let (question_html, type_answer, had_type_marker) = prepare_type_question(
+            &core.backend,
+            question_html,
+            card.note_id,
+            card.template_idx,
+        )?;
         let intervals = core
             .backend
             .with_col(|col| SchedulerService::describe_next_states(col, states.clone()))
@@ -431,6 +642,10 @@ pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
             card_id: card.id,
             states,
             started: Instant::now(),
+            answer_html: answer_html.clone(),
+            answer_audio: answer_audio.clone(),
+            type_answer: type_answer.clone(),
+            had_type_marker,
         });
         Ok(ReviewDto {
             finished: false,
@@ -443,6 +658,47 @@ pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
             answer_audio,
             counts,
             intervals,
+            type_answer: type_answer.is_some(),
+        })
+    })())
+}
+
+#[no_mangle]
+pub extern "C" fn kanki_prepare_answer_json(
+    core: *mut KankiCore,
+    typed_answer: *const c_char,
+) -> *mut c_char {
+    response((|| {
+        let core = core_mut(core)?;
+        let current = core
+            .current
+            .clone()
+            .ok_or("no current card is available to show an answer")?;
+        let typed = c_string(typed_answer, "typed_answer")?;
+        let html = if let Some(state) = &current.type_answer {
+            let comparison = core
+                .backend
+                .with_col(|col| {
+                    CardRenderingService::compare_answer(
+                        col,
+                        CompareAnswerRequest {
+                            expected: state.expected.clone(),
+                            provided: typed,
+                            combining: state.combining,
+                        },
+                    )
+                })
+                .map_err(|err| err.to_string())?
+                .val;
+            render_type_answer(&current.answer_html, state, &comparison)
+        } else if current.had_type_marker {
+            replace_type_markers(&current.answer_html, "")
+        } else {
+            current.answer_html.clone()
+        };
+        Ok(PreparedAnswerDto {
+            html,
+            audio: current.answer_audio,
         })
     })())
 }
