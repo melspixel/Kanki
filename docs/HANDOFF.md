@@ -15,7 +15,7 @@ Current implementation line:
 - `main` — last hardware-accepted legacy line;
 - `rewrite-v1` — active source-owned replacement;
 - PR #10 — integration PR, kept Draft until closure;
-- issue #11 — evidence-backed closure tracker.
+- issue #11 — evidence-backed closure tracker. In that issue, checkboxes mean **verified with evidence**, not merely "code exists".
 
 Before taking over, read in order:
 
