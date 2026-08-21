@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT=${PROJECT:?set PROJECT}
+ANKI=${ANKI:?set ANKI}
+CARGO_HOME=${CARGO_HOME:?set CARGO_HOME}
+PROTOC=${PROTOC:?set PROTOC}
+TOOLCHAIN_BIN=${TOOLCHAIN_BIN:?set TOOLCHAIN_BIN to KindleHF bin directory}
+RUST_TARGET=${KAP_RUST_TARGET:-armv7-unknown-linux-gnueabihf}
+OUT=${OUT:-$PROJECT/build/armhf}
+TRIPLE=${KAP_TOOLCHAIN_TRIPLE:-arm-kindlehf-linux-gnueabihf}
+GLIBC_CEILING=${GLIBC_CEILING:-2.35}
+BUILD_COMMIT=${BUILD_COMMIT:-$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null || printf unknown)}
+ANKI_COMMIT=${ANKI_COMMIT:-$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$PROJECT/upstream.lock.json")}
+
+export PATH="$TOOLCHAIN_BIN:$PATH"
+export CARGO_HOME PROTOC CARGO_NET_OFFLINE=true
+export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER="$TRIPLE-gcc"
+export CC_armv7_unknown_linux_gnueabihf="$TRIPLE-gcc"
+export CXX_armv7_unknown_linux_gnueabihf="$TRIPLE-g++"
+export AR_armv7_unknown_linux_gnueabihf="$TRIPLE-ar"
+
+rm -rf "$OUT"
+mkdir -p "$OUT"
+cd "$ANKI"
+cargo build -p anki --features rustls --release --target "$RUST_TARGET" --offline
+cp "target/$RUST_TARGET/release/libanki.so" "$OUT/libanki-kindle.so"
+"$TRIPLE-gcc" -O2 -std=c99 -Wall -Wextra -Werror -I"$PROJECT/core" \
+  -DKAP_BUILD_COMMIT=\"$BUILD_COMMIT\" \
+  -DKAP_ANKI_COMMIT=\"$ANKI_COMMIT\" \
+  "$PROJECT/native/app.c" -ldl -o "$OUT/kap-app"
+"$TRIPLE-gcc" -O2 -std=c99 -Wall -Wextra -Werror \
+  "$PROJECT/native/audio.c" -ldl -o "$OUT/kap-audio"
+"$TRIPLE-gcc" -O2 -std=c99 -Wall -Wextra -Werror -I"$PROJECT/core" \
+  "$PROJECT/native/sync.c" -ldl -o "$OUT/kap-sync"
+
+file "$OUT"/* | tee "$OUT/file.txt"
+"$TRIPLE-nm" -D "$OUT/libanki-kindle.so" | grep ' kap_' | tee "$OUT/exports.txt"
+for symbol in \
+  kap_open_collection_json kap_deck_tree_json kap_next_question_json \
+  kap_reveal_answer_json kap_answer_json kap_bury_current_json \
+  kap_sync_collection_json kap_full_sync_json kap_media_sync_status_json \
+  kap_abort_sync_json kap_close_collection_json; do
+  grep -q " $symbol$" "$OUT/exports.txt" || { echo "missing export: $symbol" >&2; exit 91; }
+done
+
+for binary in libanki-kindle.so kap-app kap-audio kap-sync; do
+  "$TRIPLE-readelf" -h -A -d -V "$OUT/$binary" > "$OUT/$binary.abi.txt"
+  grep -q 'Machine:.*ARM' "$OUT/$binary.abi.txt" || { echo "$binary is not ARM" >&2; exit 92; }
+  grep -q 'Tag_ABI_VFP_args: VFP registers' "$OUT/$binary.abi.txt" || {
+    echo "$binary is not hard-float" >&2; exit 93;
+  }
+  grep -oE 'GLIBC_[0-9.]+' "$OUT/$binary.abi.txt" | sort -Vu > "$OUT/$binary.glibc.txt" || true
+  max=$(sed 's/GLIBC_//' "$OUT/$binary.glibc.txt" | tail -1)
+  [ -n "$max" ] || max=0
+  python3 - "$binary" "$max" "$GLIBC_CEILING" <<'PY'
+import sys
+def ver(value): return tuple(int(x) for x in value.split('.'))
+name, required, ceiling = sys.argv[1:]
+print(f"{name}: required GLIBC_{required}; ceiling GLIBC_{ceiling}")
+if ver(required) > ver(ceiling):
+    raise SystemExit(f"{name} exceeds GLIBC ceiling")
+PY
+done
+{
+  printf 'product=Kindle Anki Port\n'
+  printf 'source_commit=%s\n' "$BUILD_COMMIT"
+  printf 'anki_commit=%s\n' "$ANKI_COMMIT"
+  printf 'rust_target=%s\n' "$RUST_TARGET"
+  printf 'toolchain_triple=%s\n' "$TRIPLE"
+  printf 'glibc_ceiling=%s\n' "$GLIBC_CEILING"
+  "$TRIPLE-gcc" --version | head -1 | sed 's/^/compiler=/'
+  cargo --version | sed 's/^/cargo=/'
+  rustc --version | sed 's/^/rustc=/'
+} > "$OUT/BUILD-PROVENANCE.txt"
+printf 'ARMHF gates: PASS\n' | tee "$OUT/ARMHF-GATES.txt"
