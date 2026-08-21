@@ -261,6 +261,16 @@ audit pass on that exact SHA. This is software evidence only. Physical clean
 install, historical upgrade and rollback remain Gate E work, and must never
 delete or replace `/mnt/us/anki_data` or touch `/mnt/us/extensions/ranki`.
 
+A follow-up call-order audit then found that launch/sync/report could touch a
+log, lock or report input before that verifier rejected a symlink. Commit
+`5a9151c8d8eab1853ef4b4c986bb79cb0455628a` moves all such access behind the
+authenticated verifier and makes link rejection precede manifest hashing.
+Exact candidate `202c020154386c56ef8f0f6dcdf7a888d9681210` additionally runs
+the actual complete package verifier through the fixed PW6 ARM BusyBox shell
+inside the canonical rootfs audit. Host, typed-Anki, two byte-identical package
+builds and the enhanced rootfs audit pass on that SHA; the first open evidence
+failure remains physical PW6 launch (`hardware_execution=not_run`).
+
 ## 5. Recommended target layout
 
 Do **not** perform a mass rename as the first task. First get a local green baseline. Once behavior is stable, reorganize toward clear ownership. A reasonable target is:

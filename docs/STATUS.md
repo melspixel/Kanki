@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-22
-**Current fully recorded non-hardware candidate:** `b2f6a60c1a7d1c7a1137a4851fe17b6d51ed66cc`
+**Current fully recorded non-hardware candidate:** `202c020154386c56ef8f0f6dcdf7a888d9681210`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -86,7 +86,7 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware candidate is recorded for exact SHA
-`b2f6a60c1a7d1c7a1137a4851fe17b6d51ed66cc`:
+`202c020154386c56ef8f0f6dcdf7a888d9681210`:
 
 - host: macOS 26.4.1 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -105,7 +105,10 @@ The current clean local non-hardware candidate is recorded for exact SHA
   ZIP host contract and install-integrity contract also passed. The latter
   proves a clean package and bounded runtime state pass while stale regular
   files, symlinks, tampering, missing manifest-owned files and a missing
-  manifest are rejected with distinct failures;
+  manifest are rejected with distinct failures. The runtime-preflight contract
+  also proves launch, standalone sync and reporting authenticate and execute
+  the verifier before log, lock or report-input access, and symlinks are
+  rejected before manifest paths are hashed;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
   native x86-64 typed library; a backend-created disposable nine-card
   collection passed queue counts, question/answer rendering, semantic
@@ -144,13 +147,13 @@ The current clean local non-hardware candidate is recorded for exact SHA
 - two consecutive clean invocations of the same canonical package command on
   this SHA produced byte-identical ZIPs, `BUILD.json`, manifests and archive
   evidence. Both archives contain 1,297 sorted regular files, use source date
-  epoch `1787331729`, and have the same SHA-256;
+  epoch `1787333389`, and have the same SHA-256;
 - package SHA-256:
-  `d6746127d49449a2fbcfe1d8b98e01376991a9115a2df521d31509f44d83d3e8`;
-- byte-identical companion evidence hashes are `0de78d7366060b14082528d985e00864709f073adfe7509c00b2d3b3fc4f9242`
-  for `BUILD.json`, `b4646b15866a884a5dead5a56ccb441be3e04138efd83904a607f296fced1051`
+  `9ce905be17f8b4ecd6eb4337727c7efb6c5e842607876575d18a121776c04075`;
+- byte-identical companion evidence hashes are `319bc66c50e042fb3c036b30952c9066e5565ab9a2b761001ddc6032744ce11c`
+  for `BUILD.json`, `6dbc766d7957e206df7db448bee256138c72e739a4ce26aa5af7ded8e194c677`
   for the 1,291-entry manifest, and
-  `20a4f37c5dc803476b300f9199c68fc3f48f953da81bb83f643b2339b82ce460`
+  `353d978f680359806d5e8a49a296ccbca139ebd0c3496d8e17be90d28c7a631b`
   for `archive-info.txt`;
 - `bash tools/local_pw6_rootfs_audit.sh` — **PASS** against the authenticated
   official PW6 5.19.6 recovery bundle. The audit verified the 412,492,749-byte
@@ -160,6 +163,9 @@ The current clean local non-hardware candidate is recorded for exact SHA
   `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`
   and TTS squashfs SHA-256
   `0724e2fca5d8bba72681cc5a9d593c68a76f3b0b22a367e613dd01ffba22c15b`.
+  The actual complete 1,297-file package verifier executed successfully through
+  the PW6 ARM BusyBox shell before the ABI probes; its evidence SHA-256 is
+  `2edc5fd69fbd6c1cc284b31e99ef0e43fae2dd6b9757f8fbfeb60caa1fbeaaea`.
   All seven packaged ELF objects were ARMv7 hard-float; their required
   GLIBC/GCC/LIBATOMIC versions and loader dependency closures resolved in the
   rootfs. Under QEMU/chroot, the real PW6 loader successfully loaded GTK2,
@@ -167,7 +173,7 @@ The current clean local non-hardware candidate is recorded for exact SHA
   symbols plus all four Lab126 CSS-pixel/zoom symbols, and instantiated
   `mixersink` and `ttssrc` after modeling the firmware's `/usr/lib/tts` mount.
   Evidence is under ignored
-  `out/firmware/pw6-5.19.6/evidence/b2f6a60c1a7d1c7a1137a4851fe17b6d51ed66cc/`;
+  `out/firmware/pw6-5.19.6/evidence/202c020154386c56ef8f0f6dcdf7a888d9681210/`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -341,6 +347,38 @@ executed through the target ARM shell under QEMU. No compiler, test or package
 error followed the fix. The first open failure remains physical PW6 execution
 (`hardware_execution=not_run`); historical upgrade and rollback still require
 real-device evidence.
+
+### Runtime-preflight checkpoint
+
+The next read-only call-order audit found a distinct real failure after the
+mixed-file verifier itself was correct: `kanki-launch.sh` created/inspected the
+lock and could append `kanki.log` before verification; standalone sync could
+also append the log first; and the diagnostic report copied identity, metrics
+and log inputs before recording its late verifier result. A symlink that should
+eventually be rejected could therefore be followed before rejection. The new
+contract reproduced the first failure as:
+
+```text
+runtime preflight contract: FAIL: launch: '\nverify_installation\n' must execute before 'if ! mkdir "$LOCK"'
+```
+
+Commit `5a9151c8d8eab1853ef4b4c986bb79cb0455628a` is the minimum runtime fix:
+the verifier rejects links before reading identity/manifest-owned paths, and
+launch, standalone sync and reporting authenticate and run it on stderr before
+touching the log, lock or report inputs. A failed report preflight creates no
+bundle from an unverified tree. Commit
+`202c020154386c56ef8f0f6dcdf7a888d9681210` adds the corresponding canonical
+target gate by executing the actual complete packaged verifier through the
+fixed PW6 BusyBox shell before the existing loader probes. This changes no
+Anki, renderer, audio or collection semantics and requires no ADR.
+
+On exact candidate `202c020154386c56ef8f0f6dcdf7a888d9681210`, host gates,
+typed Anki review/APKG/sync, two byte-identical ARMHF packages, the actual host
+package-tree verifier, target BusyBox verifier and full official PW6 rootfs
+audit all passed. No compiler, test or package error followed the fix; no
+global package was installed. The first open failure remains physical PW6
+launch (`hardware_execution=not_run`), followed by real-device clean install,
+historical upgrade and rollback evidence.
 
 ### Baseline failure ledger
 
@@ -540,7 +578,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 1. Preserve candidate identity before device transfer with
    `shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip`; the expected value
-   is `d6746127d49449a2fbcfe1d8b98e01376991a9115a2df521d31509f44d83d3e8`.
+   is `9ce905be17f8b4ecd6eb4337727c7efb6c5e842607876575d18a121776c04075`.
 2. Obtain explicit local test access to original COCA and at least one
    unrelated representative APKG, then run the same privacy-reviewed path
    without modifying or committing the decks and without adding deck CSS.
