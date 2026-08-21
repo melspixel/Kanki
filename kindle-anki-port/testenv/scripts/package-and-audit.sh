@@ -9,7 +9,10 @@ VERSION=${VERSION:-0.1.0-dev}
 BUILD_COMMIT=${BUILD_COMMIT:-unknown}
 ANKI_COMMIT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$PROJECT/upstream.lock.json")
 
-rm -rf "$DIST"
+# Both staging and release output are owned by this invocation.  Reusing an
+# existing ZIP lets `zip` retain members that disappeared from the new staging
+# tree, and stale sidecar reports can make a checkpoint look newer than it is.
+rm -rf "$DIST" "$RELEASE"
 mkdir -p "$DIST/extensions/kindle-anki-port" "$DIST/documents" "$RELEASE"
 EXT="$DIST/extensions/kindle-anki-port"
 cp "$ARMHF/kap-app" "$ARMHF/kap-audio" "$ARMHF/kap-sync" \
