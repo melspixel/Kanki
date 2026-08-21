@@ -44,6 +44,7 @@ run python3 -m py_compile \
     "$ROOT/tests/test_core_integration.py" \
     "$ROOT/tests/test_injector.py" "$ROOT/tests/test_semantic_boundary.py" \
     "$ROOT/tests/test_source_contract.py" "$ROOT/tests/test_package_audit.py" \
+    "$ROOT/tests/test_package_reproducibility.py" \
     "$ROOT/tests/test_prepare_pw6_rootfs.py" "$ROOT/tests/test_rootfs_prepare_script.py" \
     "$ROOT/tests/test_build_entrypoints.py" "$ROOT/tests/test_prepare_sysroot.py" \
     "$ROOT/tests/test_vm_advance_contract.py"
@@ -51,6 +52,7 @@ run python3 "$ROOT/tests/test_injector.py"
 run python3 "$ROOT/tests/test_semantic_boundary.py"
 run python3 "$ROOT/tests/test_source_contract.py"
 run python3 "$ROOT/tests/test_package_audit.py"
+run python3 "$ROOT/tests/test_package_reproducibility.py"
 run python3 "$ROOT/tests/test_prepare_pw6_rootfs.py"
 run python3 "$ROOT/tests/test_rootfs_prepare_script.py"
 run python3 "$ROOT/tests/test_build_entrypoints.py"
