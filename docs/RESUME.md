@@ -15,6 +15,8 @@ This is the first file to read when taking over the `rewrite-v1` work. The goal 
 
 Never infer completion from a compile, a screenshot, or an old green job. Issue #11 plus evidence attached to the release commit is the closure record.
 
+Read `docs/ANKI_DESKTOP_PARITY.md` before changing reviewer behavior: it records semantics derived directly from the pinned Anki desktop code and known remaining deltas.
+
 ## 2. Current architectural invariants
 
 These are design constraints, not implementation suggestions:
@@ -78,6 +80,7 @@ If a proposed fix violates any invariant above, stop and redesign it.
 - `scripts/kanki-report.sh` — redacted diagnostic bundle; does not include raw card captures
 - `packaging/` — config example and Kindle-home shortcuts
 - `tools/install_kindlehf_toolchain.sh` — pinned/checksummed KindleHF toolchain installer
+- `tools/run_host_gates.sh` — one-command host verification path
 - `.github/workflows/package.yml` — canonical installable package recipe
 
 ### References
@@ -106,7 +109,7 @@ Use the workflows as executable build documentation. Do not maintain a separate 
 
 The Actions failure has been isolated from Kanki source.
 
-On 2026-08-21, a deliberately minimal PR workflow named **Actions runner probe** was added. It uses `ubuntu-latest` and has one shell step that only prints the date, `uname`, runner OS and runner architecture. The failure continues on later source/documentation heads: probe run `32470385718`, job `96735736090`, completed `failure` with `steps = null`. Normal Kanki workflows fail in the same pre-step manner.
+On current audited PR head `6fb88b13e315cf3269ba6e09c96fbfea5d91d926`, deliberately minimal **Actions runner probe** run `32472582601` completed `failure` before its only shell step ran. The seven normal Kanki workflows triggered from the same head also failed before useful execution.
 
 Therefore the immediate blocker is outside product source execution. Do **not** change Kanki code or workflow build commands to repair these zero-step failures.
 
@@ -124,7 +127,13 @@ Do not shotgun-edit seven workflows merely because seven zero-step jobs are red.
 
 ## 6. Local/CI reproduction sequence
 
-When a normal runner or equivalent Linux environment is available, use this order:
+When a normal runner or equivalent Linux environment is available, the simplest entry point is:
+
+```sh
+sh tools/run_host_gates.sh
+```
+
+Its canonical components are:
 
 ```sh
 # Repository policy and formatting
@@ -148,6 +157,7 @@ cargo run -p kanki-app -- --self-test
 # Reviewer contracts (after installing the pinned jsdom used by CI)
 node tests/renderer_contract.test.cjs
 node tests/css_compat.test.cjs
+node tests/diagnostics_contract.test.cjs
 ```
 
 For Anki and ARMHF work, follow the corresponding workflow verbatim rather than reconstructing commands from memory. The package workflow is the canonical source for toolchain flags, source pins, exported symbols, ABI gates and ZIP layout.
@@ -160,7 +170,19 @@ Default `metrics.log` is designed to be privacy-safe: render/card identifier, si
 
 Raw source capture requires the sentinel `/mnt/us/extensions/kanki/enable-render-capture`. The launcher writes runtime `config.js`, the reviewer captures only the first 12 render sides, and `kanki-diag` writes HTML/CSS/AV metadata into `render-debug/`. Raw captures may contain note content and are never copied into the default redacted report.
 
-## 8. Evidence rules
+## 8. Current desktop-parity findings
+
+Do not treat visual similarity alone as completion. `docs/ANKI_DESKTOP_PARITY.md` currently records these open semantic items:
+
+- type-answer `{{FrontSide}}` separator must be inserted at the comparison marker rather than prepended to the whole answer document;
+- autoplay must come from effective deck config (`!disable_autoplay`), not merely from AV-tag presence;
+- answer-side replay must honor the effective `!skip_question_when_replaying_answer` semantic, including filtered-card original deck behavior;
+- Lab126 CSS-pixel policy belongs at the WebView lifecycle boundary and needs real-device proof;
+- ordinary HTTP(S) reviewer links need an explicit navigation policy.
+
+The same audit corrected an earlier assumption: the pinned Anki v3 scheduler returns four answer buttons, so Kanki's four-button bar is not a current parity defect; interval labels still come from Anki.
+
+## 9. Evidence rules
 
 For every closed item in issue #11, attach or reference evidence from the same commit:
 
@@ -175,7 +197,7 @@ For every closed item in issue #11, attach or reference evidence from the same c
 
 Never close a gate using a green result from an older source commit after behavior-changing code has landed.
 
-## 9. PW6 acceptance order
+## 10. PW6 acceptance order
 
 Do not begin hardware acceptance until host + bridge + ARMHF + package gates are green on the exact candidate commit.
 
@@ -188,18 +210,19 @@ On PW6:
 5. verify deck tree and collapse persistence;
 6. verify question -> answer -> Again/Hard/Good/Easy, bury, restart;
 7. run renderer corpus including representative original APKG decks without modifying them;
-8. verify long-card scrolling;
-9. verify AirPods audio and repeated replay;
-10. verify normal sync, restart, then desktop Anki integrity;
-11. verify full-sync decision paths separately;
-12. verify back/exit, duplicate launch, sleep/wake and USB/MTP lifecycle;
-13. generate diagnostic ZIP and inspect for credentials/private database content;
-14. if layout diagnosis requires raw content, enable raw capture deliberately for a bounded session and review it separately;
-15. verify rollback while leaving `anki_data` untouched.
+8. verify type-answer and effective autoplay/replay semantics;
+9. verify long-card scrolling;
+10. verify AirPods audio and repeated replay;
+11. verify normal sync, restart, then desktop Anki integrity;
+12. verify full-sync decision paths separately;
+13. verify back/exit, duplicate launch, sleep/wake and USB/MTP lifecycle;
+14. generate diagnostic ZIP and inspect for credentials/private database content;
+15. if layout diagnosis requires raw content, enable raw capture deliberately for a bounded session and review it separately;
+16. verify rollback while leaving `anki_data` untouched.
 
 Any failure reopens the relevant gate. Do not compensate by editing the deck.
 
-## 10. Release/merge rule
+## 11. Release/merge rule
 
 PR #10 remains Draft and issue #11 remains open until all applicable Gates A-E have same-commit evidence. Only then:
 
@@ -210,7 +233,7 @@ PR #10 remains Draft and issue #11 remains open until all applicable Gates A-E h
 5. update `STATUS.md`, `HANDOFF.md`, issue #11 and release notes;
 6. mark PR ready, merge to `main`, and tag the accepted source point.
 
-## 11. Things that must never be hidden in chat
+## 12. Things that must never be hidden in chat
 
 Before ending any development session, commit/update:
 
