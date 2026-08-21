@@ -25,10 +25,12 @@ def main() -> int:
         'len(unique_apkgs) < 5',
         '"non-hardware-release-gates-passed"',
         '"armhf-checkpoint-passed"',
-        '"qemu-package-checkpoint-passed"',
+        '"qemu-checkpoint-passed"',
         '"QEMU": str(qemu_exact)',
         '"BUILD_COMMIT": build_commit',
         'qemu_exact / "QEMU-PROVENANCE.txt"',
+        'if semantic_missing:',
+        'report["release_gate_missing"] = [*semantic_missing, "final package"]',
     )
     for needle in required:
         assert needle in text, f"vm-advance missing canonical contract: {needle}"
@@ -45,10 +47,17 @@ def main() -> int:
         "vm-advance must terminate at an ARMHF checkpoint when rootfs is absent"
     )
 
+    semantic_guard = text.index("if semantic_missing:")
+    qemu_checkpoint = text.index('report["result"] = "qemu-checkpoint-passed"')
+    assert qemu_gate < semantic_guard < qemu_checkpoint < package_gate, (
+        "vm-advance must withhold the installer when real-APKG semantic coverage is incomplete"
+    )
+
     forbidden = (
         "kap_port::tests",
         '"software-build-gates-passed"',
         '"armhf-package-checkpoint-passed"',
+        '"qemu-package-checkpoint-passed"',
         '("cargo-check",',
         '("cargo-test",',
         '("cargo-release",',
