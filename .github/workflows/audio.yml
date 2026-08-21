@@ -7,6 +7,7 @@ on:
       - 'device/audio/**'
       - 'scripts/kanki-launch.sh'
       - 'third_party/audiobook-koplugin'
+      - 'tools/install_kindlehf_toolchain.sh'
       - '.github/workflows/audio.yml'
   pull_request:
     branches: [main]
@@ -14,6 +15,7 @@ on:
       - 'device/audio/**'
       - 'scripts/kanki-launch.sh'
       - 'third_party/audiobook-koplugin'
+      - 'tools/install_kindlehf_toolchain.sh'
       - '.github/workflows/audio.yml'
   workflow_dispatch:
 
@@ -27,10 +29,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Install KindleHF toolchain and pinned decoder
+      - name: Install pinned KindleHF toolchain and pinned decoder
         run: |
-          wget -q https://github.com/KindleModding/koxtoolchain/releases/latest/download/kindlehf.tar.gz -O /tmp/kindlehf.tar.gz
-          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          bash tools/install_kindlehf_toolchain.sh
           echo "$HOME/x-tools/arm-kindlehf-linux-gnueabihf/bin" >> "$GITHUB_PATH"
           curl -fL --retry 3 \
             https://raw.githubusercontent.com/mackron/miniaudio/4a5b74bef029b3592c54b6048650ee5f972c1a48/miniaudio.h \
