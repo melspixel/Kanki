@@ -85,6 +85,7 @@ class ArmhfProvenanceTests(unittest.TestCase):
                 "PROTOC": str(self.protoc),
                 "TOOLCHAIN_BIN": str(self.toolchain),
                 "OUT": str(self.out),
+                "SYSROOT": str(self.tmp / "fixture-sysroot"),
                 "GLIBC_CEILING": "2.35",
                 "CARGO_MARKER": str(self.marker),
             }
