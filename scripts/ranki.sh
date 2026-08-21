@@ -15,6 +15,9 @@ RENDER_DEBUG_DIR="$RANKI_DIR/render-debug"
 RENDER_DEBUG_PREVIOUS="$RANKI_DIR/render-debug.previous"
 SYSTEM_FINGERPRINT_SCRIPT="$RANKI_DIR/kindle-system-fingerprint.sh"
 SYSTEM_FINGERPRINT="$RANKI_DIR/system-fingerprint.txt"
+CONFIG_FILE="$RANKI_DIR/config.ini"
+DEFAULT_CONFIG="$RANKI_DIR/config.ini.default"
+BUILD_INFO="$RANKI_DIR/KANKI_BUILD.txt"
 
 acquire_lock() {
     if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -32,7 +35,14 @@ acquire_lock() {
 }
 acquire_lock || exit 0
 
-COLLECTION_DIR=$(sed -n 's/^[[:space:]]*collection_dir[[:space:]]*=[[:space:]]*//p' "$RANKI_DIR/config.ini" | tail -n 1)
+# The drop-in package deliberately does not overwrite config.ini. When this is
+# a fresh installation, create it from the packaged default; when it is an
+# in-place replacement, the existing AnkiWeb key and collection path survive.
+if [ ! -r "$CONFIG_FILE" ] && [ -r "$DEFAULT_CONFIG" ]; then
+    cp "$DEFAULT_CONFIG" "$CONFIG_FILE" 2>/dev/null || true
+fi
+
+COLLECTION_DIR=$(sed -n 's/^[[:space:]]*collection_dir[[:space:]]*=[[:space:]]*//p' "$CONFIG_FILE" | tail -n 1)
 [ -z "$COLLECTION_DIR" ] && COLLECTION_DIR=/mnt/us/anki_data
 case "$COLLECTION_DIR" in
     /*) ;;
@@ -95,6 +105,8 @@ chmod 755 "$AUDIO_SERVER" "$BIN" 2>/dev/null || true
     echo ""
     echo "===== Kanki start $(date '+%Y-%m-%d %H:%M:%S') ====="
     echo "arch=$ARCH"
+    [ -r "$BUILD_INFO" ] && sed 's/^/build: /' "$BUILD_INFO"
+    echo "launcher=direct-library-shortcut"
     echo "media=$KANKI_MEDIA_DIR"
     echo "backend_request=$BACKEND_REQUEST"
     echo "render_debug=$RENDER_DEBUG"
