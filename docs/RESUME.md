@@ -121,17 +121,11 @@ bash tools/local_pw6_rootfs_audit.sh
 
 ## 5. Current hosted-CI blocker
 
-GitHub-hosted Actions remains broken before job execution.
-
-At PR head `fc4879c609ca95978c3ed202a8c485c6993a1d7c`, minimal **Actions runner probe** run `32475742329`, job `96751577470`, completed `failure` with `steps = null`. All normal workflows on the same head failed in the same pre-step manner.
-
-Therefore:
-
-- do **not** treat these red runs as source/compiler failures;
-- do **not** shotgun-edit workflows to chase a job that never started;
-- repository/account Actions policy, minutes/billing/budget or hosted-runner availability remains the likely infrastructure class to inspect.
-
-However, hosted Actions is no longer a hard blocker for compilation: the canonical package recipe now has a local Docker executor.
+Current runner/run identifiers belong in `docs/STATUS.md`, not in this resume
+router. The invariant is stable: a red job with no executed steps is hosted
+infrastructure evidence, not a Kanki compiler failure. Do not edit product
+source or duplicate build logic to chase it; use the canonical local executors
+and treat hosted CI as later independent confirmation.
 
 ## 6. Immediate next actions from this checkpoint
 
@@ -148,116 +142,43 @@ the physical PW6.
 
 ## 7. Local package contract
 
-The canonical package script:
-
-```sh
-bash tools/build_kindle_package.sh
-```
-
-requires Linux x86-64-compatible execution, Rust 1.92.0 and the documented host dependencies. On macOS use the wrapper:
-
-```sh
-bash tools/local_package_docker.sh
-```
-
-The wrapper forces `linux/amd64` because the pinned KindleHF toolchain is Linux x86-64-hosted. Apple Silicon Docker/OrbStack/Colima can emulate this platform; the first Anki build may be slow.
-
-Expected output:
-
-```text
-out/local-kindle/Kanki-rewrite-hw3.zip
-out/local-kindle/Kanki-rewrite-hw3.zip.sha256
-out/local-kindle/package-contents.txt
-out/local-kindle/package-exports.txt
-out/local-kindle/package-glibc.txt
-out/local-kindle/sysroot-glibc.txt
-out/local-kindle/toolchain-info.txt
-out/local-kindle/mathjax-info.txt
-out/local-kindle/archive-info.txt
-```
-
-The script refuses a dirty root checkout by default, validates source gitlinks, installs/reuses the checksum-pinned KindleHF toolchain, restores temporary Anki source injection on exit, performs manifest/export/GLIBC gates, and records the exact build identity inside the package.
-
-A local canonical build is valid build evidence. A ZIP assembled by ad-hoc copy commands is not.
+`docs/LOCAL_BUILD.md` exclusively owns prerequisites, output inventory,
+troubleshooting and evidence fields. The canonical definition remains
+`tools/build_kindle_package.sh`; macOS/Linux runs it through
+`tools/local_package_docker.sh`. A manually assembled ZIP is never evidence.
 
 ## 8. Renderer diagnostics contract
 
-Normal launch creates `/mnt/us/extensions/kanki/render-debug/` and starts `kanki-diag`. Failure to create/start diagnostics is explicit and aborts launch rather than silently losing observability.
-
-Default `metrics.log` is privacy-safe: render/card identifier, side, body class, viewport/scroll/`#qa` geometry, DPR, and a bounded set of element tag/class/computed font/display/geometry fields. It does not include element text.
-
-Raw source capture requires the sentinel `/mnt/us/extensions/kanki/enable-render-capture`. Raw captures may contain note content and are never copied into the default redacted report.
+`docs/HANDOFF.md` owns the diagnostic/privacy contract and `docs/INSTALL.md`
+owns the device procedure. Default evidence stays metadata-only; raw card
+source remains bounded explicit opt-in and is never added to the redacted
+bundle automatically.
 
 ## 9. Current desktop-parity findings
 
-Do not treat visual similarity alone as completion. `docs/ANKI_DESKTOP_PARITY.md` is the source of truth.
-
-Current important state:
-
-- typed-answer `{{FrontSide}}` separator placement and basic/cloze/empty/unknown-field behavior have pinned-backend executable fixtures; PW6 input/scroll remains pending;
-- autoplay must come from effective deck config (`!disable_autoplay`) and is represented in the rewrite design/packet path;
-- answer-side replay must honor effective `!skip_question_when_replaying_answer`, including filtered-card original-deck behavior;
-- the pinned Anki v3 scheduler uses four answer buttons, so the four-button Kindle bar is not a parity defect for this pin;
-- Lab126 CSS-pixel policy still needs lifecycle/device verification;
-- ordinary reviewer HTTP(S) links are explicitly prevented from replacing the persistent reviewer document and need device-policy acceptance.
-- checksum-pinned MathJax SVG output is exercised across dynamic persistent
-  `#qa` renders; real PW6 geometry/performance remains open.
-- seven checksum-pinned, unmodified upstream Anki APKG fixtures pass semantic
-  import -> packet -> persistent-reviewer host tests; original COCA, unrelated
-  rich/user APKGs and PW6 geometry remain open.
+`docs/ANKI_DESKTOP_PARITY.md` owns semantic findings and
+`docs/STATUS.md` owns which ones currently pass or remain open. Visual
+similarity alone is never completion; diagnose via the backend/packet/DOM/CSS/
+WebKit/Lab126/font-media chain in `docs/CODEX_HANDOFF.md`.
 
 ## 10. Evidence rules
 
-For every closed item in issue #11, attach/reference evidence from the same candidate commit:
-
-- exact commit SHA;
-- executor/test identifier (GitHub run, local canonical build, or PW6 test);
-- relevant artifact/log;
-- target architecture;
-- for rendering: fixture name and measured contract result;
-- for hardware: device firmware, operation performed and result;
-- for sync: desktop integrity/reopen result;
-- for privacy: diagnostic bundle inspection result.
-
-Never close a gate using a green result from an older source commit after behavior-changing code has landed.
+`docs/TESTING.md` owns gate requirements and `docs/HANDOFF.md` owns the durable
+evidence record. Issue #11 closes only with same-candidate evidence; never
+inherit an older green result across behavior-changing commits.
 
 ## 11. PW6 acceptance order
 
-Do not begin final hardware acceptance until host + bridge + ARMHF + package gates are green on the exact candidate commit.
-
-On PW6:
-
-1. back up the collection;
-2. clean-install into `extensions/kanki` without touching `extensions/ranki` or `anki_data`;
-3. capture build identity and system fingerprint;
-4. confirm `render-debug/metrics.log` exists after first review render;
-5. verify deck tree and collapse persistence;
-6. verify question -> answer -> Again/Hard/Good/Easy, bury, restart;
-7. run renderer corpus including representative original APKG decks without modifying them;
-8. verify type-answer and effective autoplay/replay semantics;
-9. verify long-card scrolling;
-10. verify AirPods audio and repeated replay;
-11. verify normal sync, restart, then desktop Anki integrity;
-12. verify full-sync decision paths separately;
-13. verify back/exit, duplicate launch, sleep/wake and USB/MTP lifecycle;
-14. generate diagnostic ZIP and inspect for credentials/private database content;
-15. if layout diagnosis requires raw content, enable raw capture deliberately for a bounded session and review it separately;
-16. verify rollback while leaving `anki_data` untouched.
-
-Any failure reopens the relevant gate. Do not compensate by editing the deck.
+`docs/TESTING.md` Gate E owns the ordered acceptance checklist and
+`docs/INSTALL.md` owns clean install/full-sync/rollback steps. Start only after
+the exact candidate passes non-hardware gates; never touch `anki_data`, modify
+an input deck, or treat rootfs/QEMU evidence as physical PW6 evidence.
 
 ## 12. Release/merge rule
 
-PR #10 remains Draft and issue #11 remains open until all applicable gates have same-candidate evidence. Hosted GitHub CI is useful independent confirmation but is no longer the sole build authority.
-
-A release candidate may be produced by the documented local canonical builder when hosted Actions is unavailable, provided:
-
-1. the checkout is clean and exact commit recorded;
-2. canonical package script gates pass;
-3. artifact SHA-256/toolchain/ABI evidence is retained;
-4. remaining non-hardware gates are green on the same commit;
-5. PW6 acceptance is completed against that exact ZIP;
-6. `STATUS.md`, `HANDOFF.md`, issue #11 and release notes are updated before merge/tag.
+`docs/HANDOFF.md` owns release operations and `docs/STATUS.md` owns current
+readiness. PR #10 stays Draft and issue #11 stays open until the same exact
+candidate artifact has all applicable software and physical PW6 evidence.
 
 ## 13. Things that must never be hidden in chat
 

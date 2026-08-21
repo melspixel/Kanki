@@ -6,7 +6,9 @@ Use this page to avoid treating overlapping project documents as separate projec
 
 - `CODEX_HANDOFF.md` — zero-context operational handoff for a local coding agent/maintainer; includes repository cleanup plan and local-build sequence.
 - `STATUS.md` — current implemented/verified/blocked state. This is the answer to “what is happening now?”.
-- `RESUME.md` — legacy zero-context resume guide retained while the rewrite is in progress; keep consistent with `CODEX_HANDOFF.md` until they are consolidated.
+- `RESUME.md` — compact zero-context route through invariants, source map and
+  entry commands; mutable status and detailed contracts link to their owner
+  documents instead of being copied here.
 
 ## Design and parity
 
