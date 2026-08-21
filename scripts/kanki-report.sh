@@ -8,6 +8,7 @@ WORK="$OUT_ROOT/kanki-report-$STAMP"
 ARCHIVE="$OUT_ROOT/kanki-report-$STAMP.tar.gz"
 LOG="$DIR/kanki.log"
 RENDER_DEBUG="$DIR/render-debug"
+RENDER_PREVIOUS="$DIR/render-debug.previous"
 
 mkdir -p "$WORK"
 
@@ -59,16 +60,18 @@ redact_log() {
     echo 'credentials_included=no'
     echo 'raw_card_capture_included=no'
     echo 'renderer_metrics_included=yes_if_available'
+    echo 'previous_renderer_metrics_included=yes_if_available'
     echo
     echo 'Raw HTML/CSS capture is opt-in via enable-render-capture and remains under'
-    echo 'extensions/kanki/render-debug. It is intentionally NOT copied into this'
-    echo 'redacted bundle because it may contain note content.'
+    echo 'extensions/kanki/render-debug or render-debug.previous. It is intentionally'
+    echo 'NOT copied into this redacted bundle because it may contain note content.'
 } >"$WORK/README.txt"
 
 copy_if_readable "$DIR/BUILD.json" "$WORK/BUILD.json"
 copy_if_readable "$DIR/MANIFEST.sha256" "$WORK/MANIFEST.sha256"
 copy_if_readable "$DIR/INSTALL.md" "$WORK/INSTALL.md"
 copy_if_readable "$RENDER_DEBUG/metrics.log" "$WORK/renderer-metrics.log"
+copy_if_readable "$RENDER_PREVIOUS/metrics.log" "$WORK/renderer-metrics.previous.log"
 redact_log "$LOG" "$WORK/kanki.redacted.log"
 
 {
@@ -122,6 +125,11 @@ redact_log "$LOG" "$WORK/kanki.redacted.log"
     else
         echo 'render_debug_dir=missing'
     fi
+    if [ -d "$RENDER_PREVIOUS" ]; then
+        echo 'render_debug_previous=present'
+    else
+        echo 'render_debug_previous=missing'
+    fi
     if [ -f "$DIR/enable-render-capture" ]; then
         echo 'raw_render_capture=enabled'
     else
@@ -147,8 +155,8 @@ redact_log "$LOG" "$WORK/kanki.redacted.log"
 
 # Never copy config.ini, collection.anki2, collection.media, raw render captures,
 # browser history, account files, Wi-Fi configuration or Kindle identifiers into
-# the default report. `renderer-metrics.log` contains geometry/style metadata but
-# deliberately contains no element text.
+# the default report. Renderer metrics contain geometry/style metadata but
+# deliberately contain no element text.
 if command -v tar >/dev/null 2>&1; then
     (cd "$OUT_ROOT" && tar -czf "$ARCHIVE" "$(basename "$WORK")")
 else
