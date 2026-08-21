@@ -49,13 +49,13 @@ Earlier commits/iterations established useful component-level evidence for parts
 
 These results are engineering evidence, but they do **not** close the current candidate because later behavior-changing commits landed afterward. The release candidate must be revalidated on one exact commit.
 
-## Current blocker
+## Current blocker — confirmed on newest handoff head
 
-At the last observed PR head before this documentation refresh, every PR-triggered workflow completed as `failure` within seconds and the jobs exposed no executed step list. Example `Rewrite CI` jobs (`host`, `arm-skeleton`) contained zero steps.
+After the handoff documentation refresh, PR #10 advanced to a new head and all seven PR workflows again terminated as `failure` before executing useful steps. `Rewrite CI` run `32468549202` reports jobs `host` and `arm-skeleton`, both completed `failure`, with `steps = null`.
 
-Working diagnosis: GitHub Actions execution/runner infrastructure is currently blocking useful CI execution. Until a job actually enters checkout/step 1, do not treat these zero-step failures as application/compiler failures.
+This reproduces the prior behavior on a fresh commit and strongly isolates the immediate blocker to GitHub Actions job execution/runner/account/repository infrastructure rather than a product source compile failure.
 
-This blocker is now documented in `docs/RESUME.md` so a new maintainer does not waste time shotgun-editing source or all workflow files in response to infrastructure-only red runs.
+Until a job actually enters checkout/step 1, do not change Kanki source merely because these zero-step runs are red.
 
 ## What is not yet verified/closed
 
@@ -76,14 +76,13 @@ The following still require same-commit evidence before release:
 
 ## Immediate next actions
 
-1. Re-check GitHub Actions on the newest `rewrite-v1` head after the handoff/status commits.
-2. Confirm whether jobs execute real steps.
-3. If they still fail with zero steps, diagnose Actions/account/repository execution before modifying product code.
-4. Once runners execute, fix only the first real failing step in the narrowest workflow.
-5. Establish one green host commit, then typed Anki host bridge, ARMHF bridge/device/audio/CSS, then package.
-6. Freeze the first complete candidate only after all non-hardware gates are green on the same SHA.
-7. Produce the first rewrite installable ZIP from the package workflow, not manually.
-8. Run PW6 hardware acceptance and feed its diagnostic bundle back into issue #11.
+1. Diagnose why GitHub Actions creates jobs with no step list on this private repository/account.
+2. Do not edit seven product/workflow files in parallel; first make one minimal workflow execute checkout successfully.
+3. Once a runner executes, fix only the first real failing step in the narrowest workflow.
+4. Establish one green host commit, then typed Anki host bridge, ARMHF bridge/device/audio/CSS, then package.
+5. Freeze the first complete candidate only after all non-hardware gates are green on the same SHA.
+6. Produce the first rewrite installable ZIP from the package workflow, not manually.
+7. Run PW6 hardware acceptance and feed its diagnostic bundle back into issue #11.
 
 ## Release rule
 
