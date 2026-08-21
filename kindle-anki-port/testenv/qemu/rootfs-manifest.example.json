@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "device": "PW6/Bellatrix4",
+  "firmware_sha256": "72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c",
+  "rootfs_sha256": "b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa",
+  "rootfs_path": "external input; never committed",
+  "dynamic_linker": "/lib/ld-linux-armhf.so.3"
+}
