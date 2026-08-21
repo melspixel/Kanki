@@ -40,6 +40,7 @@ jobs:
           node --check assets/reviewer/reviewer.js
           node --check assets/reviewer/css_compat.js
           node --check assets/reviewer/css_runtime.js
+          node --check assets/reviewer/diagnostics.js
           node --check assets/device/decks.js
           node --check tests/renderer_contract.test.cjs
           sh -n tools/install_kindlehf_toolchain.sh
