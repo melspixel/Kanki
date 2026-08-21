@@ -50,6 +50,7 @@ ANKI_CARGO=third_party/anki/rslib/Cargo.toml
 ANKI_BRIDGE_RS=third_party/anki/rslib/src/kanki_bridge.rs
 ANKI_SYNC_RS=third_party/anki/rslib/src/kanki_sync_bridge.rs
 ANKI_FIXTURE_RS=third_party/anki/rslib/src/bin/kanki_fixture.rs
+ANKI_APKG_FIXTURE_RS=third_party/anki/rslib/src/bin/kanki_apkg_fixture.rs
 cp "$ANKI_LIB_RS" "$SCRATCH/lib.rs.original"
 cp "$ANKI_CARGO" "$SCRATCH/Cargo.toml.original"
 
@@ -60,7 +61,8 @@ cleanup() {
     fi
     cp "$SCRATCH/lib.rs.original" "$ANKI_LIB_RS" 2>/dev/null || true
     cp "$SCRATCH/Cargo.toml.original" "$ANKI_CARGO" 2>/dev/null || true
-    rm -f "$ANKI_BRIDGE_RS" "$ANKI_SYNC_RS" "$ANKI_FIXTURE_RS"
+    rm -f "$ANKI_BRIDGE_RS" "$ANKI_SYNC_RS" "$ANKI_FIXTURE_RS" \
+        "$ANKI_APKG_FIXTURE_RS"
     rmdir third_party/anki/rslib/src/bin 2>/dev/null || true
     rm -rf "$SCRATCH"
 }
@@ -82,6 +84,7 @@ cp bridge/anki_bridge.rs "$ANKI_BRIDGE_RS"
 cp bridge/sync_bridge.rs "$ANKI_SYNC_RS"
 mkdir -p "$(dirname "$ANKI_FIXTURE_RS")"
 cp bridge/fixture.rs "$ANKI_FIXTURE_RS"
+cp bridge/apkg_fixture.rs "$ANKI_APKG_FIXTURE_RS"
 python3 - <<'PY'
 from pathlib import Path
 
@@ -109,7 +112,8 @@ PY
 printf '%s\n' '== compile typed Anki host library =='
 (
     cd third_party/anki
-    cargo build -p anki --release --features rustls --lib --bin kanki_fixture
+    cargo build -p anki --release --features rustls --lib \
+        --bin kanki_fixture --bin kanki_apkg_fixture
     cargo build -p anki-sync-server --release
 )
 
@@ -138,6 +142,27 @@ python3 tests/anki_bridge_integration.py \
     "$LIB" "$SCRATCH/collection.anki2" "$SCRATCH/media" "$SCRATCH/media.db2" \
     | tee "$OUT_DIR/bridge-integration.txt"
 grep -q '^anki bridge integration: pass$' "$OUT_DIR/bridge-integration.txt"
+
+printf '%s\n' '== import unmodified pinned APKGs and render production packets =='
+python3 tests/apkg_bridge_integration.py \
+    "$LIB" third_party/anki/target/release/kanki_apkg_fixture \
+    "$SCRATCH/apkg-fixtures" "$ROOT" tests/anki_apkg_fixtures.sha256 \
+    "$OUT_DIR/apkg-packets.json" \
+    | tee "$OUT_DIR/apkg-integration.txt"
+grep -q '^APKG bridge integration: pass$' "$OUT_DIR/apkg-integration.txt"
+
+printf '%s\n' '== insert original APKG packets into one persistent reviewer DOM =='
+NODE_ROOT=${KANKI_HOST_NODE_ROOT:-$OUT_DIR/node-toolchain}
+sh tools/install_host_node.sh "$NODE_ROOT" | tee "$OUT_DIR/node-install.txt"
+NODE_BIN=$NODE_ROOT/bin/node
+sh tools/install_host_jsdom.sh "$OUT_DIR/node-runtime" "$NODE_ROOT" \
+    | tee "$OUT_DIR/jsdom-install.txt"
+JSDOM_ROOT=$OUT_DIR/node-runtime/node_modules
+NODE_PATH="$JSDOM_ROOT" "$NODE_BIN" tests/apkg_reviewer_contract.test.cjs \
+    "$OUT_DIR/apkg-packets.json" \
+    | tee "$OUT_DIR/apkg-reviewer.txt"
+grep -q '^APKG persistent reviewer contract: pass (7 fixtures)$' \
+    "$OUT_DIR/apkg-reviewer.txt"
 
 printf '%s\n' '== run controlled normal/full/media sync integration =='
 SYNC_FIXTURE_USER=kanki-sync-fixture

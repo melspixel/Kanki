@@ -15,11 +15,16 @@ need cargo
 need rustfmt
 need bash
 need python3
-need node
-need npm
 need cc
 need curl
 need tar
+
+NODE_ROOT=$ROOT/out/host-node-toolchain/node-v20.18.2
+sh tools/install_host_node.sh "$NODE_ROOT"
+PATH="$NODE_ROOT/bin:$PATH"
+export PATH
+need node
+need npm
 
 printf '%s\n' '== source pins =='
 test "$(git -C third_party/anki rev-parse HEAD)" = e5a6fbe27fdd4d57d5f712191b4a753032e57853
@@ -29,7 +34,7 @@ test "$(git -C third_party/audiobook-koplugin rev-parse HEAD)" = 62edf76feb1b7f4
 
 printf '%s\n' '== formatting / lint / policy =='
 cargo fmt --all -- --check
-rustfmt --edition 2021 --check bridge/anki_bridge.rs bridge/fixture.rs
+rustfmt --edition 2021 --check bridge/anki_bridge.rs bridge/fixture.rs bridge/apkg_fixture.rs
 cargo clippy --workspace --all-targets -- -D warnings
 python3 tools/check_policy.py
 python3 tests/bridge_source_contract.py
@@ -48,6 +53,7 @@ node --check assets/reviewer/mathjax_runtime.js
 node --check assets/reviewer/diagnostics.js
 node --check tests/renderer_contract.test.cjs
 node --check tests/mathjax_vendor_contract.test.cjs
+node --check tests/apkg_reviewer_contract.test.cjs
 node --check tests/css_compat.test.cjs
 node --check tests/diagnostics_contract.test.cjs
 sh -n scripts/kanki-launch.sh
@@ -55,10 +61,13 @@ sh -n scripts/kanki-sync.sh
 sh -n scripts/kanki-report.sh
 sh -n tools/install_kindlehf_toolchain.sh
 sh -n tools/install_mathjax.sh
+sh -n tools/install_host_node.sh
+sh -n tools/install_host_jsdom.sh
 bash -n tools/run_anki_bridge_host.sh
 sh -n tools/local_anki_bridge_docker.sh
 sh -n tools/local_package_docker.sh
 python3 -c 'compile(open("tests/anki_bridge_integration.py", encoding="utf-8").read(), "tests/anki_bridge_integration.py", "exec")'
+python3 -c 'compile(open("tests/apkg_bridge_integration.py", encoding="utf-8").read(), "tests/apkg_bridge_integration.py", "exec")'
 python3 -c 'compile(open("tests/sync_bridge_integration.py", encoding="utf-8").read(), "tests/sync_bridge_integration.py", "exec")'
 python3 -c 'compile(open("tools/create_reproducible_zip.py", encoding="utf-8").read(), "tools/create_reproducible_zip.py", "exec")'
 python3 -c 'compile(open("tests/reproducible_zip_contract.py", encoding="utf-8").read(), "tests/reproducible_zip_contract.py", "exec")'
@@ -66,10 +75,10 @@ python3 -c 'compile(open("tests/reproducible_zip_contract.py", encoding="utf-8")
 printf '%s\n' '== host unit/integration =='
 cargo test --workspace
 
-if [ ! -d node_modules/jsdom ]; then
-    printf '%s\n' '== install pinned jsdom test dependency =='
-    npm install --no-save --ignore-scripts jsdom@24.1.3
-fi
+printf '%s\n' '== install locked jsdom test dependency =='
+sh tools/install_host_jsdom.sh "$ROOT/out/host-node" "$NODE_ROOT"
+NODE_PATH=$ROOT/out/host-node/node_modules
+export NODE_PATH
 
 printf '%s\n' '== reviewer contracts =='
 MATHJAX_EVIDENCE="$ROOT/out/host-mathjax"
