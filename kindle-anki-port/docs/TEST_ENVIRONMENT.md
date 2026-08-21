@@ -6,7 +6,7 @@ Updated: 2026-08-22
 
 Provide a reproducible porting laboratory that separates desktop-Anki semantics, ARM/Linux compatibility, exact PW6 runtime ABI, release packaging, and real-device behavior. VM/QEMU evidence may close non-hardware gates, but it is never a substitute for physical PW6 acceptance.
 
-The official Kindle open-source tree is useful for understanding and rebuilding open components; it is not a complete emulator. High-fidelity runtime testing additionally requires the checksum-matching PW6 5.19.6 rootfs/proprietary runtime files. Those bytes are private external inputs and are never committed to GitHub.
+The official Kindle open-source tree is useful for understanding and rebuilding open components; it is not a complete emulator. High-fidelity runtime testing additionally requires the checksum-matching PW6 5.19.6 rootfs/proprietary runtime files. For release L2, both the extracted rootfs directory and the retained rootfs image are required: the directory supplies QEMU's runtime tree, while the image supplies the full-filesystem SHA-256 identity. Those bytes are private external inputs and are never committed to GitHub.
 
 ## Release-order invariant
 
@@ -15,12 +15,12 @@ The maintained non-hardware release sequence is strictly:
 ```text
 L0 host semantics/static contracts
 -> L1 ARMHF cross-build + ELF/ABI/GLIBC audit
--> L2 exact checksum-matching PW6 rootfs QEMU
+-> L2 exact checksum-matching PW6 rootfs-image + extracted-rootfs QEMU
 -> L2.5 QEMU-bound package/reproducibility/privacy audit
 -> durable GitHub release artifacts
 ```
 
-A final-looking `Kindle-Anki-Port-PW6-armhf.zip` must **not** be assembled before L2 passes for the exact ARMHF bytes being archived. Generic ARM/QEMU host sanity is not a substitute for L2.
+A final-looking `Kindle-Anki-Port-PW6-armhf.zip` must **not** be assembled before L2 passes for the exact ARMHF bytes being archived. Generic ARM/QEMU host sanity is not a substitute for L2, and an extracted directory that is not bound to the canonical rootfs-image SHA-256 is not sufficient L2 evidence.
 
 ## Test layers
 
@@ -54,7 +54,7 @@ L1 may run generic static ARM/QEMU sanity, but it does **not** create the final 
 
 ### L2 — Exact PW6 rootfs QEMU runtime gate
 
-Runs the fresh L1 ARM binaries against an extracted, checksum-verified PW6 5.19.6 rootfs under `qemu-arm`/`qemu-arm-static`.
+Runs the fresh L1 ARM binaries against an extracted PW6 5.19.6 rootfs under `qemu-arm`/`qemu-arm-static`, while requiring the retained source rootfs image from the same verified extraction.
 
 Required identity checks occur before QEMU execution:
 
@@ -64,21 +64,23 @@ Anki identity == upstream.lock.json pin
 ARMHF-GATES.txt == ARMHF gates: PASS
 ARMHF source/Anki provenance matches the release identity
 rootfs manifest bytes == committed canonical PW6 5.19.6 manifest
+ROOTFS_IMAGE is present as a regular retained image
+rootfs image SHA-256 == canonical manifest rootfs_image.sha256
 ```
 
 Runtime checks include:
 
-- verify loader/libc/WebKit and rootfs-image hashes against the canonical manifest;
-- load the real target dynamic linker/shared libraries;
+- verify the full rootfs-image SHA-256 and selected loader/libc/WebKit hashes against the canonical manifest;
+- load the real target dynamic linker/shared libraries from the extracted tree;
 - load the exact `libanki-kindle.so` built at L1;
 - smoke-test backend startup/C ABI loading and shutdown;
 - run `kap-audio --self-test` and `kap-sync --self-test` under the exact rootfs;
 - detect missing symbols and incompatible target-library assumptions;
 - persist `QEMU-SMOKE.txt`, rootfs verification, backend/audio/sync logs and `QEMU-PROVENANCE.txt`.
 
-`QEMU-PROVENANCE.txt` records source/Anki identity, canonical manifest hash and the SHA-256 of all four ARMHF release binaries. It does not expose private rootfs absolute paths.
+`QEMU-PROVENANCE.txt` records source/Anki identity, canonical manifest hash, canonical rootfs-image SHA-256 and the SHA-256 of all four ARMHF release binaries. It records hashes/identifiers only and does not expose private rootfs/image absolute paths.
 
-The rootfs is an external private input and is never committed to GitHub.
+The rootfs tree and image are external private inputs and are never committed to GitHub.
 
 ### L2.5 — Release package, provenance, privacy and reproducibility gate
 
@@ -89,11 +91,14 @@ This layer may run **only after L2 PASS**.
 ```text
 QEMU smoke PASS
 PW6 rootfs verification PASS
-backend/audio/sync smoke PASS
+rootfs-verification.txt proves canonical rootfs-image SHA-256
+QEMU provenance rootfs_verified=true
 same source commit
 same pinned Anki commit
 same canonical rootfs-manifest SHA-256
+same canonical rootfs-image SHA-256
 same SHA-256 for libanki-kindle.so, kap-app, kap-audio and kap-sync
+backend/audio/sync smoke PASS
 ```
 
 Then it may:
@@ -104,6 +109,7 @@ Then it may:
 - normalize modes/timestamps/member order for reproducibility;
 - run ZIP integrity/content/policy audit;
 - persist ARMHF/QEMU/rootfs/ABI/GLIBC/package provenance reports alongside the ZIP;
+- record canonical rootfs-manifest and rootfs-image hashes in package provenance;
 - generate the external ZIP SHA-256 and package contents listing.
 
 The production package path must fail closed on absent or stale L2 evidence.
@@ -163,8 +169,9 @@ The environment must pin/verify:
 - official Anki source commit;
 - Rust/toolchain/protoc inputs used by the release build;
 - KindleHF toolchain release/checksum;
-- exact PW6 firmware/rootfs checksum;
-- canonical PW6 runtime-file hashes;
+- exact PW6 firmware checksum;
+- exact retained PW6 rootfs-image SHA-256;
+- canonical PW6 runtime-file hashes from the extracted tree;
 - generated sysroot manifest where used;
 - real APKG fixture hashes in the final test report;
 - source, ARMHF, QEMU and package provenance hashes.
@@ -175,38 +182,43 @@ Canonical PW6 manifest:
 testenv/qemu/pw6-5.19.6-rootfs-manifest.json
 ```
 
-Firmware/rootfs/proprietary library bytes are never committed. Only scripts, expected hashes, manifests and sanitized derived reports belong in GitHub.
+Firmware/rootfs-image/extracted proprietary library bytes are never committed. Only scripts, expected hashes, manifests and sanitized derived reports belong in GitHub.
 
 ## Maintained release entrypoints
 
-The public interfaces must encode the same ordering as the production gates:
+The public interfaces must encode the same ordering and image identity as the production gates:
 
 ```text
-make qemu-smoke
+make qemu-smoke ROOTFS=<verified extracted tree> ROOTFS_IMAGE=<retained verified image>
+  -> requires both private inputs
   -> writes QEMU evidence to $(QEMU)
 
 make package
   -> requires $(QEMU)
-  -> package-and-audit.sh revalidates the QEMU evidence
+  -> package-and-audit.sh revalidates source/Anki/manifest/rootfs-image/ARMHF evidence
 
 vm-advance.py without --rootfs
   -> may stop at armhf-checkpoint-passed
   -> must not create final ZIP
 
-vm-advance.py with --rootfs but incomplete required real-APKG coverage
+vm-advance.py with --rootfs
+  -> also requires --rootfs-image
+  -> exact QEMU cannot begin from an unbound extracted tree
+
+vm-advance.py with --rootfs + --rootfs-image but incomplete required real-APKG coverage
   -> may stop at qemu-checkpoint-passed
   -> must not create final ZIP
 
-vm-advance.py with all semantic + ARMHF + exact-rootfs QEMU gates green
+vm-advance.py with all semantic + ARMHF + exact-rootfs-image QEMU gates green
   -> may package
   -> may record non-hardware-release-gates-passed
 ```
 
-Public GitHub Actions do not possess the private PW6 rootfs. The canonical workflow therefore persists a `NOT-A-RELEASE.txt` host/ARMHF build checkpoint and intentionally does not create the final installer.
+Public GitHub Actions do not possess the private PW6 rootfs tree/image. The canonical workflow therefore persists a `NOT-A-RELEASE.txt` host/ARMHF build checkpoint and intentionally does not create the final installer.
 
 ## What the VM can complete without the user's local host
 
-Given the required public/pinned build inputs and private rootfs mounted into the VM, the VM can perform:
+Given the required public/pinned build inputs and the verified private rootfs tree **plus retained rootfs image** mounted into the VM, the VM can perform:
 
 - all source editing/code generation;
 - host Rust/C/JavaScript tests;
@@ -220,7 +232,7 @@ Given the required public/pinned build inputs and private rootfs mounted into th
 
 The user's Mac is not required for ordinary compilation, QEMU, or packaging.
 
-If the VM cannot itself obtain the private checksum-matching PW6 rootfs, a local/Codex worker may only transport that verified private input according to `CODEX_COORDINATION.md`. Compilation remains VM-owned.
+If the VM cannot itself obtain the private checksum-matching PW6 rootfs tree/image pair, a local/Codex worker may only transport those verified private inputs according to `CODEX_COORDINATION.md`. Compilation remains VM-owned.
 
 ## What cannot be truthfully validated in the VM
 
@@ -239,8 +251,8 @@ A local host is needed only as a bridge when the VM cannot reach the Kindle over
 
 When hardware testing eventually starts, the local worker must first read `CODEX_COORDINATION.md`, verify the final installer/test-bundle hashes recorded in `HANDOFF.md`, and collect only sanitized HIL evidence. It must not rebuild the software locally as a substitute for the VM release provenance.
 
-Before hardware testing, Task B in `CODEX_COORDINATION.md` may be used only to provide the checksum-verified private PW6 5.19.6 rootfs bytes to the VM/private channel.
+Before hardware testing, Task B in `CODEX_COORDINATION.md` may be used only to provide the checksum-verified private PW6 5.19.6 extracted rootfs and retained rootfs image to the VM/private channel.
 
 ## Completion rule
 
-The virtual environment can close all non-hardware gates only when L0 -> L1 -> L2 -> L2.5 are green for one coherent current source/Anki/ARMHF/runtime identity and the final artifacts/reports are persisted durably. It must never mark PW6 hardware acceptance complete without L5 evidence.
+The virtual environment can close all non-hardware gates only when L0 -> L1 -> L2 -> L2.5 are green for one coherent current source/Anki/ARMHF/runtime identity and the final artifacts/reports are persisted durably. L2 specifically requires proof of the canonical retained rootfs-image SHA-256. The VM must never mark PW6 hardware acceptance complete without L5 evidence.
