@@ -97,6 +97,18 @@ A local package built from a **clean checkout**, with the pinned builder/toolcha
 
 A manually assembled ZIP that bypasses `tools/build_kindle_package.sh` is never release evidence.
 
+Typed Anki native-host integration has a separate canonical test recipe:
+
+```text
+tools/run_anki_bridge_host.sh
+```
+
+`.github/workflows/anki-bridge.yml` and
+`tools/local_anki_bridge_docker.sh` are executors for that recipe. Its
+disposable collection is always created under `mktemp`; it must never point at
+`/mnt/us/anki_data`. Passing this smoke establishes build/open/deck/health and
+close ownership plus ABI presence, not full reviewer or network-sync parity.
+
 ## Build and CI ownership map
 
 - `.github/workflows/actions-probe.yml` — hosted runner/account execution probe only
@@ -108,6 +120,8 @@ A manually assembled ZIP that bypasses `tools/build_kindle_package.sh` is never 
 - `.github/workflows/css-compat.yml` — old-WebKit generic CSS compatibility
 - `.github/workflows/package.yml` — hosted executor for the canonical package script
 - `tools/run_host_gates.sh` — local host gate entry point
+- `tools/run_anki_bridge_host.sh` — canonical native-host typed Anki/disposable collection recipe
+- `tools/local_anki_bridge_docker.sh` — local Docker executor for the typed Anki host recipe
 - `tools/build_kindle_package.sh` — canonical ARMHF package/ABI recipe
 - `tools/local_package_docker.sh` — local Docker wrapper for macOS/Linux
 

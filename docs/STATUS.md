@@ -6,6 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-21
+**Last fully recorded non-hardware baseline:** `d35962a0fd00beb511f29118acc3855f925d5089`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -24,7 +25,7 @@ The branch contains source-owned implementations for the major runtime paths:
 - Lab126/WebKit CSS-pixel/full-content-zoom feature path;
 - source-owned sync lifecycle;
 - source-owned loopback audio service and pinned `mixersink` player helper;
-- deck-config-driven autoplay and answer-side question-audio replay path;
+- typed bridge deck-config autoplay and answer-side question-replay fields; reviewer sequence consumption and fixtures remain open;
 - source-owned renderer diagnostics daemon on `127.0.0.1:17393`;
 - bounded privacy-safe renderer metrics and explicit bounded raw capture opt-in;
 - duplicate-instance/reactivation helper;
@@ -76,7 +77,59 @@ out/local-kindle/toolchain-info.txt
 
 The canonical script refuses a dirty root checkout by default, validates source pins, restores temporary Anki bridge injection on exit, and records the exact build identity in `BUILD.json`.
 
-**Status:** local build infrastructure is implemented but the first full local ARMHF package run has not yet been recorded as evidence on this checkpoint.
+### Verified local baseline
+
+The first clean local baseline is now recorded for exact SHA
+`d35962a0fd00beb511f29118acc3855f925d5089`:
+
+- host: macOS 26.4 x86-64 with Docker Desktop engine 29.4.0, using the
+  `linux/amd64` builder platform;
+- `sh tools/run_host_gates.sh` — **PASS** using project-local Rust 1.92.0,
+  Node 24.19.0 and jsdom 24.1.3; fmt, clippy, policy, native/source
+  syntax, 13 Rust unit tests, doc tests, renderer/CSS/diagnostics contracts
+  and the app self-test passed;
+- `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
+  native x86-64 typed library, a disposable collection passed
+  build/open/decks/health/close plus independent sync open/close, and the
+  required semantic ABI symbols were present; library SHA-256 was
+  `100c6c671df598ad3fe6df3ddb88f40e9cc342debf4bf9f22e356cfa293c655b`;
+- `bash tools/local_package_docker.sh` — **PASS**; typed Anki and all six
+  ARMHF native executables built, renderer/reproducibility policy passed,
+  `MANIFEST.sha256` verified, forbidden archive paths were absent, semantic
+  exports were present and required GLIBC versions were within the pinned
+  sysroot;
+- package SHA-256:
+  `b7b75b2eef19f06d696ece4855cdec49e80cf59309a1904b882705089f54bb3a`;
+- build identity pins Anki
+  `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
+  `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
+  `62edf76feb1b7f4af2f01754957e8d57eb3e7d67` and KindleHF 2026.08 SHA-256
+  `8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0`.
+
+This evidence is non-hardware baseline evidence, not release acceptance. It
+does not prove reviewer audio sequencing, full queue/render/answer semantics,
+sync against AnkiWeb, reproducibility across two clean builds or PW6 behavior.
+
+### Baseline failure ledger
+
+- Initial audited SHA: `6e8330a4384af20af2c4404a12f8521638265147`.
+- Host preflight first stopped at missing `cargo` (exit 69); Docker initially
+  stopped at a non-running daemon. Both were environment preconditions, not
+  source failures, and were resolved without global installation.
+- The first real package compiler failure was `E0463` while compiling
+  `serde_repr`, caused by sharing Anki's Cargo target directory through a
+  Docker Desktop source bind. Commit `9edcb719b40c3f669415418ffd2cd19a6b14f07e`
+  moved only that target cache to a named volume.
+- The next compiler category was 31 typed-bridge errors against pinned Anki
+  26.08.1. Commit `8f5fa0b2c6316a2f708bdafadec2ca391e17cd38`
+  restored the semantic C ABI and pinned service/proto contract while retaining
+  effective deck playback fields.
+- Subsequent host categories fixed a forbidden global image rule, fail-open
+  package assertions and portable diagnostics loopback binding in separate
+  commits. The clean baseline above is the first SHA after all of them.
+- First remaining failing contract at this checkpoint:
+  `python3 tests/audio_source_contract.py` reports
+  `reviewer must support semantic AV sequences`.
 
 ## Current GitHub-hosted Actions blocker
 
@@ -135,17 +188,16 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 ## What is still not verified/closed
 
-- first clean local canonical ARMHF package build on the current line;
-- host fmt/clippy/unit/integration suite on the final candidate;
-- disposable Anki collection queue/render/AV/type-answer/answer/bury/reopen corpus;
+- reviewer ordered AV autoplay and answer-side question replay consumption;
+- disposable Anki collection queue/render/AV/type-answer/answer/bury/reopen corpus beyond the basic open/deck/close smoke;
 - deck-config autoplay/replay integration fixtures;
 - normal/full/media sync lifecycle;
-- ARMHF typed Anki library and ABI audit on the candidate;
+- repeated clean-build comparison and reproducibility evidence;
+- runtime ABI/loader proof against an audited PW6 rootfs or device;
 - native GTK/WebKit shell and CSS-pixel behavior on PW6;
 - audio sequence behavior on PW6/AirPods;
 - renderer diagnostics daemon behavior on ARMHF/PW6;
 - full generic CSS/renderer corpus including original unmodified representative APKGs;
-- reproducibility characteristics of repeated canonical builds;
 - clean install / historical upgrade / rollback;
 - diagnostic privacy review;
 - PW6 review/sync/scroll/sleep-wake/USB lifecycle acceptance;
@@ -153,10 +205,10 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 ## Immediate next actions
 
-1. Run `bash tools/local_package_docker.sh` on a developer Mac/Linux host and capture the first real compiler/package result.
-2. If it fails, fix the first actual build error rather than inferring failure from GitHub's zero-step jobs.
-3. If it succeeds, retain the ZIP, SHA-256, toolchain, ABI and GLIBC evidence and update issue #11.
-4. Run/complete host and typed-Anki integration gates on the same commit.
+1. Run `python3 tests/audio_source_contract.py`; fix the ordered autoplay/replay contract without changing ordinary SVG/image behavior.
+2. Add executable disposable-collection fixtures for queue/render/AV/type-answer/answer/bury/reopen semantics to the canonical host-Anki recipe.
+3. Exercise normal/full/media sync semantics with disposable state and no credentials in logs.
+4. Repeat the clean canonical package build on the eventual candidate and compare manifests/artifact characteristics.
 5. Freeze one candidate only after non-hardware gates are green.
 6. Install that exact ZIP on PW6 and run hardware acceptance, renderer metrics and audio/sync tests.
 7. Repair/rerun hosted Actions later as independent confirmation, not as a separate build definition.

@@ -261,6 +261,12 @@ For host-only gates:
 sh tools/run_host_gates.sh
 ```
 
+For the native typed-Anki ABI and basic disposable-collection smoke:
+
+```sh
+sh tools/local_anki_bridge_docker.sh
+```
+
 The canonical full package recipe is:
 
 ```sh
@@ -306,6 +312,12 @@ Then host baseline:
 
 ```sh
 sh tools/run_host_gates.sh
+```
+
+Then native typed-Anki/disposable-collection smoke:
+
+```sh
+sh tools/local_anki_bridge_docker.sh
 ```
 
 Then full local package:
