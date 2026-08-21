@@ -4,6 +4,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 IMAGE=${KANKI_LOCAL_IMAGE:-kanki-local-builder:ubuntu24.04-rust1.92.0}
 PLATFORM=${KANKI_LOCAL_PLATFORM:-linux/amd64}
+TARGET_VOLUME=${KANKI_LOCAL_TARGET_VOLUME:-kanki-local-anki-target}
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "kanki-local: docker CLI is required (Docker Desktop, OrbStack, Colima, or compatible daemon)" >&2
@@ -40,6 +41,7 @@ docker run --rm \
     -v "$ROOT:/work" \
     -v kanki-local-cargo:/cache/cargo \
     -v kanki-local-home:/cache/home \
+    --mount "type=volume,src=$TARGET_VOLUME,dst=/work/third_party/anki/target,volume-nocopy" \
     -w /work \
     "$IMAGE" \
     bash -lc '
