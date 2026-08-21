@@ -9,6 +9,7 @@ PROTOC ?=
 TOOLCHAIN_BIN ?=
 QEMU_ARM ?= qemu-arm-static
 ROOTFS ?=
+ROOTFS_IMAGE ?=
 ARMHF ?= $(PROJECT_ROOT)/$(BUILD)/armhf
 QEMU ?= $(PROJECT_ROOT)/$(BUILD)/qemu
 VERSION ?= 0.1.0-dev
@@ -52,8 +53,9 @@ qemu-host-sanity:
 qemu-smoke:
 	@test -d "$(ARMHF)" || { echo "ARMHF=<run-armhf-gates output directory> is required" >&2; exit 64; }
 	@test -n "$(ROOTFS)" || { echo "ROOTFS=<checksum-verified PW6 rootfs> is required" >&2; exit 64; }
+	@test -n "$(ROOTFS_IMAGE)" || { echo "ROOTFS_IMAGE=<retained checksum-verified PW6 rootfs image> is required" >&2; exit 64; }
 	@test -n "$(TOOLCHAIN_BIN)" || { echo "TOOLCHAIN_BIN=<KindleHF bin directory> is required" >&2; exit 64; }
-	PROJECT="$(PROJECT_ROOT)" ARMHF="$(ARMHF)" ROOTFS="$(ROOTFS)" OUT="$(QEMU)" \
+	PROJECT="$(PROJECT_ROOT)" ARMHF="$(ARMHF)" ROOTFS="$(ROOTFS)" ROOTFS_IMAGE="$(ROOTFS_IMAGE)" OUT="$(QEMU)" \
 		TOOLCHAIN_BIN="$(TOOLCHAIN_BIN)" QEMU_ARM="$(QEMU_ARM)" BUILD_COMMIT="$(BUILD_COMMIT)" \
 		$(BASH) ./testenv/scripts/run-qemu-smoke.sh
 
