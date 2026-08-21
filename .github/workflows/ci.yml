@@ -37,6 +37,7 @@ jobs:
       - name: Renderer/source policy
         run: |
           python3 tools/check_policy.py
+          python3 tests/bridge_source_contract.py
           node --check assets/reviewer/reviewer.js
           node --check assets/reviewer/css_compat.js
           node --check assets/reviewer/css_runtime.js
