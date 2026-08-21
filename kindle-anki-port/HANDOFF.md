@@ -18,6 +18,7 @@ Last updated: 2026-08-22 UTC
 - Canonical-source audit: `docs/VM_CANONICAL_SOURCE_AUDIT_20260822.md`
 - Lifecycle hardening: `docs/VM_LIFECYCLE_HARDENING_20260822.md`, `docs/VM_ZOMBIE_LOCK_HARDENING_20260822.md`
 - Package/privacy hardening: `docs/VM_PACKAGE_HARDENING_20260822.md`
+- Build provenance hardening: `docs/VM_BUILD_PROVENANCE_HARDENING_20260822.md`
 - Local/Codex channel: `CODEX_COORDINATION.md`
 
 This file is the authoritative continuation point. Update it after every material source, test, build, QEMU, package or release change.
@@ -170,6 +171,30 @@ ccf259d885e489c766e4656f4d0a6be75f1672ce  test: gate zombie operation-lock recov
 
 See `docs/VM_ZOMBIE_LOCK_HARDENING_20260822.md`.
 
+### Build provenance preflight hardening
+
+A release-provenance gap was found in both host-backend and ARMHF entry points. Before this fix, a dirty project tree could be compiled and later cleaned while outputs still claimed the unchanged `HEAD`; separately, a different Anki checkout could be compiled while provenance text still named the lock-file pin.
+
+The host and ARMHF build gates now fail before injection/Cargo when the project is not a clean Git checkout at the declared `BUILD_COMMIT`, or when the Anki checkout base `HEAD` is not exactly the `upstream.lock.json` pin. The ARMHF path also rejects any `ANKI_COMMIT` override that differs from the lock file.
+
+Targeted exact-source fixture results:
+
+```text
+test_armhf_provenance.py       6/6 PASS
+ARMHF targeted log SHA-256     2ee0b646827cbeb83d05ea7572ad526d914826f4d480b5b485b2633edb17d538
+test_host_backend_provenance.py 5/5 PASS
+host targeted log SHA-256      897fd9ac46cc311276d31218d58a50cec190cad6582ebc518be803ccf2365db4
+```
+
+Current build-gate blobs at the targeted checkpoint:
+
+```text
+testenv/scripts/run-armhf-gates.sh        a81e8017034ba707aa0fca93248f44ec6c87dc1b
+testenv/scripts/run-host-backend-gates.sh e58c1271f87815221faa5eb165c3fa96acb97df5
+```
+
+The new regressions are part of `run-static-gates.sh`. See `docs/VM_BUILD_PROVENANCE_HARDENING_20260822.md` for the exact false-provenance scenarios, commands, exit policy, hashes and commits.
+
 ### ARM hard-float checkpoint
 
 ```text
@@ -181,7 +206,7 @@ libanki-kindle.so ARM EABI5 hard-float, max GLIBC_2.18
 
 The exact PW6 5.19.6 runtime oracle advertises through GLIBC_2.35. The build requirements are below that ceiling. A static ARMHF sanity executable runs under QEMU 8.2.2.
 
-These are checkpoint results from the prior canonical build and must be rerun from the final release head.
+These are checkpoint results from the prior canonical build and must be rerun from the final release head. They predate the new source-identity preflight and therefore cannot be promoted to final release provenance without a fresh rebuild.
 
 ### Package/privacy hardening
 
@@ -221,7 +246,7 @@ Kindle-Anki-Port-PW6-armhf.zip
 SHA-256: 9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225
 ```
 
-This earlier checkpoint passed its then-current ZIP integrity, internal manifest, required-file and privacy/state gates. It is **not** the final release and is explicitly stale because it predates the latest lifecycle/rootfs-helper/package hardening, the current canonical branch state and exact-rootfs QEMU smoke.
+This earlier checkpoint passed its then-current ZIP integrity, internal manifest, required-file and privacy/state gates. It is **not** the final release and is explicitly stale because it predates the latest lifecycle/rootfs-helper/package/build-provenance hardening, the current canonical branch state and exact-rootfs QEMU smoke.
 
 ## Exact PW6 runtime and rootfs pipeline
 
@@ -340,14 +365,14 @@ Coordination/progress state immediately before this handoff update was persisted
 a387f5409110b423bf6389c92434e593fa5fc512  docs: refresh Codex boundary and rootfs task
 ```
 
-This continuation did **not** claim a fresh full canonical-head build. The isolated execution environment used for the targeted lifecycle/helper work could not resolve external Git/HTTP hosts for a normal clone/fetch, so it was not a valid place to re-run the complete pinned Anki/toolchain build. Ordinary compilation remains VM-owned; it is not delegated to the user.
+This continuation did **not** claim a fresh full canonical-head build. The isolated execution environment used for the targeted lifecycle/helper/provenance work could not resolve external Git/HTTP hosts for a normal clone/fetch, so it was not a valid place to re-run the complete pinned Anki/toolchain build. Ordinary compilation remains VM-owned; it is not delegated to the user.
 
-What is green from this continuation is limited to the targeted lifecycle and rootfs-helper fixtures documented above. The next build VM must materialize the latest branch head and run the complete sequence before any new package can become release evidence.
+What is green from the latest provenance continuation is limited to the targeted host/ARMHF source-identity regressions documented above. The next build VM must materialize the latest branch head and run the complete sequence before any new package can become release evidence.
 
 ## Current ordered next actions
 
 1. Materialize the then-current canonical `kindle-anki-port` branch head in a build VM with the pinned Anki checkout and toolchain cache.
-2. Run the complete static gate from that head, including the new zombie-lock and rootfs-helper regressions.
+2. Run the complete static gate from that clean head, including the zombie-lock, rootfs-helper, package-provenance, ARMHF-provenance and host-backend-provenance regressions.
 3. Run the full non-hardware build/test sequence from the same commit:
 
    ```text
@@ -381,7 +406,7 @@ Not released.
 
 Current release blockers:
 
-- complete reproducible static/backend/APKG/ARMHF/package rerun from the latest canonical GitHub head;
+- complete reproducible static/backend/APKG/ARMHF/package rerun from the latest canonical GitHub head, now including fail-closed project/Anki source-identity preflight;
 - exact-rootfs dynamic QEMU smoke against checksum-matching PW6 5.19.6 bytes;
 - regenerated final package with fresh SHA-256/manifest/contents/audit reports persisted durably on GitHub;
 - separately recorded physical PW6 acceptance.
