@@ -72,22 +72,28 @@ The thin Docker wrapper calls the canonical Linux recipe:
 tools/run_anki_bridge_host.sh
 ```
 
-It builds the pinned Anki backend as a native `libanki.so`, opens a collection
-under a `mktemp` directory, reads the deck tree and health response, closes it,
-reopens/closes it through the independent sync core, audits semantic exports,
-then removes the disposable collection. It never opens
+It builds the pinned Anki backend as a native `libanki.so`, injects a host-only
+fixture binary into the pinned source checkout for the duration of the build,
+and creates a five-card collection under a `mktemp` directory using Anki's own
+typed APIs. The production bridge then exercises queue counts, question/answer
+rendering, separate question/answer sound and TTS extraction, `{{FrontSide}}`,
+basic typed-answer comparison, Again/Hard/Good/Easy persistence, user bury,
+close/reopen and health checks. It also reopens/closes the collection through
+the independent sync core and audits semantic exports. The trap restores the
+pinned checkout and removes the disposable collection. It never opens
 `/mnt/us/anki_data`. Evidence is written to:
 
 ```text
 out/host-anki/bridge-smoke.txt
+out/host-anki/bridge-integration.txt
 out/host-anki/bridge-exports.txt
 out/host-anki/bridge-dynamic.txt
 out/host-anki/bridge-library.sha256
 ```
 
-This is a basic ownership/ABI smoke, not the full queue/render/answer/sync
-corpus. The Anki bridge workflow invokes the same canonical script instead of
-embedding its own injection/build/test recipe.
+This is executable synthetic review/ownership/ABI evidence, not original-APKG,
+full-sync/media-sync or PW6 evidence. The Anki bridge workflow invokes the same
+canonical script instead of embedding its own injection/build/test recipe.
 
 ## Canonical Linux recipe without Docker
 

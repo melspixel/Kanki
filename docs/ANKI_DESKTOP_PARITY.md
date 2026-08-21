@@ -34,22 +34,22 @@ Kanki equivalents:
 | Reviewer document | One initialized reviewer WebView with persistent `#qa` | One persistent reviewer shell and `#qa` | Implemented; verify on PW6 |
 | Card body classes | `card cardN isLin` plus theme classes | `card cardN isLin kindle` | Core parity; `kindle` is intentional platform extension |
 | Card transition | Replace `#qa`, execute card script in established reviewer runtime | Replace `#qa`, recreate embedded scripts | Implemented; contract test required |
-| Question queue | Anki v3 scheduler `get_queued_cards()` | Typed scheduler service with semantic bridge | Implemented; integration evidence pending |
-| Scheduler states | Queue-provided states; current custom_data copied to current state | Same pattern in bridge | Implemented; integration evidence pending |
-| Answer | Build `CardAnswer` from current queued states and rating | Same typed `CardAnswer` model | Implemented; revlog/state test pending |
+| Question queue | Anki v3 scheduler `get_queued_cards()` | Typed scheduler service with semantic bridge | Five-card disposable integration passes |
+| Scheduler states | Queue-provided states; current custom_data copied to current state | Same pattern in bridge | Four-rating disposable integration passes |
+| Answer | Build `CardAnswer` from current queued states and rating | Same typed `CardAnswer` model | Again/Hard/Good/Easy revlog persistence passes |
 | Card body CSS | Note type CSS is authoritative | Note type CSS is authoritative; generic syntax compatibility only | Architectural invariant |
 | Platform scaling | Desktop Qt/WebEngine uses CSS pixels/device scale | Lab126 WebKit native CSS-pixel/pixel-density/full-content-zoom path | Implemented feature path; initial-view lifecycle audit below |
-| AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` | Implemented; integration evidence pending |
+| AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` after partial render and semantic `FrontSide` expansion | Synthetic sound/TTS integration passes; original APKG/PW6 evidence pending |
 | Replay button | Reviewer-owned semantic control | Reviewer-owned 40px semantic control | Implemented; unrelated SVG must stay untouched |
-| Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Implemented structurally; fixture evidence pending |
-| Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` and replaces marker in place | Structurally equivalent; fixture evidence pending |
-| Answer separator with FrontSide | Remove `<hr id=answer>` temporarily, then place it immediately before comparison at `[[type:...]]` replacement | Bridge appends separator to the marker-local replacement before `replace_type_markers()` | Structurally equivalent; source contract added |
+| Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Basic field disposable fixture passes; cloze/edge cases pending |
+| Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` and replaces marker in place | Basic comparison fixture passes; cloze/edge cases pending |
+| Answer separator with FrontSide | Remove `<hr id=answer>` temporarily, then place it immediately before comparison at `[[type:...]]` replacement | Bridge appends separator to the marker-local replacement before `replace_type_markers()` | Source contract and executable basic `FrontSide` fixture pass |
 | Autoplay | `Card.autoplay()` is deck-config driven | Typed effective-deck boolean controls one bounded ordered AV sequence | Implemented with host fixtures; integration/PW6 evidence pending |
 | Answer-side question replay | `Card.replay_question_audio_on_answer_side()` is deck-config driven | Prepared answer conditionally queues question tags before answer tags | Implemented with both-value host fixtures; filtered-card/PW6 evidence pending |
 | Answer buttons | Pinned v3 scheduler's `answerButtons()` returns 4 | Native bottom bar owns 4 buttons | Equivalent for supported 26.08.1 v3 scheduler; keep interval labels backend-driven |
 | Answer intervals | `describe_next_states()` labels | Bridge calls typed `describe_next_states()` | Implemented |
 | Card timer | Desktop starts timer on card fetch and uses time limit/options | Bridge records `Instant`; native/UI submission can pass elapsed milliseconds | Core timing implemented; UI semantics verify |
-| Bury card | Scheduler bury-card request | Typed `bury_or_suspend_cards()` | Implemented; integration evidence pending |
+| Bury card | Scheduler bury-card request | Typed `bury_or_suspend_cards()` | User-bury persistence passes in disposable integration |
 | Deck collapse | Backend deck metadata | Backend deck metadata | Implemented; hardware persistence test pending |
 | Sync ownership | One collection owner; sync through backend lifecycle | Reviewer exits/closes collection before separate sync process | Architectural parity |
 | Add-on hooks | Extensive Qt hook surface | Not implemented | Intentional non-goal for 1.0 unless needed by card runtime |
@@ -89,10 +89,12 @@ Kanki's `render_type_answer()` follows the same structural order: it removes the
 
 `tests/bridge_source_contract.py` now guards this property so a later refactor cannot accidentally reintroduce the earlier suspected bug.
 
+At `868b07a15ec09be2790f97e339e4a7984c8a7afb`, a disposable basic-field
+fixture exercises the input, comparison, `{{FrontSide}}` placement and
+close/reopen path through the production bridge.
+
 Still required before the parity gate closes:
 
-- executable fixtures for basic type answer;
-- `{{FrontSide}}` type answer;
 - cloze type answer;
 - unknown/empty field behavior;
 - answer scroll target on real Kindle WebKit.
@@ -105,7 +107,7 @@ Desktop `Card.autoplay()` reads the effective deck config. In the current protob
 autoplay = !deck_config.disable_autoplay
 ```
 
-At `512cb803c01cc6a9b2c94c99cd0c7ad908378c3e`, Kanki resolves this boolean in
+At `868b07a15ec09be2790f97e339e4a7984c8a7afb`, Kanki resolves this boolean in
 the typed bridge and the reviewer starts one ordered AV sequence only when it
 is true. Replay buttons remain independent of autoplay.
 
@@ -124,7 +126,7 @@ replay_question_audio_on_answer_side = !deck_config.skip_question_when_replaying
 
 Desktop answer replay concatenates question and answer AV tags when that semantic is true.
 
-At `512cb803c01cc6a9b2c94c99cd0c7ad908378c3e`, prepared-answer data carries
+At `868b07a15ec09be2790f97e339e4a7984c8a7afb`, prepared-answer data carries
 the resolved boolean and question tags. The persistent reviewer concatenates
 question then answer tags only when it is true; host fixtures cover both
 values.
@@ -142,7 +144,8 @@ Requirements that remain:
 
 - keep the displayed interval text from typed `describe_next_states()` rather than reproducing interval logic in the UI;
 - keep rating mapping Again=1, Hard=2, Good=3, Easy=4 aligned with the bridge;
-- test all four ratings and revlog/state results.
+- preserve the passing disposable integration for all four ratings and revlog
+  persistence as the fixture corpus expands.
 
 If a future Anki backend changes v3 button cardinality, treat that as an upstream semantic change during the pinned-version upgrade review instead of pre-implementing obsolete v1/v2 UI behavior.
 
@@ -159,14 +162,16 @@ Before release:
 
 ### 8. External links need explicit policy
 
-Desktop Anki controls navigation around its reviewer WebView. Kanki currently intercepts `kanki://` commands, but ordinary HTTP(S) navigation from card HTML needs a deliberate device policy so a dictionary link cannot silently replace the persistent reviewer document.
+Desktop Anki controls navigation around its reviewer WebView. At
+`868b07a15ec09be2790f97e339e4a7984c8a7afb`, Kanki applies the chosen initial
+policy at two layers: delegated reviewer JavaScript cancels external link
+defaults, and native WebKit policy blocks external/default navigation after
+the reviewer is ready. Same-document `file:`/`about:` fragments and card
+JavaScript remain allowed. Diagnostics record only the URI scheme, not a full
+potentially sensitive URI.
 
-Before release, choose and test one policy:
-
-- open externally in the Kindle browser/system handler, or
-- block and log external navigation in the reviewer.
-
-Never let card link navigation destroy the reviewer lifecycle accidentally.
+The host navigation contract passes. PW6 still needs to prove the native
+policy callback and persistent reviewer lifecycle under real WebKit.
 
 ## Release gate
 
