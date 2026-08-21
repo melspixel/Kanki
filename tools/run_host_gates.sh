@@ -104,6 +104,7 @@ printf '%s\n' '== reproducible package archive contract =='
 python3 tests/reproducible_zip_contract.py
 sh tests/install_integrity_contract.sh
 sh tests/operation_lock_contract.sh
+sh tests/device_css_lifecycle_contract.sh
 python3 tests/runtime_preflight_contract.py
 python3 tests/report_privacy_contract.py
 

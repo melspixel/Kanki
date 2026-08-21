@@ -499,7 +499,6 @@ static void load_reviewer(App *app) {
     app->view_mode = VIEW_REVIEWER;
     app->reviewer_ready = 0;
     set_review_controls(app, "none", "");
-    configure_native_css_pixels(app);
     app->ui.webkit_web_view_load_html_string(app->web_view, app->reviewer_html,
                                               "file:///mnt/us/extensions/kanki/assets/device/");
 }
@@ -772,6 +771,8 @@ static int build_window(App *app, int *argc, char ***argv) {
     bottom = app->ui.gtk_hbox_new(1, 4);
     app->web_view = app->ui.webkit_web_view_new();
     if (!app->window || !root || !top || !bottom || !app->web_view) return 0;
+    /* This policy belongs to the persistent WebView, not to a reviewer page. */
+    configure_native_css_pixels(app);
 
     app->back_button = app->ui.gtk_button_new_with_label("Back");
     app->bury_button = app->ui.gtk_button_new_with_label("Bury");

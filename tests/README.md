@@ -26,6 +26,10 @@ Tests in this directory are cross-layer contracts for the rewrite. They are inte
   launcher handoff and inherited-worker lifetime behavior; its source contract
   also requires the same helper to execute under the fixed PW6 BusyBox/flock
   rootfs audit;
+- `device_css_lifecycle_contract.sh` executes the native GTK/WebKit window
+  construction with a fake UI ABI and proves the Lab126 CSS-pixel/density/zoom
+  policy is configured once after the persistent WebView exists and before any
+  deck, reviewer or sync document loads;
 - `report_privacy_contract.py` keeps redacted-report staging private, unique,
   failure-cleaned and atomically published without raw capture/user data;
 - `reproducible_zip_contract.py` checks deterministic archive mechanics; two
