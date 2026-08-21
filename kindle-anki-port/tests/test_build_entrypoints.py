@@ -20,6 +20,7 @@ def forbid(text: str, needle: str, label: str) -> None:
 def main() -> int:
     top_make = (ROOT / "Makefile").read_text(encoding="utf-8")
     env_make = (ROOT / "testenv" / "Makefile").read_text(encoding="utf-8")
+    env_readme = (ROOT / "testenv" / "README.md").read_text(encoding="utf-8")
     host_compat = (ROOT / "testenv" / "scripts" / "run-host-gates.sh").read_text(encoding="utf-8")
     package_compat = (ROOT / "testenv" / "scripts" / "package_audit.py").read_text(encoding="utf-8")
     workflow = (REPO / ".github" / "workflows" / "kindle-anki-port.yml").read_text(encoding="utf-8")
@@ -74,9 +75,9 @@ def main() -> int:
         )
     forbid(workflow, '"$PROJECT/testenv/scripts/package-and-audit.sh"', "canonical workflow")
 
-    # TEST_ENVIRONMENT.md is a required continuation document and must describe
-    # the same release ordering as the executable entrypoints. In particular,
-    # package construction belongs after exact-rootfs L2, not in ARMHF L1.
+    # Both required continuation docs must describe the same release ordering as
+    # the executable entrypoints. Package construction belongs after exact-rootfs
+    # QEMU, not in ARMHF L1 and not before the runtime gate.
     require(test_environment, "### L1 — ARMHF cross-build and static ABI audit", "test environment")
     require(test_environment, "### L2 — Exact PW6 rootfs QEMU runtime gate", "test environment")
     require(test_environment, "### L2.5 — Release package, provenance, privacy and reproducibility gate", "test environment")
@@ -87,6 +88,15 @@ def main() -> int:
     l25 = test_environment.index("### L2.5 —")
     if not l1 < l2 < l25:
         raise AssertionError("test environment release layers are not ordered L1 -> L2 -> L2.5")
+
+    require(env_readme, "`scripts/run-qemu-smoke.sh`", "testenv README")
+    require(env_readme, "`scripts/package-and-audit.sh`", "testenv README")
+    require(env_readme, "**only after step 5 passes**", "testenv README")
+    require(env_readme, "do not create a final-looking `Kindle-Anki-Port-PW6-armhf.zip`", "testenv README")
+    qemu_doc = env_readme.index("`scripts/run-qemu-smoke.sh`")
+    package_doc = env_readme.index("`scripts/package-and-audit.sh`")
+    if not qemu_doc < package_doc:
+        raise AssertionError("testenv README documents package before exact-rootfs QEMU")
 
     print("test_build_entrypoints: ok")
     return 0
