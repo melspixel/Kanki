@@ -164,7 +164,11 @@ printf '%s\n' '== build Kindle native executables =='
     third_party/audiobook-koplugin/kindle/gst-play.c -o "$SCRATCH/kanki-gst-play" -ldl
 file "$SCRATCH"/kanki-device "$SCRATCH"/kanki-sync "$SCRATCH"/kanki-diag \
      "$SCRATCH"/kanki-raise "$SCRATCH"/kanki-audio "$SCRATCH"/kanki-gst-play
-! "$TRIPLE-nm" -D "$SCRATCH/kanki-raise" | grep -E ' U (malloc|free|memcpy|memset|fprintf|getenv|setenv|write)$'
+if "$TRIPLE-nm" -D "$SCRATCH/kanki-raise" \
+    | grep -E ' U (malloc|free|memcpy|memset|fprintf|getenv|setenv|write)$'; then
+    echo "kanki-package: freestanding reactivation helper imports forbidden libc symbols" >&2
+    exit 1
+fi
 
 printf '%s\n' '== assemble self-identifying package =='
 ROOT_PACKAGE="$OUT_DIR/package"
@@ -224,10 +228,14 @@ grep -q 'render-debug' "$EXT/kanki-launch.sh"
 grep -q 'enable-render-capture' "$EXT/kanki-diag"
 grep -q "\"koxtoolchain_version\": \"$KOX_VERSION\"" "$EXT/BUILD.json"
 grep -q "\"koxtoolchain_sha256\": \"$KOX_SHA256\"" "$EXT/BUILD.json"
-! grep -R -F 'releases/latest/download/kindlehf' .github/workflows tools
+python3 tools/check_policy.py
 (cd "$EXT" && sha256sum -c MANIFEST.sha256)
 unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" | tee "$OUT_DIR/package-contents.txt"
-! unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" | grep -E 'extensions/ranki|LD_PRELOAD|collection\.anki2|config\.ini$'
+if unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" \
+    | grep -E 'extensions/ranki|LD_PRELOAD|collection\.anki2|config\.ini$'; then
+    echo "kanki-package: archive contains a forbidden legacy/runtime data path" >&2
+    exit 1
+fi
 nm -D "$EXT/libanki-kanki.so" | grep -E ' kanki_(core_new|open_collection_json|next_card_json|prepare_answer_json|answer_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee "$OUT_DIR/package-exports.txt"
 for file in "$EXT/libanki-kanki.so" "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-diag" "$EXT/kanki-raise" "$EXT/kanki-audio" "$EXT/kanki-gst-play"; do
     readelf --version-info "$file" | grep -oE 'GLIBC_[0-9.]+' || true

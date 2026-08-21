@@ -54,7 +54,6 @@ jobs:
           ! grep -R -E '^[[:space:]]*svg[[:space:]]*\{' assets/reviewer/*.css
           ! grep -R -E 'log_message\([^;]*hkey|fprintf\([^;]*hkey[[:space:]]*=' device
           ! grep -R -E '(>>|>)[[:space:]]*"?\$LOG"?.*\$HKEY|\$HKEY.*(>>|>)[[:space:]]*"?\$LOG"?' scripts
-          ! grep -R -F 'releases/latest/download/kindlehf' .github/workflows tools
 
   armhf-shell:
     runs-on: ubuntu-24.04
