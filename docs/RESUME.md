@@ -84,6 +84,7 @@ If a proposed fix violates any invariant above, stop and redesign it.
 
 Use the workflows as executable build documentation. Do not maintain a separate hidden local recipe.
 
+- `.github/workflows/actions-probe.yml` — minimal runner/account/repository execution probe; no product dependencies
 - `.github/workflows/ci.yml` — Rust workspace, policy, reviewer contract, host self-test, ARM scaffold
 - `.github/workflows/anki-bridge.yml` — typed Anki host bridge/integration
 - `.github/workflows/anki-bridge-arm.yml` — typed Anki ARMHF build/ABI
@@ -96,15 +97,21 @@ Use the workflows as executable build documentation. Do not maintain a separate 
 
 ## 5. Current blocker at handoff checkpoint
 
-At the 2026-08-21 checkpoint, the latest PR-triggered GitHub Actions runs failed before useful execution: jobs completed within seconds and exposed no step list. Treat those runs as an Actions/runner execution blocker until a rerun actually enters checkout/step 1. Do not interpret zero-step failures as source compilation failures.
+The Actions failure has been isolated from Kanki source.
+
+On 2026-08-21, a deliberately minimal PR workflow named **Actions runner probe** was added. It uses `ubuntu-latest` and has one shell step that only prints the date, `uname`, runner OS and runner architecture. On commit `e3f2abb42bcaca385968b8146751ebbeda269201`, probe run `32469010279` completed `failure`; its only job (`probe`, job `96731662061`) reported `steps = null` and no job log. The normal Kanki workflows failed in the same pre-step manner on that commit.
+
+Therefore the immediate blocker is outside product source execution. Do **not** change Kanki code or workflow build commands to repair these zero-step failures.
 
 First action when resuming:
 
 1. inspect PR #10 current head;
-2. inspect all workflow runs for that head;
-3. confirm at least one job shows actual steps;
-4. if jobs still fail with no steps, diagnose repository/account Actions execution before modifying application code;
-5. once runners execute, fix the first real failing step only, then rerun the narrow workflow.
+2. inspect the **Actions runner probe** for that head;
+3. if the probe has real steps, resume normal CI diagnosis;
+4. if the probe still has `steps = null`, inspect GitHub repository/account Actions availability before changing source. In particular check repository Actions policy and, because this is a private repository using GitHub-hosted runners, the account's Actions minutes/billing/budget state. GitHub blocks hosted-runner use when applicable quota/budget/payment conditions prevent additional usage;
+5. after any account/repository fix, rerun the probe first;
+6. only when the probe enters its `Runner started` step should normal Kanki workflows be treated as actionable source/build failures;
+7. then fix the first real failing step only and rerun the narrow workflow.
 
 Do not shotgun-edit seven workflows merely because seven zero-step jobs are red.
 
