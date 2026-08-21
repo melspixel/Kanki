@@ -91,8 +91,15 @@ for fragment in [
     "loader-resolution.txt",
     "--backend /opt/kanki-audit/libanki-kanki.so --abi-probe",
     "hardware_execution=not_run",
+    "mktemp -d /tmp/kanki-pw6-chroot.XXXXXX",
+    'cp -a "$ROOTFS_TREE/." "$CHROOT/"',
 ]:
     require(AUDIT, fragment, f"PW6 ABI evidence is missing: {fragment}")
+forbid(
+    AUDIT,
+    'cp -al "$ROOTFS_TREE/."',
+    "Docker Desktop bind mounts cannot provide a portable hard-link rootfs clone",
+)
 
 forbidden_audit_paths = [
     "/mnt/us/anki_data",

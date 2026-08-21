@@ -69,8 +69,8 @@ require_hash() {
 
 register_temp() {
     case "$1" in
-        "$CACHE"/.*) TEMP_PATHS+=("$1") ;;
-        *) fail "refusing unsafe temporary path outside $CACHE: $1" ;;
+        "$CACHE"/.*|/tmp/kanki-pw6-chroot.*) TEMP_PATHS+=("$1") ;;
+        *) fail "refusing unsafe temporary path: $1" ;;
     esac
 }
 
@@ -78,7 +78,7 @@ cleanup() {
     local path
     for path in "${TEMP_PATHS[@]}"; do
         case "$path" in
-            "$CACHE"/.*) rm -rf -- "$path" ;;
+            "$CACHE"/.*|/tmp/kanki-pw6-chroot.*) rm -rf -- "$path" ;;
         esac
     done
 }
@@ -253,9 +253,9 @@ test -f "$TTS_TREE/libIvonaEInkCommon.so.1.0" ||
 } > "$EVIDENCE/rootfs-identity.txt"
 
 printf '%s\n' '== stage immutable rootfs clone and canonical package =='
-CHROOT=$(mktemp -d "$CACHE/.chroot.XXXXXX")
+CHROOT=$(mktemp -d /tmp/kanki-pw6-chroot.XXXXXX)
 register_temp "$CHROOT"
-cp -al "$ROOTFS_TREE/." "$CHROOT/"
+cp -a "$ROOTFS_TREE/." "$CHROOT/"
 mkdir -p "$CHROOT/opt/kanki-audit" "$CHROOT/usr/lib/tts" "$CHROOT/var/tmp"
 install -m 0755 /usr/bin/qemu-arm-static "$CHROOT/usr/bin/qemu-arm-static"
 for name in "${PACKAGE_ELF[@]}"; do
