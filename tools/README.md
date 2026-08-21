@@ -4,12 +4,29 @@ This directory is for **developer-side build, verification and repository toolin
 
 ## Canonical entry points
 
-- `build_kindle_package.sh` — canonical ARMHF package build/validation recipe. CI and local Docker must call this rather than copy its logic.
-- `local_package_docker.sh` — macOS/other developer wrapper that runs the canonical package build in a Linux/amd64 container.
-- `local-builder.Dockerfile` — pinned local Linux build environment.
-- `install_kindlehf_toolchain.sh` — checksum-pinned KindleHF toolchain installer.
-- `run_host_gates.sh` — canonical host-side formatting/lint/unit/renderer/source-contract gate.
-- `check_policy.py` — architectural source-policy enforcement.
+- `run_host_gates.sh` — canonical host formatting, lint, unit, renderer and
+  source-contract gate.
+- `run_anki_bridge_host.sh` — canonical pinned-Anki disposable collection,
+  APKG and loopback-sync integration recipe.
+- `local_anki_bridge_docker.sh` — local Linux executor for that host-Anki
+  recipe.
+- `build_kindle_package.sh` — the only canonical ARMHF package
+  build/validation recipe. CI and local Docker call it instead of copying its
+  logic.
+- `local_package_docker.sh` — local Linux/amd64 executor for the canonical
+  package recipe.
+- `audit_pw6_rootfs.sh` — canonical authenticated PW6 5.19.6 rootfs
+  ABI/loader audit.
+- `local_pw6_rootfs_audit.sh` — local Docker executor for that rootfs audit.
+- `local-builder.Dockerfile` / `pw6-rootfs-audit.Dockerfile` — pinned local
+  Linux execution environments; dependencies installed here are not host
+  global dependencies.
+- `install_kindlehf_toolchain.sh`, `install_mathjax.sh`,
+  `install_host_node.sh` and `install_host_jsdom.sh` — pinned/checksummed
+  toolchain and test-runtime installers.
+- `create_reproducible_zip.py` — internal deterministic archive helper called
+  only by `build_kindle_package.sh`; it is not a second package recipe.
+- `check_policy.py` — architectural and repository source-policy enforcement.
 
 ## What must not live here
 

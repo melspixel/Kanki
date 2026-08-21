@@ -4,12 +4,19 @@ Tests in this directory are cross-layer contracts for the rewrite. They are inte
 
 ## Current groups
 
-- `renderer_contract.test.cjs` — persistent reviewer lifecycle, card classes, script execution and AV controls.
-- `css_compat.test.cjs` — generic old-WebKit compatibility behavior.
-- `diagnostics_contract.test.cjs` — bounded/privacy-safe renderer diagnostics behavior.
-- `navigation_contract.test.cjs` — reviewer navigation must preserve the persistent document.
-- `bridge_source_contract.py` — semantic typed Anki bridge source invariants.
-- `audio_source_contract.py` — native audio source/pipeline invariants.
+- reviewer contracts cover the persistent `#qa`, card classes, script
+  execution, semantic AV ordering, navigation, generic old-WebKit CSS,
+  bounded diagnostics and real pinned MathJax SVG;
+- bridge integrations cover a pinned-Anki disposable collection, review/type
+  answer/bury/reopen behavior, normal/full/media sync and the seven unchanged
+  upstream APKG fixtures;
+- source contracts enforce semantic typed bridge, audio, privacy and package
+  invariants without substituting for executable integration;
+- `rootfs_audit_source_contract.py` pins the PW6 firmware audit identity and
+  evidence boundary; `tools/audit_pw6_rootfs.sh` supplies the corresponding
+  executable loader/QEMU evidence;
+- `reproducible_zip_contract.py` checks deterministic archive mechanics; two
+  full canonical package builds remain the release evidence.
 
 ## Rules
 
