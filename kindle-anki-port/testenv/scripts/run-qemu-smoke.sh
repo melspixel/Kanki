@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT=${PROJECT:?set PROJECT}
 ARMHF=${ARMHF:?set ARMHF to the ARMHF gate output directory}
 ROOTFS=${ROOTFS:?set ROOTFS to the checksum-verified PW6 rootfs}
+ROOTFS_IMAGE=${ROOTFS_IMAGE:-}
 QEMU_ARM=${QEMU_ARM:-qemu-arm}
 TOOLCHAIN_BIN=${TOOLCHAIN_BIN:?set TOOLCHAIN_BIN to KindleHF bin directory}
 TRIPLE=${TRIPLE:-arm-kindlehf-linux-gnueabihf}
@@ -49,6 +50,17 @@ if ! cmp -s "$ROOTFS_MANIFEST" "$CANONICAL_ROOTFS_MANIFEST"; then
   echo "ROOTFS_MANIFEST does not match the canonical PW6 5.19.6 manifest" >&2
   exit 66
 fi
+# The extracted directory alone is not a cryptographic identity for the full
+# target filesystem. Require the retained rootfs image so the verifier can bind
+# L2 to the canonical image SHA-256, not merely to a few selected runtime files.
+[ -n "$ROOTFS_IMAGE" ] || {
+  echo "ROOTFS_IMAGE=<checksum-verified PW6 rootfs image> is required for exact-rootfs QEMU" >&2
+  exit 66
+}
+[ -f "$ROOTFS_IMAGE" ] || {
+  echo "PW6 rootfs image is missing or not a regular file: $ROOTFS_IMAGE" >&2
+  exit 66
+}
 for required in kap-app kap-audio kap-sync libanki-kindle.so ARMHF-GATES.txt BUILD-PROVENANCE.txt; do
   [ -s "$ARMHF/$required" ] || {
     echo "missing/non-empty ARMHF artifact: $ARMHF/$required" >&2
@@ -82,11 +94,9 @@ fi
 [ -r "$ARMHF/libanki-kindle.so" ] || { echo "missing ARMHF backend" >&2; exit 66; }
 
 mkdir -p "$OUT"
-verify=(python3 "$PROJECT/testenv/scripts/verify-pw6-rootfs.py" "$ROOTFS" --manifest "$ROOTFS_MANIFEST")
-if [ -n "${ROOTFS_IMAGE:-}" ]; then
-  verify+=(--rootfs-image "$ROOTFS_IMAGE")
-fi
-"${verify[@]}" | tee "$OUT/rootfs-verification.txt"
+python3 "$PROJECT/testenv/scripts/verify-pw6-rootfs.py" \
+  "$ROOTFS" --manifest "$ROOTFS_MANIFEST" --rootfs-image "$ROOTFS_IMAGE" \
+  | tee "$OUT/rootfs-verification.txt"
 
 "$TOOLCHAIN_BIN/$TRIPLE-gcc" -O2 -std=c99 -Wall -Wextra -Werror \
   -I"$PROJECT/core" "$PROJECT/testenv/qemu/smoke.c" -ldl -o "$OUT/kap-qemu-smoke"
@@ -106,8 +116,7 @@ fi
   printf 'rootfs_manifest_id=pw6-5.19.6-rootfs-manifest.json\n'
   printf 'rootfs_manifest_sha256=%s\n' "$(sha256sum "$ROOTFS_MANIFEST" | awk '{print $1}')"
   printf 'rootfs_verified=true\n'
-  [ -z "${ROOTFS_IMAGE:-}" ] || \
-    printf 'rootfs_image_sha256=%s\n' "$(sha256sum "$ROOTFS_IMAGE" | awk '{print $1}')"
+  printf 'rootfs_image_sha256=%s\n' "$(sha256sum "$ROOTFS_IMAGE" | awk '{print $1}')"
   for binary in libanki-kindle.so kap-app kap-audio kap-sync; do
     printf '%s_sha256=%s\n' "$binary" "$(sha256sum "$ARMHF/$binary" | awk '{print $1}')"
   done
