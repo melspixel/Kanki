@@ -49,6 +49,7 @@ run node --check "$ROOT/web/decks.js"
 run node --check "$ROOT/web/reviewer.js"
 run node "$ROOT/tests/test_web_contract.js"
 run node "$ROOT/tests/test_css_compat_fixtures.js"
+run node "$ROOT/tests/test_reviewer_runtime_fixtures.js"
 run sh -n "$ROOT/scripts/launch.sh"
 run sh -n "$ROOT/scripts/sync.sh"
 run "$CC" -O2 -std=c99 -Wall -Wextra -Werror -I"$ROOT/core" \
