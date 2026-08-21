@@ -48,19 +48,22 @@ ANKI_LIB_RS=third_party/anki/rslib/src/lib.rs
 ANKI_CARGO=third_party/anki/rslib/Cargo.toml
 ANKI_BRIDGE_RS=third_party/anki/rslib/src/kanki_bridge.rs
 ANKI_SYNC_RS=third_party/anki/rslib/src/kanki_sync_bridge.rs
+ANKI_FIXTURE_RS=third_party/anki/rslib/src/bin/kanki_fixture.rs
 cp "$ANKI_LIB_RS" "$SCRATCH/lib.rs.original"
 cp "$ANKI_CARGO" "$SCRATCH/Cargo.toml.original"
 
 cleanup() {
     cp "$SCRATCH/lib.rs.original" "$ANKI_LIB_RS" 2>/dev/null || true
     cp "$SCRATCH/Cargo.toml.original" "$ANKI_CARGO" 2>/dev/null || true
-    rm -f "$ANKI_BRIDGE_RS" "$ANKI_SYNC_RS"
+    rm -f "$ANKI_BRIDGE_RS" "$ANKI_SYNC_RS" "$ANKI_FIXTURE_RS"
+    rmdir third_party/anki/rslib/src/bin 2>/dev/null || true
     rm -rf "$SCRATCH"
 }
 trap cleanup EXIT INT TERM
 
 mkdir -p "$OUT_DIR"
-rm -f "$OUT_DIR/bridge-smoke.txt" "$OUT_DIR/bridge-exports.txt" \
+rm -f "$OUT_DIR/bridge-smoke.txt" "$OUT_DIR/bridge-integration.txt" \
+      "$OUT_DIR/bridge-exports.txt" \
       "$OUT_DIR/bridge-dynamic.txt" "$OUT_DIR/bridge-library.sha256"
 
 printf '%s\n' '== initialize pinned Anki translations =='
@@ -71,6 +74,8 @@ ln -sf "$PROTOC" third_party/anki/out/extracted/protoc/bin/protoc
 printf '%s\n' '== embed semantic Kanki bridges =='
 cp bridge/anki_bridge.rs "$ANKI_BRIDGE_RS"
 cp bridge/sync_bridge.rs "$ANKI_SYNC_RS"
+mkdir -p "$(dirname "$ANKI_FIXTURE_RS")"
+cp bridge/fixture.rs "$ANKI_FIXTURE_RS"
 python3 - <<'PY'
 from pathlib import Path
 
@@ -89,21 +94,25 @@ lib.write_text(text)
 cargo = Path("third_party/anki/rslib/Cargo.toml")
 text = cargo.read_text()
 if "[lib]" not in text:
-    text += '\n[lib]\ncrate-type = ["cdylib"]\n'
-elif 'crate-type = ["cdylib"]' not in text:
-    raise SystemExit("kanki-host-anki: existing [lib] section must declare cdylib")
+    text += '\n[lib]\ncrate-type = ["cdylib", "rlib"]\n'
+elif 'crate-type = ["cdylib", "rlib"]' not in text:
+    raise SystemExit("kanki-host-anki: existing [lib] section must declare cdylib and rlib")
 cargo.write_text(text)
 PY
 
 printf '%s\n' '== compile typed Anki host library =='
 (
     cd third_party/anki
-    cargo build -p anki --release --features rustls
+    cargo build -p anki --release --features rustls --lib --bin kanki_fixture
 )
 
 LIB=third_party/anki/target/release/libanki.so
 test -f "$LIB"
 mkdir -p "$SCRATCH/media"
+
+printf '%s\n' '== seed disposable collection with pinned Anki =='
+third_party/anki/target/release/kanki_fixture \
+    "$SCRATCH/collection.anki2" "$SCRATCH/media" "$SCRATCH/media.db2"
 gcc -O2 -Wall -Wextra -Werror bridge/smoke.c -Ibridge \
     -L"$(dirname "$LIB")" -lanki \
     -Wl,-rpath,"$(realpath "$(dirname "$LIB")")" \
@@ -116,6 +125,12 @@ printf '%s\n' '== run disposable collection C ABI smoke =='
 for result in build open decks health close sync_open sync_close; do
     grep -q "^${result}={\"ok\":true" "$OUT_DIR/bridge-smoke.txt"
 done
+
+printf '%s\n' '== run queue/render/AV/type-answer/answer/bury/reopen integration =='
+python3 tests/anki_bridge_integration.py \
+    "$LIB" "$SCRATCH/collection.anki2" "$SCRATCH/media" "$SCRATCH/media.db2" \
+    | tee "$OUT_DIR/bridge-integration.txt"
+grep -q '^anki bridge integration: pass$' "$OUT_DIR/bridge-integration.txt"
 
 printf '%s\n' '== audit host ABI exports =='
 nm -D "$LIB" \

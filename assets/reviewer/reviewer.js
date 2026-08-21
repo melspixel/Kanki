@@ -188,18 +188,27 @@
     }
   }
 
-  function makeReplayButton(index, packet) {
+  function audioForMarker(packet, side) {
+    if (side === 'q' && packet.question_audio != null) return packet.question_audio;
+    if (side === 'a' && packet.answer_audio != null) return packet.answer_audio;
+    return packet.audio || [];
+  }
+
+  function makeReplayButton(side, index, packet) {
     var link = document.createElement('a');
     link.href = '#';
     link.className = 'replay-button';
     link.setAttribute('role', 'button');
     link.setAttribute('aria-label', 'Replay audio');
+    link.setAttribute('data-kanki-av-side', side);
     link.setAttribute('data-kanki-av-index', String(index));
     link.innerHTML = replaySvg();
     link.onclick = function () {
       var value = parseInt(this.getAttribute('data-kanki-av-index'), 10);
-      if (!isNaN(value) && packet.audio && value < packet.audio.length) {
-        playTag(packet.audio[value]);
+      var markerSide = this.getAttribute('data-kanki-av-side') || '';
+      var markerAudio = audioForMarker(packet, markerSide);
+      if (!isNaN(value) && value < markerAudio.length) {
+        playTag(markerAudio[value]);
       }
       return false;
     };
@@ -210,7 +219,7 @@
     if (!node) return;
     if (node.nodeType === 3) {
       var value = node.nodeValue || '';
-      var expression = /\[anki:play:[qa]:(\d+)\]/g;
+      var expression = /\[anki:play:([qa]):(\d+)\]/g;
       var match;
       var last = 0;
       var fragment = null;
@@ -219,7 +228,7 @@
         if (match.index > last) {
           fragment.appendChild(document.createTextNode(value.substring(last, match.index)));
         }
-        fragment.appendChild(makeReplayButton(parseInt(match[1], 10), packet));
+        fragment.appendChild(makeReplayButton(match[1], parseInt(match[2], 10), packet));
         last = expression.lastIndex;
       }
       if (fragment) {
@@ -328,6 +337,8 @@
       html: side === 'answer' ? card.answer_html : card.question_html,
       css: card.css || '',
       audio: sideAudio,
+      question_audio: questionAudio,
+      answer_audio: answerAudio,
       autoplay: card.autoplay === true,
       autoplay_audio: autoplayAudio
     };
@@ -355,6 +366,8 @@
       html: prepared.html || '',
       css: currentCard.css || '',
       audio: answerAudio,
+      question_audio: questionAudio,
+      answer_audio: answerAudio,
       autoplay: prepared.autoplay === true,
       autoplay_audio: autoplayAudio
     });

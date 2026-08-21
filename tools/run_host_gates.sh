@@ -12,6 +12,7 @@ need() {
 }
 
 need cargo
+need rustfmt
 need bash
 need python3
 need node
@@ -26,6 +27,7 @@ test "$(git -C third_party/audiobook-koplugin rev-parse HEAD)" = 62edf76feb1b7f4
 
 printf '%s\n' '== formatting / lint / policy =='
 cargo fmt --all -- --check
+rustfmt --edition 2021 --check bridge/anki_bridge.rs bridge/fixture.rs
 cargo clippy --workspace --all-targets -- -D warnings
 python3 tools/check_policy.py
 python3 tests/bridge_source_contract.py
@@ -50,6 +52,7 @@ sh -n scripts/kanki-report.sh
 sh -n tools/install_kindlehf_toolchain.sh
 bash -n tools/run_anki_bridge_host.sh
 sh -n tools/local_anki_bridge_docker.sh
+python3 -c 'compile(open("tests/anki_bridge_integration.py", encoding="utf-8").read(), "tests/anki_bridge_integration.py", "exec")'
 
 printf '%s\n' '== host unit/integration =='
 cargo test --workspace

@@ -70,11 +70,19 @@ require(
 )
 require("pub extern \"C\" fn kanki_health_json", "semantic ABI health check is missing")
 
-# Full renders must remain owned by Anki. Kanki only unwraps the one complete
-# Text node guaranteed by partial_render=false; it must not emulate filters or
-# concatenate partial replacement nodes.
-require("partial_render: false", "reviewer render must request a full Anki render")
-require("fn render_full_text(", "full-render node contract must be checked")
+# FrontSide must be expanded only after question AV extraction, matching the
+# desktop pipeline. Standard filters remain owned by Anki; any add-on filter
+# replacement is rejected instead of being emulated by the bridge.
+require("partial_render: true", "reviewer render must retain the FrontSide node")
+require("fn render_template_text(", "render-node contract must be checked")
+require(
+    'replacement.field_name == "FrontSide"',
+    "only Anki's semantic FrontSide replacement may be completed by Kanki",
+)
+require(
+    "Some(&question_html)",
+    "answer rendering must use question HTML after question AV extraction",
+)
 forbid(
     "out.push_str(&replacement.current_text)",
     "bridge must not emulate Anki partial-template replacement",

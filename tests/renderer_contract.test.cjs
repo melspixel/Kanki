@@ -59,7 +59,9 @@ const card = {
     '</section>',
   answer_html:
     '<section><hr id="answer"><script>window.__answerRuns=(window.__answerRuns||0)+1;<\/script>' +
-    '<span>[anki:play:a:0]</span><strong id="answer-text">answer</strong></section>',
+    '<span id="question-replay">[anki:play:q:0]</span>' +
+    '<span id="answer-replay">[anki:play:a:0]</span>' +
+    '<strong id="answer-text">answer</strong></section>',
   css: '.row{display:flex;gap:8px}#illustration{width:123px;height:77px}',
   question_audio: [{kind: 'sound', source: 'word.mp3'}],
   answer_audio: [{kind: 'tts', text: 'answer', lang: 'en_US', voices: [], speed: 1.0}],
@@ -117,7 +119,12 @@ assert.deepStrictEqual(
   ['sequence', card.question_audio.concat(card.answer_audio)],
   'answer autoplay must replay question audio before answer audio when requested',
 );
-assert.strictEqual(document.querySelectorAll('.replay-button').length, 1);
+assert.strictEqual(document.querySelectorAll('.replay-button').length, 2);
+const answerReplayButtons = document.querySelectorAll('.replay-button');
+answerReplayButtons[0].onclick();
+assert.deepStrictEqual(hostValue(audio[4]), ['sound', 'word.mp3']);
+answerReplayButtons[1].onclick();
+assert.deepStrictEqual(hostValue(audio[5]), ['tts', 'answer', 'en_US', [], 1]);
 
 const beforeAutoplayOff = audio.length;
 window.kankiReviewer.showCard({

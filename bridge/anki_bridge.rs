@@ -211,25 +211,32 @@ fn deck_dto(node: DeckTreeNode) -> DeckDto {
     }
 }
 
-fn render_full_text(nodes: Vec<RenderedTemplateNode>, side: &str) -> Result<String, String> {
-    let mut nodes = nodes.into_iter();
-    let node = nodes
-        .next()
-        .ok_or_else(|| format!("Anki returned no {side} node for a full render"))?;
-    if nodes.next().is_some() {
-        return Err(format!(
-            "Anki returned multiple {side} nodes for a full render"
-        ));
+fn render_template_text(
+    nodes: Vec<RenderedTemplateNode>,
+    side: &str,
+    front_side: Option<&str>,
+) -> Result<String, String> {
+    if nodes.is_empty() {
+        return Err(format!("Anki returned no {side} render nodes"));
     }
-    match node.value {
-        Some(rendered_template_node::Value::Text(text)) => Ok(text),
-        Some(rendered_template_node::Value::Replacement(_)) => Err(format!(
-            "Anki returned a partial {side} replacement for a full render"
-        )),
-        None => Err(format!(
-            "Anki returned an empty {side} node for a full render"
-        )),
+    let mut text = String::new();
+    for node in nodes {
+        match node.value {
+            Some(rendered_template_node::Value::Text(value)) => text.push_str(&value),
+            Some(rendered_template_node::Value::Replacement(replacement))
+                if replacement.field_name == "FrontSide" && replacement.filters.is_empty() =>
+            {
+                text.push_str(front_side.unwrap_or_default());
+            }
+            Some(rendered_template_node::Value::Replacement(_)) => {
+                return Err(format!(
+                    "Anki returned an unsupported custom-filter replacement on the {side} side"
+                ));
+            }
+            None => return Err(format!("Anki returned an empty {side} render node")),
+        }
     }
+    Ok(text)
 }
 
 fn extract_av(
@@ -693,21 +700,16 @@ pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
                     RenderExistingCardRequest {
                         card_id: card.id,
                         browser: false,
-                        partial_render: false,
+                        partial_render: true,
                     },
                 )
             })
             .map_err(|err| err.to_string())?;
-        let (question_html, question_audio) = extract_av(
-            &core.backend,
-            render_full_text(rendered.question_nodes, "question")?,
-            true,
-        )?;
-        let (answer_html, answer_audio) = extract_av(
-            &core.backend,
-            render_full_text(rendered.answer_nodes, "answer")?,
-            false,
-        )?;
+        let question_text = render_template_text(rendered.question_nodes, "question", None)?;
+        let (question_html, question_audio) = extract_av(&core.backend, question_text, true)?;
+        let answer_text =
+            render_template_text(rendered.answer_nodes, "answer", Some(&question_html))?;
+        let (answer_html, answer_audio) = extract_av(&core.backend, answer_text, false)?;
         let (question_html, type_answer, had_type_marker) = prepare_type_question(
             &core.backend,
             question_html,
