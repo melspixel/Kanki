@@ -6,6 +6,7 @@ PROTOC ?=
 TOOLCHAIN_BIN ?=
 PACKAGE ?=
 ROOTFS ?=
+ROOTFS_IMAGE ?=
 QEMU_ARM ?= qemu-arm-static
 
 .PHONY: static host armhf package lifecycle qemu-host-sanity qemu-smoke all
@@ -40,4 +41,5 @@ qemu-host-sanity:
 
 qemu-smoke:
 	$(MAKE) -C "$(PROJECT_ROOT)" qemu-smoke \
-		TOOLCHAIN_BIN="$(TOOLCHAIN_BIN)" QEMU_ARM="$(QEMU_ARM)" ROOTFS="$(ROOTFS)"
+		TOOLCHAIN_BIN="$(TOOLCHAIN_BIN)" QEMU_ARM="$(QEMU_ARM)" \
+		ROOTFS="$(ROOTFS)" ROOTFS_IMAGE="$(ROOTFS_IMAGE)"
