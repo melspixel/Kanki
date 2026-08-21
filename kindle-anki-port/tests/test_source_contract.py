@@ -49,6 +49,7 @@ def main() -> int:
     sync = (ROOT / "native" / "sync.c").read_text(encoding="utf-8")
     reviewer_html = (ROOT / "web" / "reviewer.html").read_text(encoding="utf-8")
     reviewer_js = (ROOT / "web" / "reviewer.js").read_text(encoding="utf-8")
+    armhf_gates = (ROOT / "testenv" / "scripts" / "run-armhf-gates.sh").read_text(encoding="utf-8")
 
     declared = exported_c_functions(header)
     implemented = rust_exports(port)
@@ -101,6 +102,13 @@ def main() -> int:
             "native host does not require full-content zoom")
     require("prepare_webkit_global(app);" in app,
             "W3C CSS pixels must be enabled before WebView creation")
+
+    require("--print-sysroot" in armhf_gates,
+            "ARMHF gate must derive compatibility from the target sysroot")
+    require("GLIBC_CEILING=${GLIBC_CEILING:-2.35}" not in armhf_gates,
+            "ARMHF gate must not use the stale host-like GLIBC 2.35 ceiling")
+    require('strings "$libc"' in armhf_gates,
+            "ARMHF gate must derive the target libc symbol-version ceiling")
 
     runtime_files = [
         ROOT / "core" / "src" / "port.rs",
