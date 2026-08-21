@@ -72,7 +72,7 @@ Because `run-static-gates.sh` already invokes `tests/test_build_entrypoints.py`,
 GitHub content blobs after the code/doc updates:
 
 ```text
-docs/RELEASE_GATES.md         6b40202cc35115270e72811933fe781b379f8fff
+docs/RELEASE_GATES.md           6b40202cc35115270e72811933fe781b379f8fff
 tests/test_build_entrypoints.py 009872702acab56cb1cd9ca62ce599f9d8352b6a
 ```
 
@@ -136,9 +136,9 @@ These SHA-256 values are byte hashes, not Git blob IDs.
 
 ## GitHub Actions observation
 
-The push at code head `1baf30a181c6438c08770dce4a29ccc10e750ed0` created canonical workflow run `32533386741`. It completed with `failure`, but job `96929703461` exposed zero recorded steps and its log blob was unavailable (`404 BlobNotFound`). This matches the previous unavailable-runner/capacity symptom rather than a test-level failure.
+The push at code head `1baf30a181c6438c08770dce4a29ccc10e750ed0` created canonical workflow run `32533386741`. Its first job `96929703461` completed with `failure` before any recorded step and its log blob was unavailable (`404 BlobNotFound`).
 
-A rerun of that failed job was requested successfully through GitHub Actions. No usable step-level result was available during this continuation, so it is not counted as validation.
+A rerun was then requested successfully. The rerun created job `96929792919`, which also completed with `failure` and again exposed zero recorded steps. This reproduces the unavailable-runner/capacity symptom twice and still provides no test-level diagnostic. Neither attempt is counted as code validation.
 
 ## Release status
 
