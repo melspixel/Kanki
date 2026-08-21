@@ -35,11 +35,12 @@ The wrapper:
 
 1. builds `tools/local-builder.Dockerfile` as Ubuntu 24.04 + Rust 1.92.0;
 2. forces `linux/amd64` unless `KANKI_LOCAL_PLATFORM` overrides it;
-3. mounts the checkout read/write at `/work`;
-4. reuses named Docker volumes for Cargo and KindleHF downloads;
-5. calls the canonical `tools/build_kindle_package.sh` recipe;
-6. performs manifest, exported-symbol and target-GLIBC gates;
-7. restores the temporary source injection into the Anki submodule even when the build fails.
+3. mounts the checkout at `/work`;
+4. marks mounted repositories as safe Git directories inside the container;
+5. reuses named Docker volumes for Cargo and KindleHF downloads;
+6. calls the canonical `tools/build_kindle_package.sh` recipe;
+7. performs manifest, exported-symbol and target-GLIBC gates;
+8. restores the temporary source injection into the Anki submodule even when the build fails.
 
 Successful outputs are written to:
 
@@ -73,19 +74,29 @@ Do not use a dirty build as release evidence.
 
 ## Relationship to GitHub Actions
 
-`.github/workflows/package.yml` must invoke `tools/build_kindle_package.sh`; the workflow must not carry a separate copy of the compilation/package recipe. This keeps local and CI build logic from drifting.
+`tools/build_kindle_package.sh` is the build definition. `.github/workflows/package.yml` is only one executor and artifact uploader. The workflow must not carry a second copy of the compilation/package recipe.
 
-A local green package is valid engineering evidence that the source/toolchain path can build, but it does not by itself close the release gates. The final candidate still needs same-commit evidence for the host/bridge/renderer gates and PW6 hardware acceptance recorded in issue #11.
+This means a GitHub-hosted runner outage is **not** a reason to stop compilation work. A clean local canonical build can provide actionable compiler/package evidence and can serve as release-candidate build evidence when hosted Actions is unavailable, provided the remaining issue #11 gates and PW6 hardware acceptance are completed against the exact artifact.
 
-When GitHub Actions is unavailable, record local build evidence with:
+Hosted CI should still be rerun when available as independent confirmation, but it is not allowed to redefine the build.
+
+## Evidence to record
+
+For every meaningful local build, record:
 
 - exact commit SHA;
-- host Mac model/architecture and Docker engine/version;
-- builder image platform (`linux/amd64` by default);
+- confirmation that the root checkout was clean before build;
+- host Mac/Linux model/architecture and OS;
+- Docker/OrbStack/Colima engine and version;
+- builder platform (`linux/amd64` by default);
+- Rust version;
 - `toolchain-info.txt`;
 - ZIP SHA-256;
-- package ABI/GLIBC evidence files;
-- whether the build ran from a clean checkout.
+- package exported-symbol and GLIBC evidence files;
+- manifest verification result;
+- whether this is the first build or a repeated clean rebuild.
+
+Where practical, perform a second clean rebuild before freezing a release candidate and compare package contents/manifest. Bit-for-bit reproducibility is a separate gate to establish rather than assume.
 
 ## Troubleshooting
 
