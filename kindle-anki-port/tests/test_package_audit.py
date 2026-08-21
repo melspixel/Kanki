@@ -28,6 +28,14 @@ def make_package(path: Path, extra: dict[str, str] | None = None) -> None:
             archive.writestr(name, text)
 
 
+def expect_runtime_rejection(tmp: Path, filename: str, member: str) -> None:
+    package = tmp / filename
+    make_package(package, {member: "runtime-state\n"})
+    result = subprocess.run(["python3", str(AUDITOR), str(package)], text=True, capture_output=True)
+    assert result.returncode != 0, (member, result.stdout, result.stderr)
+    assert "forbidden user/runtime file" in result.stdout, (member, result.stdout)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="kap-package-test-") as tmp_text:
         tmp = Path(tmp_text)
@@ -52,6 +60,37 @@ def main() -> int:
         result = subprocess.run(["python3", str(AUDITOR), str(secret)], text=True, capture_output=True)
         assert result.returncode != 0
         assert "sync credential" in result.stdout
+
+        expect_runtime_rejection(
+            tmp,
+            "backup.zip",
+            "extensions/kindle-anki-port/backups/collection-pre-sync-20260822.anki2",
+        )
+        expect_runtime_rejection(
+            tmp,
+            "operation-lock.zip",
+            "extensions/kindle-anki-port/.kap-operation.lock/pid",
+        )
+        expect_runtime_rejection(
+            tmp,
+            "operation-lock-transfer.zip",
+            "extensions/kindle-anki-port/.kap-operation.lock.pid.1234",
+        )
+        expect_runtime_rejection(
+            tmp,
+            "sync-request.zip",
+            "extensions/kindle-anki-port/.sync-request",
+        )
+        expect_runtime_rejection(
+            tmp,
+            "opened-build.zip",
+            "extensions/kindle-anki-port/.opened-build",
+        )
+        expect_runtime_rejection(
+            tmp,
+            "media.zip",
+            "extensions/kindle-anki-port/collection.media/example.mp3",
+        )
 
     print("test_package_audit: ok")
     return 0
