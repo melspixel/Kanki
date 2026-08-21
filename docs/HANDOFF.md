@@ -154,7 +154,8 @@ tools/audit_pw6_rootfs.sh
 canonical package exists for the clean current `HEAD`. It authenticates the
 fixed official PW6 5.19.6 firmware, rootfs and TTS squashfs, checks ARMHF
 attributes/symbol versions/dependency closures, and executes loader-level
-UI/backend/audio probes. Its firmware cache and evidence remain below ignored
+UI/backend/audio probes plus the complete packaged install verifier through the
+PW6 BusyBox shell. Its firmware cache and evidence remain below ignored
 `out/`; no firmware bytes enter the package. Passing is Gate D evidence and
 must retain `hardware_execution=not_run` until the exact ZIP runs on PW6.
 

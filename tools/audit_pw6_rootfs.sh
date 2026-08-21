@@ -256,12 +256,26 @@ printf '%s\n' '== stage immutable rootfs clone and canonical package =='
 CHROOT=$(mktemp -d /tmp/kanki-pw6-chroot.XXXXXX)
 register_temp "$CHROOT"
 cp -a "$ROOTFS_TREE/." "$CHROOT/"
-mkdir -p "$CHROOT/opt/kanki-audit" "$CHROOT/usr/lib/tts" "$CHROOT/var/tmp"
+mkdir -p "$CHROOT/opt/kanki-audit" "$CHROOT/opt/kanki-package" \
+    "$CHROOT/usr/lib/tts" "$CHROOT/var/tmp"
 install -m 0755 /usr/bin/qemu-arm-static "$CHROOT/usr/bin/qemu-arm-static"
 for name in "${PACKAGE_ELF[@]}"; do
     install -m 0755 "$EXT/$name" "$CHROOT/opt/kanki-audit/$name"
 done
+cp -a "$EXT/." "$CHROOT/opt/kanki-package/"
 cp -a "$TTS_TREE/." "$CHROOT/usr/lib/tts/"
+
+printf '%s\n' '== execute packaged verifier under PW6 BusyBox =='
+if ! env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    /usr/sbin/chroot "$CHROOT" /usr/bin/qemu-arm-static \
+    /bin/sh /opt/kanki-package/kanki-verify.sh /opt/kanki-package \
+    > "$EVIDENCE/package-verifier-pw6-busybox.txt" 2>&1; then
+    cat "$EVIDENCE/package-verifier-pw6-busybox.txt" >&2
+    fail "packaged install verifier failed under the PW6 BusyBox shell"
+fi
+grep -Fxq 'kanki-install-integrity=pass' \
+    "$EVIDENCE/package-verifier-pw6-busybox.txt" ||
+    fail "PW6 BusyBox verifier evidence lacks the success marker"
 
 printf '%s\n' '== verify ARMv7 hard-float ELF identity and symbol versions =='
 : > "$EVIDENCE/elf-abi.txt"
@@ -504,6 +518,7 @@ grep -Fq 'gst-play: preloaded /usr/lib/tts/libIvonaEInkCommon.so.1.0' \
     printf 'rootfs_sha256=%s\n' "$ROOTFS_SHA256"
     printf 'tts_sqsh_sha256=%s\n' "$TTS_SQSH_SHA256"
     printf 'package_manifest=pass\n'
+    printf 'package_verifier_pw6_busybox=pass\n'
     printf 'armv7_hard_float=pass\n'
     printf 'loader_resolution=pass\n'
     printf 'ui_backend_dlopen_dlsym=pass\n'

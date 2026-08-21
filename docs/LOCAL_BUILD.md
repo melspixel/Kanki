@@ -87,8 +87,10 @@ does not equal `HEAD`. It checks every packaged ELF for ARMv7 hard-float,
 compares required GLIBC/GCC/LIBATOMIC symbol versions with the rootfs, resolves
 package plus GTK2/GObject/WebKitGTK/X11/GStreamer dependency closures with the
 PW6 loader, and executes the device UI/backend and audio capability probes via
-QEMU/chroot. The TTS squashfs is staged at `/usr/lib/tts` to model the firmware
-runtime mount; it is not patched or copied into the Kanki package.
+QEMU/chroot. It also executes the actual packaged install verifier over the
+complete package tree through the PW6 BusyBox shell. The TTS squashfs is staged
+at `/usr/lib/tts` to model the firmware runtime mount; it is not patched or
+copied into the Kanki package.
 
 Evidence is written below:
 

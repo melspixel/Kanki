@@ -96,6 +96,10 @@ for fragment in [
     "hardware_execution=not_run",
     "mktemp -d /tmp/kanki-pw6-chroot.XXXXXX",
     'cp -a "$ROOTFS_TREE/." "$CHROOT/"',
+    'cp -a "$EXT/." "$CHROOT/opt/kanki-package/"',
+    "/bin/sh /opt/kanki-package/kanki-verify.sh /opt/kanki-package",
+    "package-verifier-pw6-busybox.txt",
+    "package_verifier_pw6_busybox=pass",
 ]:
     require(AUDIT, fragment, f"PW6 ABI evidence is missing: {fragment}")
 forbid(
