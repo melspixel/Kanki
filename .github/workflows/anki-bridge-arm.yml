@@ -6,12 +6,14 @@ on:
     paths:
       - 'bridge/**'
       - 'third_party/anki'
+      - 'tools/install_kindlehf_toolchain.sh'
       - '.github/workflows/anki-bridge-arm.yml'
   pull_request:
     branches: [main]
     paths:
       - 'bridge/**'
       - 'third_party/anki'
+      - 'tools/install_kindlehf_toolchain.sh'
       - '.github/workflows/anki-bridge-arm.yml'
   workflow_dispatch:
 
@@ -34,15 +36,14 @@ jobs:
         with:
           toolchain: 1.92.0
           target: armv7-unknown-linux-gnueabihf
-      - name: Install build dependencies and KindleHF toolchain
+      - name: Install build dependencies and pinned KindleHF toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config protobuf-compiler python3 perl make git wget file binutils
+          sudo apt-get install -y clang cmake ninja-build pkg-config protobuf-compiler python3 perl make git curl file binutils zstd
           git -C third_party/anki submodule update --init --depth 1 ftl/core-repo ftl/qt-repo
           mkdir -p third_party/anki/out/rslib/proto third_party/anki/out/extracted/protoc/bin
           ln -sf /usr/bin/protoc third_party/anki/out/extracted/protoc/bin/protoc
-          wget -q https://github.com/KindleModding/koxtoolchain/releases/latest/download/kindlehf.tar.gz -O /tmp/kindlehf.tar.gz
-          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
+          bash tools/install_kindlehf_toolchain.sh
           TC="$HOME/x-tools/$TRIPLE"
           echo "$TC/bin" >> "$GITHUB_PATH"
           echo "KHF_SYSROOT=$TC/$TRIPLE/sysroot" >> "$GITHUB_ENV"
