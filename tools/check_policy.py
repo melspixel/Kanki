@@ -112,6 +112,13 @@ for required in [
 ]:
     if required not in package_recipe:
         errors.append(f"canonical package recipe lacks MathJax identity/runtime: {required}")
+for required in [
+    'BUILD_EPOCH=$(git show -s --format=%ct "$BUILD_COMMIT")',
+    "python3 tools/create_reproducible_zip.py",
+    '"source_date_epoch": $BUILD_EPOCH',
+]:
+    if required not in package_recipe:
+        errors.append(f"canonical package recipe lacks deterministic archive input: {required}")
 for workflow in (ROOT / ".github/workflows").glob("*.yml"):
     workflow_text = workflow.read_text(encoding="utf-8")
     if "releases/latest/download/kindlehf" in workflow_text:

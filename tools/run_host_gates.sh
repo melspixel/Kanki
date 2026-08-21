@@ -60,6 +60,8 @@ sh -n tools/local_anki_bridge_docker.sh
 sh -n tools/local_package_docker.sh
 python3 -c 'compile(open("tests/anki_bridge_integration.py", encoding="utf-8").read(), "tests/anki_bridge_integration.py", "exec")'
 python3 -c 'compile(open("tests/sync_bridge_integration.py", encoding="utf-8").read(), "tests/sync_bridge_integration.py", "exec")'
+python3 -c 'compile(open("tools/create_reproducible_zip.py", encoding="utf-8").read(), "tools/create_reproducible_zip.py", "exec")'
+python3 -c 'compile(open("tests/reproducible_zip_contract.py", encoding="utf-8").read(), "tests/reproducible_zip_contract.py", "exec")'
 
 printf '%s\n' '== host unit/integration =='
 cargo test --workspace
@@ -80,6 +82,9 @@ node tests/renderer_contract.test.cjs
 node tests/navigation_contract.test.cjs
 node tests/css_compat.test.cjs
 node tests/diagnostics_contract.test.cjs
+
+printf '%s\n' '== reproducible package archive contract =='
+python3 tests/reproducible_zip_contract.py
 
 printf '%s\n' '== app self-test =='
 SELF=$(mktemp)

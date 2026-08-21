@@ -18,7 +18,15 @@ PROTOC=${PROTOC:-/usr/bin/protoc}
 OUT_DIR=${KANKI_OUT_DIR:-$ROOT/out/local-kindle}
 SCRATCH=${KANKI_BUILD_SCRATCH:-$ROOT/out/.kindle-build-scratch}
 BUILD_COMMIT=${KANKI_BUILD_COMMIT:-$(git rev-parse HEAD)}
+BUILD_EPOCH=$(git show -s --format=%ct "$BUILD_COMMIT")
 PACKAGE_NAME=${KANKI_PACKAGE_NAME:-Kanki-rewrite-hw3}
+
+case "$BUILD_EPOCH" in
+    ''|*[!0-9]*)
+        echo "kanki-package: unable to resolve source date epoch for $BUILD_COMMIT" >&2
+        exit 70
+        ;;
+esac
 
 need() {
     command -v "$1" >/dev/null 2>&1 || {
@@ -61,7 +69,8 @@ rm -rf "$OUT_DIR/package"
 rm -f "$OUT_DIR/$PACKAGE_NAME.zip" "$OUT_DIR/$PACKAGE_NAME.zip.sha256" \
       "$OUT_DIR/package-contents.txt" "$OUT_DIR/package-exports.txt" \
       "$OUT_DIR/package-glibc.txt" "$OUT_DIR/sysroot-glibc.txt" \
-      "$OUT_DIR/toolchain-info.txt" "$OUT_DIR/mathjax-info.txt"
+      "$OUT_DIR/toolchain-info.txt" "$OUT_DIR/mathjax-info.txt" \
+      "$OUT_DIR/archive-info.txt"
 
 ANKI_LIB_RS=third_party/anki/rslib/src/lib.rs
 ANKI_CARGO=third_party/anki/rslib/Cargo.toml
@@ -207,6 +216,7 @@ cat > "$EXT/BUILD.json" <<EOF
   "miniaudio_commit": "$MINIAUDIO_COMMIT",
   "mathjax_version": "$MATHJAX_VERSION",
   "mathjax_sha256": "$MATHJAX_SHA256",
+  "source_date_epoch": $BUILD_EPOCH,
   "koxtoolchain_version": "$KOX_VERSION",
   "koxtoolchain_sha256": "$KOX_SHA256",
   "target": "$TARGET",
@@ -216,11 +226,15 @@ cat > "$EXT/BUILD.json" <<EOF
   "release_gate": "PW6 hardware acceptance required"
 }
 EOF
+find "$ROOT_PACKAGE" -type d -exec chmod 755 {} +
+find "$ROOT_PACKAGE" -type f -exec chmod 644 {} +
 chmod 755 "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-diag" "$EXT/kanki-raise" \
           "$EXT/kanki-audio" "$EXT/kanki-gst-play" "$EXT/kanki-launch.sh" \
           "$EXT/kanki-sync.sh" "$EXT/kanki-report.sh" "$ROOT_PACKAGE/documents/"*.sh
 (cd "$EXT" && find . -type f ! -name MANIFEST.sha256 ! -name config.ini ! -name kanki.log -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256)
-(cd "$ROOT_PACKAGE" && zip -qr "$OUT_DIR/$PACKAGE_NAME.zip" extensions documents)
+python3 tools/create_reproducible_zip.py \
+    "$ROOT_PACKAGE" "$OUT_DIR/$PACKAGE_NAME.zip" "$BUILD_EPOCH" \
+    | tee "$OUT_DIR/archive-info.txt"
 sha256sum "$OUT_DIR/$PACKAGE_NAME.zip" > "$OUT_DIR/$PACKAGE_NAME.zip.sha256"
 
 printf '%s\n' '== package and ABI gates =='
@@ -251,8 +265,11 @@ grep -q "\"koxtoolchain_version\": \"$KOX_VERSION\"" "$EXT/BUILD.json"
 grep -q "\"koxtoolchain_sha256\": \"$KOX_SHA256\"" "$EXT/BUILD.json"
 grep -q "\"mathjax_version\": \"$MATHJAX_VERSION\"" "$EXT/BUILD.json"
 grep -q "\"mathjax_sha256\": \"$MATHJAX_SHA256\"" "$EXT/BUILD.json"
+grep -q "\"source_date_epoch\": $BUILD_EPOCH" "$EXT/BUILD.json"
+grep -q "KANKI_ARCHIVE_SOURCE_DATE_EPOCH=$BUILD_EPOCH" "$OUT_DIR/archive-info.txt"
 python3 tools/check_policy.py
 (cd "$EXT" && sha256sum -c MANIFEST.sha256)
+unzip -tq "$OUT_DIR/$PACKAGE_NAME.zip"
 unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" | tee "$OUT_DIR/package-contents.txt"
 if unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" \
     | grep -E 'extensions/ranki|LD_PRELOAD|collection\.anki2|config\.ini$'; then

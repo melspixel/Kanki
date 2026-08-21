@@ -4,6 +4,8 @@
 /.pnpm-store/
 *.log
 *.zip
+__pycache__/
+*.pyc
 .DS_Store
 .idea/
 .vscode/
