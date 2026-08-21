@@ -53,7 +53,7 @@ Kanki equivalents:
 | Card timer | Desktop starts timer on card fetch and uses time limit/options | Bridge records `Instant`; native/UI submission can pass elapsed milliseconds | Core timing implemented; UI semantics verify |
 | Bury card | Scheduler bury-card request | Typed `bury_or_suspend_cards()` | User-bury persistence passes in disposable integration |
 | Deck collapse | Backend deck metadata | Backend deck metadata | Implemented; hardware persistence test pending |
-| Sync ownership | One collection owner; sync through backend lifecycle | Reviewer exits/closes collection before separate sync process; both inherit/acquire one kernel operation lock | Controlled loopback full/normal/media lifecycle and host lock contention pass; fixed-rootfs gate added, live AnkiWeb/PW6 lifecycle pending |
+| Sync ownership | One collection owner; sync through backend lifecycle | Reviewer exits/closes collection before separate sync process; both inherit/acquire one kernel operation lock | Controlled loopback full/normal/media lifecycle plus host and fixed-PW6-rootfs lock contention/handoff/lifetime pass; live AnkiWeb/PW6 lifecycle pending |
 | Add-on hooks | Extensive Qt hook surface | Not implemented | Intentional non-goal for 1.0 unless needed by card runtime |
 | State customizer JS | Desktop supports `cardStateCustomizer` profile config | Not implemented | Deliberate omission for initial Kindle client; scheduling still comes from Anki |
 | Flags/mark/edit/context menu | Desktop reviewer features | Not in initial Kindle scope | Deliberate UI omission, not card-semantic parity blocker |

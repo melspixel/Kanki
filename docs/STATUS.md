@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-22
-**Current fully recorded non-hardware candidate:** `3fed2a3419d1f63cba49f1fe4389be19262a1b2e`
+**Current fully recorded non-hardware candidate:** `a04b2af9ef29cb8c3f06a305dcd596ef06319521`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -86,7 +86,7 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware candidate is recorded for exact SHA
-`3fed2a3419d1f63cba49f1fe4389be19262a1b2e`:
+`a04b2af9ef29cb8c3f06a305dcd596ef06319521`:
 
 - host: macOS 26.4.1 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -112,7 +112,10 @@ The current clean local non-hardware candidate is recorded for exact SHA
   private modes, unique staging, atomic publication, cleanup after failure and
   exclusion of config/raw captures. The pinned-Anki i18n determinism contract
   authenticates the one build-only `HashMap` to `BTreeMap` normalization and
-  rejects drift on either side;
+  rejects drift on either side. The collection-operation contract proves
+  atomic contention status 74, exact launcher-to-sync descriptor handoff,
+  worker-held lifetime after the wrapper descriptor closes, kernel release
+  after the last worker exits and owner-scoped diagnostic metadata cleanup;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
   native x86-64 typed library; a backend-created disposable nine-card
   collection passed queue counts, question/answer rendering, semantic
@@ -151,18 +154,18 @@ The current clean local non-hardware candidate is recorded for exact SHA
 - two canonical builds used distinct, previously unused Cargo target volumes.
   Their complete package trees and ZIPs were byte-identical, as were
   `libanki-kanki.so`, `BUILD.json`, manifests, archive evidence and authenticated
-  Anki-i18n normalization evidence. Both archives contain 1,297 sorted regular
-  files and use source date epoch `1787335632`;
+  Anki-i18n normalization evidence. Both archives contain 1,299 sorted regular
+  files and use source date epoch `1787337609`;
 - package SHA-256:
-  `44dd56ee31c46e0ea2eb998729eabebce40ecd37d10ccd23b3161c1aff45612b`;
+  `7bfb11935d68e4846f557c5f1fe1cb0b372ab5f5d73aa7f1d3cef5f03de1fb4d`;
 - byte-identical companion hashes are
   `f9eb906595dbd3edb7c63a3bda3a556b83f71c9c74d7c0558571a3257ba69e69`
   for the ARMHF backend,
-  `db0d2749be79c5ea6c5fcb6306073a25686bc9d511d79baae70ace99cedc1923`
+  `ef46bda08073d8dcc49b6b58334471975200785c1651d779fcd626e6cca27cc6`
   for `BUILD.json`,
-  `77d4471689c1462eb4c581abd85f3471c951b618ce8fc7bd32a25c71c6331e2e`
-  for the 1,291-entry manifest,
-  `aa5d153375d271b4cc403bdb9f7b9eb0e7be8f58b46eff4a4785053e05aa8ce2`
+  `79827745976007a21f4116c434b7baf7b5ee58fd3f6892051b35a81f16941fbb`
+  for the 1,293-entry manifest,
+  `2d33a64f9c421a292cbe9cc3ae1f30267147624a97219bbabd4469bc297020f3`
   for `archive-info.txt`, and
   `624e4be4d450a5d5d0bb7d4dc23c358a82f3286eff474d3ca809dedab0b6e92a`
   for `anki-i18n-info.txt`;
@@ -174,9 +177,14 @@ The current clean local non-hardware candidate is recorded for exact SHA
   `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`
   and TTS squashfs SHA-256
   `0724e2fca5d8bba72681cc5a9d593c68a76f3b0b22a367e613dd01ffba22c15b`.
-  The actual complete 1,297-file package verifier executed successfully through
+  The actual complete 1,299-file package verifier executed successfully through
   the PW6 ARM BusyBox shell before the ABI probes; its evidence SHA-256 is
-  `2edc5fd69fbd6c1cc284b31e99ef0e43fae2dd6b9757f8fbfeb60caa1fbeaaea`.
+  `b7ab259372014ced118e4ec3efa03e3534f847992c660d4439aa1d55ba999e1c`.
+  The packaged operation-lock helper also executed with the rootfs's actual
+  util-linux `flock` 2.37.4 and BusyBox shell. Contention, inherited launcher
+  handoff, worker-held lifetime and automatic release passed; the probe
+  evidence SHA-256 is
+  `09716ef39546cf4a5055f6b7161b6b121e241330aa16eeb3c25d5af92265e9b1`.
   All seven packaged ELF objects were ARMv7 hard-float; their required
   GLIBC/GCC/LIBATOMIC versions and loader dependency closures resolved in the
   rootfs. Under QEMU/chroot, the real PW6 loader successfully loaded GTK2,
@@ -188,11 +196,11 @@ The current clean local non-hardware candidate is recorded for exact SHA
   It published a 0700 report tree and 0600 archive atomically, retained the
   safe controls, excluded private inputs, leaked no sentinel and left no work
   or partial file. `redacted-report-privacy.txt` SHA-256 is
-  `17adb0ddec66739cf46164ca2e28b2b1598a3a3db95d13186f8563d63a67bc8d`.
+  `1183345005329dd02eaf436c74b0b4b97384020e0bc8142d2c5ed3e962079a63`.
   Evidence is under ignored
-  `out/firmware/pw6-5.19.6/evidence/3fed2a3419d1f63cba49f1fe4389be19262a1b2e/`;
+  `out/firmware/pw6-5.19.6/evidence/a04b2af9ef29cb8c3f06a305dcd596ef06319521/`;
   its self-verifying `EVIDENCE.sha256` SHA-256 is
-  `4d02dedc26e71a23d38d68dcb6e6588a4734bb182dcad0036789f7736258bf97`;
+  `548c550afdc845ab5e5bdacb879c77a558f48888cd372b48b2ca7072714dc536`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -230,7 +238,7 @@ branches were deleted atomically with exact-SHA leases. Superseded PRs #8, #9,
 excluded pending stabilization and a fresh audit.
 
 This cleanup SHA was the first fully recorded non-hardware candidate and has
-since been superseded by the fully rerun renderer candidate at the top of this
+since been superseded by the fully rerun formal candidate at the top of this
 document. The first open release-evidence failure remains physical PW6 Gate E
 (`hardware_execution=not_run`), and no original COCA/user APKG is locally
 available. Before transferring the candidate, the next command is:
@@ -429,12 +437,24 @@ The canonical host and package recipes authenticate the exact pinned
 record both hashes and restore the submodule on exit. It does not patch or
 change Anki runtime scheduling, rendering, sync or collection semantics. ADR
 0004 records this boundary. Documentation commit
-`3fed2a3419d1f63cba49f1fe4389be19262a1b2e` is the formal candidate audited
+`3fed2a3419d1f63cba49f1fe4389be19262a1b2e` was the preceding formal
+candidate.
+
+The next active-branch audit found the first real collection-ownership failure:
+launch and standalone sync only observed a `.kanki.lock` directory, so two
+callers could both pass the check before either created metadata; the launcher's
+unconditional stale-directory cleanup could also remove a live owner's
+metadata. Commit `7f79a79f421a820c5de1c3042c86dfa9518dbaa8` is the minimum
+runtime fix. It serializes launch/sync on one manifest-owned inode with the
+fixed PW6 util-linux `flock`, hands the open descriptor to the intended worker,
+and leaves `.kanki.lock` as owner-scoped diagnostics only. ADR 0005 records the
+boundary. Documentation commit
+`a04b2af9ef29cb8c3f06a305dcd596ef06319521` is the formal candidate audited
 above. On that one SHA, host gates, typed-Anki disposable review/APKG/sync, two
 distinct empty-target ARMHF builds, byte-identical package trees/ZIPs and the
-official PW6 rootfs/BusyBox report audit all pass. The first open failure is
-now physical PW6 launch (`hardware_execution=not_run`); no compiler, test,
-package, ABI or rootfs error remains in this category.
+official PW6 rootfs/BusyBox verifier, lock and report audits all pass. The first
+open failure is physical PW6 launch (`hardware_execution=not_run`); no compiler,
+test, package, ABI or rootfs error remains in this category.
 
 ### Baseline failure ledger
 
@@ -636,7 +656,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 1. Preserve candidate identity before device transfer with
    `shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip`; the expected value
-   is `44dd56ee31c46e0ea2eb998729eabebce40ecd37d10ccd23b3161c1aff45612b`.
+   is `7bfb11935d68e4846f557c5f1fe1cb0b372ab5f5d73aa7f1d3cef5f03de1fb4d`.
 2. Obtain explicit local test access to original COCA and at least one
    unrelated representative APKG, then run the same privacy-reviewed path
    without modifying or committing the decks and without adding deck CSS.

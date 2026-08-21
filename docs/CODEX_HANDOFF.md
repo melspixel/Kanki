@@ -270,19 +270,22 @@ the actual complete package verifier through the fixed PW6 ARM BusyBox shell
 inside the canonical rootfs audit. Host, typed-Anki, two byte-identical package
 builds and the enhanced rootfs audit pass on that SHA.
 
-That checkpoint is superseded by current formal candidate
-`3fed2a3419d1f63cba49f1fe4389be19262a1b2e`. It makes diagnostic report
-publication private and atomic, executes the packaged report under target PW6
-BusyBox with synthetic secret/config/raw-capture sentinels, and authenticates a
-build-only `BTreeMap` normalization for nondeterministic pinned-Anki Fluent
-generation. Two canonical builds using distinct, previously unused Cargo
-target volumes produced byte-identical package trees and ZIP SHA-256
-`44dd56ee31c46e0ea2eb998729eabebce40ecd37d10ccd23b3161c1aff45612b`.
+Those checkpoints are superseded by current formal candidate
+`a04b2af9ef29cb8c3f06a305dcd596ef06319521`. It retains private atomic
+diagnostic publication and the authenticated build-only `BTreeMap`
+normalization, and closes a real collection-ownership TOCTOU: launch and sync
+previously only observed PID/path metadata. They now serialize on one
+manifest-owned inode with the fixed PW6 util-linux `flock`; only the intended
+worker inherits the descriptor, while `.kanki.lock` is diagnostics only. Two
+canonical builds using distinct, previously unused Cargo target volumes
+produced byte-identical 1,299-file package trees and ZIP SHA-256
+`7bfb11935d68e4846f557c5f1fe1cb0b372ab5f5d73aa7f1d3cef5f03de1fb4d`.
 Host, typed-Anki review/APKG/sync, ARMHF package, report privacy and official
-PW6 5.19.6 rootfs/loader gates all pass on this same SHA. The first open
-evidence failure remains physical PW6 launch
-(`hardware_execution=not_run`); do not promote rootfs/QEMU evidence to hardware
-acceptance.
+PW6 5.19.6 rootfs/loader gates all pass on this same SHA. The target rootfs's
+actual `flock` 2.37.4 and BusyBox passed contention, launcher handoff,
+worker-lifetime and release probes. The first open evidence failure remains
+physical PW6 launch (`hardware_execution=not_run`); do not promote rootfs/QEMU
+evidence to hardware acceptance.
 
 ## 5. Recommended target layout
 
