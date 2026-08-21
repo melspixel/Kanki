@@ -1,6 +1,6 @@
 # Third-party notices
 
-Kanki is AGPL-3.0-or-later. The project builds against exact, pinned source revisions.
+Kanki is AGPL-3.0-or-later. The project builds against exact, pinned source revisions or checksum-pinned build-tool releases.
 
 ## Anki
 
@@ -10,6 +10,16 @@ Kanki is AGPL-3.0-or-later. The project builds against exact, pinned source revi
 - License: AGPL-3.0-or-later
 
 The production backend is compiled from this source with Kanki's semantic bridge module.
+
+## KOReader koxtoolchain / KindleHF cross toolchain
+
+- Project: koxtoolchain
+- Source: https://github.com/koreader/koxtoolchain
+- Pinned release: `2026.08`
+- Build asset: `kindlehf.tar.zst`
+- SHA-256: `8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0`
+
+The toolchain is a build-time dependency only and is not redistributed inside the Kanki Kindle package. `tools/install_kindlehf_toolchain.sh` verifies the checksum before extraction; workflows must not use a floating `latest` toolchain URL.
 
 ## kindle-gst-play reference implementation
 
