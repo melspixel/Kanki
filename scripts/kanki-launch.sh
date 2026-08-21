@@ -13,7 +13,11 @@ mkdir -p "$DIR"
 if ! mkdir "$LOCK" 2>/dev/null; then
     PID=$(cat "$LOCK/pid" 2>/dev/null || true)
     if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-        printf '%s duplicate launch ignored pid=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$PID" >>"$LOG"
+        if [ -x "$DIR/kanki-raise" ] && "$DIR/kanki-raise" >>"$LOG" 2>&1; then
+            printf '%s existing Kanki window reactivated pid=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$PID" >>"$LOG"
+        else
+            printf '%s duplicate launch found live pid=%s but window reactivation failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$PID" >>"$LOG"
+        fi
         exit 0
     fi
     rm -rf "$LOCK"
@@ -47,7 +51,7 @@ export KANKI_MEDIA_DIR=/mnt/us/anki_data/collection.media
 export KANKI_GST_PLAYER="$DIR/kanki-gst-play"
 export KANKI_GST_LOADER=/lib/ld-linux-armhf.so.3
 export GST_PLUGIN_PATH=/usr/lib/gstreamer-0.10:/usr/lib/gstreamer-1.0
-chmod 755 "$DIR/kanki-device" "$DIR/kanki-audio" "$DIR/kanki-gst-play" "$DIR/kanki-sync.sh" 2>/dev/null || true
+chmod 755 "$DIR/kanki-device" "$DIR/kanki-audio" "$DIR/kanki-gst-play" "$DIR/kanki-raise" "$DIR/kanki-sync.sh" 2>/dev/null || true
 
 start_audio() {
     if [ -f "$AUDIO_PID_FILE" ]; then
