@@ -13,7 +13,10 @@ Last updated: 2026-08-22 UTC
 - Architecture and source map: `docs/ARCHITECTURE.md`, `docs/SOURCE_MAP.md`
 - Test design: `docs/TEST_ENVIRONMENT.md`
 - VM evidence: `docs/VM_BUILD_20260821.md`, `docs/VM_CONTINUATION_20260821.md`, `docs/VM_CONTINUATION_20260822.md`
-- Latest rootfs-pipeline evidence: `docs/VM_ROOTFS_PIPELINE_20260822.md`
+- Rootfs pipeline: `docs/VM_ROOTFS_PIPELINE_20260822.md`
+- Canonical-source audit: `docs/VM_CANONICAL_SOURCE_AUDIT_20260822.md`
+- Lifecycle hardening: `docs/VM_LIFECYCLE_HARDENING_20260822.md`
+- Package/privacy hardening: `docs/VM_PACKAGE_HARDENING_20260822.md`
 - Local/Codex channel: `CODEX_COORDINATION.md`
 
 This file is the authoritative continuation point. Update it after every material source, test, build, QEMU, package or release change.
@@ -37,14 +40,16 @@ This is an independent platform port of desktop Anki, not a Ranki patch set.
 5. `Kindle-Anki-Port-PW6-armhf.zip`.
 6. External SHA-256, internal manifest, package contents, build provenance and test report.
 7. Durable GitHub persistence of the final package and reports.
-8. No collection, media, credentials, logs, PID files or user configuration in the package.
+8. No collection, media, credentials, logs, PID/lock state or user configuration in the package.
 9. Separate PW6 hardware-in-the-loop acceptance report.
 
 ## Current verified status
 
 ### Source and architecture
 
-The independent port is ordinary source under `kindle-anki-port/`; obsolete archive staging has been retired. The implementation contains:
+The independent port is ordinary source under `kindle-anki-port/`; obsolete archive staging has been retired. `docs/VM_CANONICAL_SOURCE_AUDIT_20260822.md` records a PASS for build/package source-input independence: maintained project code resolves from `kindle-anki-port/` plus explicitly pinned Anki/Rust/KindleHF inputs.
+
+The implementation contains:
 
 - `core/src/port.rs` — semantic C ABI and reviewer state;
 - `core/src/services_bridge.rs` — narrow backend-owned bridge into official generated services;
@@ -70,7 +75,7 @@ Five real APKG fixtures passed collection/deck/queue/question/reveal/rate/close 
 
 ### Reviewer, sync and lifecycle
 
-Deterministic results include:
+Persisted deterministic checkpoints include:
 
 ```text
 test_reviewer_runtime_fixtures: ok (10 fixture groups)
@@ -88,6 +93,34 @@ Coverage includes:
 - `abort -> close -> core_free` shutdown order;
 - concurrent launch, shared operation lock, sync exclusion and stale-lock recovery.
 
+#### 2026-08-22 lifecycle hardening
+
+A real sync-wrapper termination defect was reproduced: killing the wrapper could leave the real sync worker alive while the operation lock still named the dead wrapper. A later launcher could then reclaim that lock and open the collection concurrently.
+
+The fix now:
+
+- transfers `.kap-operation.lock` ownership from the shell wrapper to the real `kap-sync` worker PID;
+- forwards TERM/INT/HUP and propagates normal worker status;
+- returns conventional signal statuses (`143`, `130`, `129`);
+- preserves worker-owned lock state across wrapper SIGKILL;
+- uses ownership-checked, interruption-safe lock release in both sync and launch wrappers;
+- adds `tests/test_sync_wrapper_signal.sh` and launcher signal regression coverage;
+- gates the new test in `run-static-gates.sh`.
+
+A second interruption window in the first ownership-aware launcher release implementation was caught by the targeted harness (`lock=yes` after TERM) and corrected. The final targeted launcher result was:
+
+```text
+launch_signal_status=143 child_alive=no pidfile=no lock=no
+```
+
+Lifecycle code checkpoint:
+
+```text
+d589345428f28777cf413f97ac0602d565dbfa90
+```
+
+See `docs/VM_LIFECYCLE_HARDENING_20260822.md`.
+
 ### ARM hard-float checkpoint
 
 ```text
@@ -99,14 +132,45 @@ libanki-kindle.so ARM EABI5 hard-float, max GLIBC_2.18
 
 The exact PW6 5.19.6 runtime oracle advertises through GLIBC_2.35. The build requirements are below that ceiling. A static ARMHF sanity executable runs under QEMU 8.2.2.
 
-### Audited package checkpoint
+### Package/privacy hardening
+
+The canonical package auditor and policy now fail closed on transient or user state, including:
+
+```text
+config.ini
+*.log
+*.pid
+*.anki2
+.sync-request
+.opened-build
+collection.media/**
+.kap-operation.lock/**
+.kap-operation.lock.pid.*
+```
+
+The expanded synthetic regression passed. The recorded synthetic ZIP hash is test evidence only, not a product hash:
+
+```text
+audit_package: ok sha256=ab6bbf82437a2e2ee1030205800ea8c242759c8699d25fa1e450c9d560c74039
+package-runtime-state regressions: ok
+```
+
+Package-audit code checkpoint:
+
+```text
+5dbb090826eeb477a511d451ecc475269a560848
+```
+
+See `docs/VM_PACKAGE_HARDENING_20260822.md`.
+
+### Audited package checkpoint — stale for release
 
 ```text
 Kindle-Anki-Port-PW6-armhf.zip
 SHA-256: 9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225
 ```
 
-This checkpoint passes ZIP integrity, internal manifest, required-file and privacy/state gates. It is **not** the final release because it predates the current canonical branch head and exact-rootfs QEMU smoke/final GitHub persistence remain open.
+This earlier checkpoint passed its then-current ZIP integrity, internal manifest, required-file and privacy/state gates. It is **not** the final release and is now explicitly stale because it predates the 2026-08-22 lifecycle/package hardening, the latest canonical branch head and exact-rootfs QEMU smoke.
 
 ## Exact PW6 runtime and rootfs pipeline
 
@@ -128,7 +192,7 @@ WebKitGTK SHA-256:      6bbe5a102d7500deb1ce109f3df22360b4b50f8d9d52da2fcf462700
 target GLIBC maximum:  2.35
 ```
 
-New canonical implementation:
+Canonical implementation:
 
 ```text
 testenv/scripts/prepare-pw6-rootfs.py
@@ -151,8 +215,6 @@ python3 tests/test_prepare_pw6_rootfs.py
 test_prepare_pw6_rootfs: ok
 ```
 
-The rootfs preparation/verifier fixture is included in `testenv/scripts/run-static-gates.sh`.
-
 Relevant commits:
 
 ```text
@@ -165,9 +227,11 @@ ef064fe91d618a8f1ac15f70fa68ab7881ffffcf  exact fixture-source alignment
 
 The exact-rootfs QEMU gate is still pending the external checksum-matching firmware/rootfs bytes. Derived oracle reports are not accepted as substitutes.
 
+Public metadata currently confirms PW6/Kindle Paperwhite 12th Generation firmware 5.19.6 build `4832160042`, but the VM still does not hold the actual checksum-matching firmware bytes. Do not treat metadata confirmation as runtime evidence.
+
 ## Current ordered next actions
 
-1. Continue deterministic reviewer, sync and lifecycle hardening while no target rootfs is mounted.
+1. Continue deterministic reviewer, sync, lifecycle and package hardening while no target rootfs is mounted.
 2. Checkout/materialize the then-current canonical branch head in the build VM.
 3. Run the full non-hardware sequence:
 
