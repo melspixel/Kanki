@@ -41,6 +41,7 @@ run python3 -m py_compile \
     "$ROOT/testenv/scripts/prepare-pw6-rootfs.py" \
     "$ROOT/testenv/scripts/verify-pw6-rootfs.py" \
     "$ROOT/testenv/scripts/vm-advance.py" \
+    "$ROOT/tests/test_core_integration.py" \
     "$ROOT/tests/test_injector.py" "$ROOT/tests/test_semantic_boundary.py" \
     "$ROOT/tests/test_source_contract.py" "$ROOT/tests/test_package_audit.py" \
     "$ROOT/tests/test_prepare_pw6_rootfs.py" "$ROOT/tests/test_rootfs_prepare_script.py" \
