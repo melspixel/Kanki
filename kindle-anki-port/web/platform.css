@@ -1,0 +1,75 @@
+html, body {
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  color: #000;
+}
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-text-size-adjust: 100%;
+}
+#qa {
+  display: block;
+  min-height: 1px;
+  padding: 20px 24px 36px;
+  box-sizing: border-box;
+}
+#qa img,
+#qa video,
+#qa object,
+#qa embed {
+  max-width: 100%;
+  height: auto;
+}
+.kap-replay-button {
+  display: inline-block !important;
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  max-width: 42px !important;
+  max-height: 42px !important;
+  margin: 2px 4px !important;
+  padding: 0 !important;
+  border: 2px solid currentColor !important;
+  border-radius: 21px !important;
+  background: transparent !important;
+  color: inherit !important;
+  font: bold 24px/38px sans-serif !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+#kap-type-answer {
+  display: block;
+  width: 88%;
+  min-height: 52px;
+  margin: 18px auto;
+  padding: 8px 10px;
+  border: 2px solid #000;
+  background: #fff;
+  color: #000;
+  text-align: center;
+  box-sizing: border-box;
+}
+.kap-type-answer-comparison {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+.kap-render-error,
+.kap-review-message {
+  margin: 16px;
+  padding: 16px;
+  border: 2px solid #000;
+  font: 24px/1.35 sans-serif;
+}
+.kap-flattened-scroll {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: auto !important;
+}
