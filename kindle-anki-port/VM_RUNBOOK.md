@@ -8,44 +8,73 @@ This runbook is the canonical procedure for continuing the port without GitHub A
 
 - Ordinary build dependencies may be installed in the Linux VM/container.
 - The user's Mac is not a compiler requirement.
-- Every material source/build/test checkpoint must be committed to the `kindle-anki-port` branch or attached to a GitHub release before being considered durable.
+- Every material source/build/test checkpoint must be committed to the `kindle-anki-port` branch or attached to a durable GitHub artifact before being considered durable.
 - A local ZIP alone is not a release.
+- Final packaging is forbidden before exact-rootfs QEMU has passed for the exact ARMHF bytes being archived.
 - PW6 hardware acceptance remains a separate gate.
 
 ## Continuation order
 
-1. Restore the newest source/worktree checkpoint.
-2. Verify the official Anki pin `e5a6fbe27fdd4d57d5f712191b4a753032e57853`.
+1. Materialize the newest clean `kindle-anki-port` branch head and record its full commit SHA.
+2. Verify the official Anki pin `e5a6fbe27fdd4d57d5f712191b4a753032e57853` and use an Anki checkout whose `HEAD` is exactly that commit.
 3. Install/verify build tools: Rust 1.92.0, C/C++ toolchain, protobuf compiler, Node, Python, CMake/Ninja, QEMU user mode, binutils, `file`, `patchelf`, and KindleHF koxtoolchain 2025.05.
-4. Initialize Anki Fluent translation submodules.
-5. Run strict host C/JavaScript/Shell gates.
-6. Repair the Anki backend semantic bridge without exposing generated service internals broadly.
-7. Run `cargo check`, semantic tests, and host release build.
-8. Cross-build ARMv7 hard-float artifacts.
-9. Run ELF/ABI/GLIBC/export/RPATH audits and QEMU/sysroot smoke tests.
-10. Assemble and unpack-audit `Kindle-Anki-Port-PW6-armhf.zip`.
-11. Persist full ordinary source, logs, manifest, SHA-256, test report, and installer on GitHub.
-12. Update `HANDOFF.md` and `PROGRESS.md` after every failed or green gate.
+4. Initialize the required Anki Fluent translation submodules and prepare the offline Cargo cache.
+5. Run `testenv/scripts/run-static-gates.sh` from the clean project head.
+6. Run the full official host-backend gate and five representative real-APKG C-ABI integrations, including the typed-answer fixture.
+7. Run `testenv/scripts/run-armhf-gates.sh` from the same project/Anki identity and preserve `ARMHF-GATES.txt`, `BUILD-PROVENANCE.txt`, ELF/ABI/GLIBC/export reports and the four ARMHF binaries.
+8. If the checksum-matching private PW6 5.19.6 rootfs is unavailable, stop at an ARMHF checkpoint. Do **not** create `Kindle-Anki-Port-PW6-armhf.zip`.
+9. With the verified private rootfs available, run `testenv/scripts/verify-pw6-rootfs.py` and then `testenv/scripts/run-qemu-smoke.sh` against the fresh ARMHF outputs. Preserve `QEMU-SMOKE.txt`, `QEMU-PROVENANCE.txt`, rootfs verification, backend smoke, audio self-test and sync self-test logs.
+10. Only after step 9 passes, run `testenv/scripts/package-and-audit.sh` with `QEMU=<fresh run-qemu-smoke output>`. The package gate independently rechecks source/Anki identity, canonical manifest hash and all four tested ARMHF binary hashes.
+11. Re-run package reproducibility/privacy/content audits and persist `Kindle-Anki-Port-PW6-armhf.zip`, external SHA-256, internal manifest, package contents, ARMHF/QEMU/package provenance and complete test reports durably on GitHub.
+12. Update `HANDOFF.md` and `PROGRESS.md` after every failed or green material gate.
+13. Begin PW6 hardware-in-the-loop acceptance only after the final non-hardware artifact hashes are recorded. Hardware PASS must be recorded separately.
+
+## Recommended driver
+
+`testenv/scripts/vm-advance.py` encodes the same ordering. Its current contract is:
+
+- static -> official host backend -> real APKG -> ARMHF;
+- without `--rootfs`, terminate as `armhf-checkpoint-passed` and do not package;
+- with `--rootfs`, run exact-rootfs QEMU before package construction;
+- pass the resulting QEMU evidence directory into `package-and-audit.sh`;
+- never mark physical hardware acceptance.
+
+A package produced by bypassing this order is not valid release evidence even if its ZIP integrity checks pass.
 
 ## VM checkpoint convention
 
-A continuation run should preserve:
+A continuation run should preserve at minimum:
 
 ```text
-CONTINUATION_STATUS.md
+report.json
 logs/
-ENVIRONMENT_REPORT.md
-*.status
-Kindle-Anki-Port-VM-continuation.zip
-Kindle-Anki-Port-VM-continuation.zip.sha256
+static-gates/
+armhf/
+qemu-host-sanity/
+qemu-exact-rootfs/          # only when the private rootfs was available
+release/                    # only after exact-rootfs QEMU passed
 ```
 
-The status report must include exact commands, exit codes, first root-cause errors, source commit/pin, and the next repair step. Full logs are retained separately; do not paste only the final Cargo summary.
+The report must include exact commands, exit codes, source commit/pin, relevant tool versions, hashes of logs/artifacts, first root-cause errors, and the next repair step. Do not replace full logs with only a final Cargo summary.
 
-## Current immediate gate
+## Current immediate gates
 
-The semantic adapter must compile against the pinned Anki backend. The known design issue is that a crate-root adapter attempted to call private generated `Backend*Service` methods. The repair should use a narrow backend-owned bridge and/or stable `Collection` methods through `Backend::with_col`, while preserving a named semantic C ABI. Do not make all generated service methods public and do not reimplement scheduler or renderer behavior locally.
+The semantic bridge visibility blocker is already resolved; do not reopen it unless a fresh pinned-Anki build demonstrates a regression.
+
+The current release-critical sequence is:
+
+```text
+latest clean canonical head
+  -> complete static gates
+  -> official Anki 26.08.1 backend + five real APKGs
+  -> ARMHF + ABI/GLIBC
+  -> checksum-matching PW6 5.19.6 exact-rootfs QEMU
+  -> QEMU-bound package-and-audit
+  -> durable GitHub installer/reports
+```
+
+The current execution container has previously failed ordinary GitHub clone/fetch because external DNS was unavailable, and it does not contain the private checksum-matching PW6 rootfs. Those limitations justify a targeted checkpoint, not a fabricated green full build.
 
 ## Completion rule
 
-Software delivery is complete only when all non-hardware gates are green and the installer, checksum, manifest, test report, source commit, and build provenance are persisted in GitHub. Physical PW6 acceptance is recorded separately and cannot be inferred from VM results.
+Software delivery is complete only when all non-hardware gates above are green from one coherent release provenance chain and the installer, checksum, manifest, contents, test report, source commit, ARMHF provenance, QEMU provenance and package provenance are persisted durably in GitHub. Physical PW6 acceptance is recorded separately and cannot be inferred from VM, CI, QEMU or mocks.
