@@ -102,7 +102,9 @@ jobs:
           cp third_party/anki/target/$TARGET/release/libanki.so "$EXT/libanki-kanki.so"
           cp kanki-device kanki-sync kanki-audio kanki-gst-play "$EXT/"
           cp assets/device/* "$EXT/assets/device/"
-          cp assets/reviewer/reviewer.css assets/reviewer/reviewer.js "$EXT/assets/reviewer/"
+          cp assets/reviewer/reviewer.css assets/reviewer/reviewer.js \
+             assets/reviewer/css_compat.js assets/reviewer/css_runtime.js \
+             "$EXT/assets/reviewer/"
           cp scripts/kanki-launch.sh scripts/kanki-sync.sh "$EXT/"
           cp packaging/config.example.ini "$EXT/"
           cp THIRD_PARTY_NOTICES.md docs/INSTALL.md "$EXT/"
@@ -127,6 +129,10 @@ jobs:
       - name: Package and ABI gates
         run: |
           EXT=package/extensions/kanki
+          test -f "$EXT/assets/reviewer/css_compat.js"
+          test -f "$EXT/assets/reviewer/css_runtime.js"
+          grep -q 'css_compat.js' "$EXT/assets/device/reviewer-shell.html"
+          grep -q 'css_runtime.js' "$EXT/assets/device/reviewer-shell.html"
           (cd "$EXT" && sha256sum -c MANIFEST.sha256)
           unzip -l Kanki-rewrite-hw1.zip | tee package-contents.txt
           ! unzip -l Kanki-rewrite-hw1.zip | grep -E 'extensions/ranki|LD_PRELOAD|collection\.anki2|config\.ini$'
