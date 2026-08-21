@@ -12,14 +12,13 @@ DOWNLOAD=0
 
 AMAZON_ALIAS='https://www.amazon.com/update_KindlePaperwhite_12th_Gen_2024'
 AMAZON_OBJECT='https://s3.amazonaws.com/firmwaredownloads/update_kindle_all_new_paperwhite_12th_5.19.6.bin'
-COMMUNITY_MIRROR='https://files.cocaine.trade/firmware/kindle/PW6/update_kindle_all_new_paperwhite_12th_5.19.6.bin'
 
 usage() {
     cat <<EOF
 Usage:
-  $0 --firmware FILE --output ROOTFS_DIR [--manifest FILE] [--kindletool FILE] [--keep-image]
-  $0 --download --firmware FILE --output ROOTFS_DIR [options]
-  $0 --print-sources
+  sh $0 --firmware FILE --output ROOTFS_DIR [--manifest FILE] [--kindletool FILE] [--keep-image]
+  sh $0 --download --firmware FILE --output ROOTFS_DIR [options]
+  sh $0 --print-sources
 
 The script verifies the pinned PW6 5.19.6 firmware, extracts it with
 KindleTool, verifies rootfs.img, expands the ext filesystem with debugfs, and
@@ -33,6 +32,23 @@ sha256_file() {
         sha256sum "$1" | awk '{print $1}'
     else
         shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
+md5_file() {
+    if command -v md5sum >/dev/null 2>&1; then
+        md5sum "$1" | awk '{print $1}'
+    elif command -v md5 >/dev/null 2>&1; then
+        md5 -q "$1"
+    else
+        python3 - "$1" <<'PY'
+import hashlib, sys
+h = hashlib.md5()
+with open(sys.argv[1], 'rb') as stream:
+    for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+        h.update(chunk)
+print(h.hexdigest())
+PY
     fi
 }
 
@@ -55,8 +71,8 @@ print_sources() {
     cat <<EOF
 Amazon alias: $AMAZON_ALIAS
 Amazon object: $AMAZON_OBJECT
-Community mirror: $COMMUNITY_MIRROR
-Expected firmware SHA-256: $(manifest_value firmware.package_sha256)
+Expected firmware SHA-256: $(manifest_value firmware.sha256)
+Expected firmware MD5: $(manifest_value firmware.md5)
 Expected rootfs image SHA-256: $(manifest_value rootfs_image.sha256)
 EOF
 }
@@ -79,7 +95,8 @@ done
 [ -n "$FIRMWARE" ] || fail '--firmware is required'
 [ -n "$OUTPUT" ] || fail '--output is required'
 
-EXPECTED_FIRMWARE=$(manifest_value firmware.package_sha256)
+EXPECTED_FIRMWARE=$(manifest_value firmware.sha256)
+EXPECTED_FIRMWARE_MD5=$(manifest_value firmware.md5)
 EXPECTED_ROOTFS=$(manifest_value rootfs_image.sha256)
 
 if [ "$DOWNLOAD" -eq 1 ] && [ ! -f "$FIRMWARE" ]; then
@@ -88,10 +105,16 @@ if [ "$DOWNLOAD" -eq 1 ] && [ ! -f "$FIRMWARE" ]; then
     TMP_DOWNLOAD="$FIRMWARE.part.$$"
     trap 'rm -f "$TMP_DOWNLOAD"' EXIT HUP INT TERM
     if ! curl -fL --retry 4 --connect-timeout 30 "$AMAZON_ALIAS" -o "$TMP_DOWNLOAD"; then
-        printf '%s\n' 'Amazon alias failed; trying the pinned community mirror.' >&2
-        curl -fL --retry 4 --connect-timeout 30 "$COMMUNITY_MIRROR" -o "$TMP_DOWNLOAD" \
-            || fail 'unable to download the pinned firmware from configured sources'
+        printf '%s\n' 'Amazon alias failed; trying the pinned Amazon firmware object.' >&2
+        curl -fL --retry 4 --connect-timeout 30 "$AMAZON_OBJECT" -o "$TMP_DOWNLOAD" \
+            || fail 'unable to download the pinned firmware from official Amazon sources'
     fi
+    DOWNLOADED_SHA=$(sha256_file "$TMP_DOWNLOAD")
+    [ "$DOWNLOADED_SHA" = "$EXPECTED_FIRMWARE" ] || \
+        fail "downloaded firmware SHA-256 mismatch: expected $EXPECTED_FIRMWARE, got $DOWNLOADED_SHA"
+    DOWNLOADED_MD5=$(md5_file "$TMP_DOWNLOAD")
+    [ "$DOWNLOADED_MD5" = "$EXPECTED_FIRMWARE_MD5" ] || \
+        fail "downloaded firmware MD5 mismatch: expected $EXPECTED_FIRMWARE_MD5, got $DOWNLOADED_MD5"
     mv "$TMP_DOWNLOAD" "$FIRMWARE"
     trap - EXIT HUP INT TERM
 fi
@@ -100,6 +123,9 @@ fi
 ACTUAL_FIRMWARE=$(sha256_file "$FIRMWARE")
 [ "$ACTUAL_FIRMWARE" = "$EXPECTED_FIRMWARE" ] || \
     fail "firmware SHA-256 mismatch: expected $EXPECTED_FIRMWARE, got $ACTUAL_FIRMWARE"
+ACTUAL_FIRMWARE_MD5=$(md5_file "$FIRMWARE")
+[ "$ACTUAL_FIRMWARE_MD5" = "$EXPECTED_FIRMWARE_MD5" ] || \
+    fail "firmware MD5 mismatch: expected $EXPECTED_FIRMWARE_MD5, got $ACTUAL_FIRMWARE_MD5"
 
 command -v python3 >/dev/null 2>&1 || fail 'python3 is required'
 command -v gzip >/dev/null 2>&1 || fail 'gzip is required'
@@ -148,6 +174,7 @@ python3 "$PROJECT/testenv/scripts/verify-pw6-rootfs.py" \
     printf '%s\n' 'KAP_PW6_ROOTFS_PREPARATION_V1'
     printf 'firmware=%s\n' "$FIRMWARE"
     printf 'firmware_sha256=%s\n' "$ACTUAL_FIRMWARE"
+    printf 'firmware_md5=%s\n' "$ACTUAL_FIRMWARE_MD5"
     printf 'rootfs_image_sha256=%s\n' "$ACTUAL_ROOTFS"
     printf 'rootfs_directory=%s\n' "$OUTPUT"
     printf 'kindletool=%s\n' "$KINDLETOOL"
