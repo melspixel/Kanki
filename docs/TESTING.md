@@ -89,7 +89,12 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
 - record the resolved toolchain release and SHA-256 in build identity;
 - compare GLIBC/GCC symbol requirements with audited rootfs;
 - verify required standard and Lab126 symbols;
-- run loader/self-test against a mounted official rootfs where possible;
+- run `bash tools/local_pw6_rootfs_audit.sh` against the authenticated official
+  PW6 5.19.6 rootfs for the exact clean package candidate;
+- resolve package, GTK2/GObject/WebKitGTK/X11/GStreamer loader closures and run
+  the UI/backend/audio capability probes through that rootfs's ARMHF loader;
+- model the firmware's authenticated TTS squashfs mount when checking
+  `mixersink`/`ttssrc`, without packaging proprietary bytes;
 - build `kanki-device`, `kanki-sync`, `kanki-diag`, `kanki-raise`, `kanki-audio`, `kanki-gst-play` and typed Anki backend;
 - produce one reproducible self-identifying ZIP with the canonical package
   recipe, whether the executor is hosted or local;
@@ -99,6 +104,12 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
 - verify `MANIFEST.sha256` and refusal of mixed/partial components;
 - verify package includes diagnostic/report runtime and does not include `extensions/ranki`, `collection.anki2` or user `config.ini`;
 - package contains no Amazon firmware or proprietary library bytes.
+
+Gate D rootfs evidence must retain the firmware/rootfs/TTS hashes, package
+identity, ELF attributes, required/provided symbol versions, loader resolution,
+UI symbol inventory and probe output below ignored `out/firmware/`. A passing
+QEMU/chroot audit records `hardware_execution=not_run`; it cannot close Gate E
+or prove display/audio output, Lab126 service behavior or computed geometry.
 
 ## Gate E — real PW6 hardware
 

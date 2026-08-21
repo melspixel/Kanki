@@ -138,6 +138,20 @@ diagnostic build only, `KANKI_ALLOW_DIRTY=1` may be supplied to either
 `bash tools/local_package_docker.sh`; such an artifact is never release
 evidence.
 
+Firmware/runtime compatibility has a separate canonical read-only audit:
+
+```text
+tools/audit_pw6_rootfs.sh
+```
+
+`tools/local_pw6_rootfs_audit.sh` is its Docker executor. Run it only after the
+canonical package exists for the clean current `HEAD`. It authenticates the
+fixed official PW6 5.19.6 firmware, rootfs and TTS squashfs, checks ARMHF
+attributes/symbol versions/dependency closures, and executes loader-level
+UI/backend/audio probes. Its firmware cache and evidence remain below ignored
+`out/`; no firmware bytes enter the package. Passing is Gate D evidence and
+must retain `hardware_execution=not_run` until the exact ZIP runs on PW6.
+
 ## Build and CI ownership map
 
 - `.github/workflows/actions-probe.yml` — hosted runner/account execution probe only
@@ -154,6 +168,8 @@ evidence.
 - `tools/local_anki_bridge_docker.sh` — local Docker executor for the typed Anki host recipe
 - `tools/build_kindle_package.sh` — canonical ARMHF package/ABI recipe
 - `tools/local_package_docker.sh` — local Docker wrapper for macOS/Linux
+- `tools/audit_pw6_rootfs.sh` — canonical fixed-firmware PW6 rootfs ABI audit
+- `tools/local_pw6_rootfs_audit.sh` — local Docker executor for the rootfs audit
 
 If a workflow and the canonical script disagree, the workflow must be reduced to invoking the script; do not create another embedded copy of the package recipe.
 

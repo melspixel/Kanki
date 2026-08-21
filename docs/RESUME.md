@@ -142,6 +142,11 @@ exact tested SHA, first current failure and next command, then follow the
 takeover sequence in `docs/CODEX_HANDOFF.md`. GitHub Actions remains independent
 confirmation and is not permitted to redefine the package recipe.
 
+Gate D now also has the canonical fixed-firmware executor
+`bash tools/local_pw6_rootfs_audit.sh`; its procedure and evidence boundary live
+in `docs/LOCAL_BUILD.md`. A green rootfs/QEMU result never replaces Gate E on
+the physical PW6.
+
 ## 7. Local package contract
 
 The canonical package script:

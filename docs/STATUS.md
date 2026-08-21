@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-21
-**Last fully recorded non-hardware baseline:** `96b326c0da1fdcbe96f519ac84f3f1f985ec403e`
+**Current fully recorded non-hardware candidate:** `313d52d8aeb7b37b6b421b69609d059b30916ecb`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -84,10 +84,10 @@ The canonical script refuses a dirty root checkout by default, validates source 
 
 ### Verified local baseline
 
-The current clean local non-hardware baseline is recorded for exact SHA
-`96b326c0da1fdcbe96f519ac84f3f1f985ec403e`:
+The current clean local non-hardware candidate is recorded for exact SHA
+`313d52d8aeb7b37b6b421b69609d059b30916ecb`:
 
-- host: macOS 26.4 x86-64 with Docker Desktop engine 29.4.0, using the
+- host: macOS 26.4.1 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
 - `sh tools/run_host_gates.sh` — **PASS** using project-local Rust 1.92.0,
   checksum-pinned Node 20.18.2 and lockfile-pinned jsdom 24.1.3; fmt, clippy, policy, native/source
@@ -135,15 +135,30 @@ The current clean local non-hardware baseline is recorded for exact SHA
 - two consecutive clean invocations of the same canonical package command on
   this SHA produced byte-identical ZIPs, `BUILD.json`, manifests and archive
   evidence. Both archives contain 1,296 sorted regular files, use source date
-  epoch `1787323042`, and have the same SHA-256;
+  epoch `1787326978`, and have the same SHA-256;
 - package SHA-256:
-  `7e3f8c817e9a0396ab3b16585a386c4776971353218d857d2ee9320d35657b91`;
-- byte-identical companion evidence hashes are `dd99fa3454c924e2abe941163352685b57acd6549095521285441351d839f24c`
-  for `BUILD.json`, `31ac30f444db9debf198e6f9c66e5b9997504f8e830283e90e9a098bb6324c7c`
+  `38b19c686201c1a67c97bcadc802809e7a6d3cff131bde91ae88d3bb687a660b`;
+- byte-identical companion evidence hashes are `8231e0553144b7b332ca6ce7667ef06dda9a0ab4609975cbe2111d7521a03633`
+  for `BUILD.json`, `23c3ed0c520f87a1d95b573a6bd47de70afe7881f709ac24cee3f55f4402d49b`
   for the 1,290-entry manifest, and
-  `838ca24047141b931e20e9bce515cebe0a9126ce4793686d68e9665a13ff5974`
-  for `archive-info.txt`; retained run1/run2 evidence is under ignored
-  `out/reproducibility/96b326c0da1fdcbe96f519ac84f3f1f985ec403e/`;
+  `d39680f29bc2f481243d15790812f592f48221906f3304c9baf7e2d742fe1cf2`
+  for `archive-info.txt`;
+- `bash tools/local_pw6_rootfs_audit.sh` — **PASS** against the authenticated
+  official PW6 5.19.6 recovery bundle. The audit verified the 412,492,749-byte
+  firmware SHA-256
+  `72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c`,
+  extracted rootfs SHA-256
+  `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`
+  and TTS squashfs SHA-256
+  `0724e2fca5d8bba72681cc5a9d593c68a76f3b0b22a367e613dd01ffba22c15b`.
+  All seven packaged ELF objects were ARMv7 hard-float; their required
+  GLIBC/GCC/LIBATOMIC versions and loader dependency closures resolved in the
+  rootfs. Under QEMU/chroot, the real PW6 loader successfully loaded GTK2,
+  GObject, WebKitGTK, X11 and the typed Anki backend, resolved all required UI
+  symbols plus all four Lab126 CSS-pixel/zoom symbols, and instantiated
+  `mixersink` and `ttssrc` after modeling the firmware's `/usr/lib/tts` mount.
+  Evidence is under ignored
+  `out/firmware/pw6-5.19.6/evidence/313d52d8aeb7b37b6b421b69609d059b30916ecb/`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -152,10 +167,12 @@ The current clean local non-hardware baseline is recorded for exact SHA
   MathJax 2.7.9 archive SHA-256 is
   `7131e739848edc14aa661a5516995866b81a477fab8b039d7cc324930e71f786`.
 
-This evidence is non-hardware baseline evidence, not release acceptance. It
-does not prove native audio output on PW6/AirPods, typed-answer focus/scroll or
-MathJax geometry/performance on Kindle WebKit, live AnkiWeb/PW6 sync,
-independent cross-host reproducibility, or PW6 behavior.
+This evidence is non-hardware baseline evidence, not release acceptance. The
+rootfs audit proves package/runtime compatibility and dynamic symbol loading;
+it does not create a Kindle display/audio device or execute Lab126 services.
+It therefore does not prove native audio output on PW6/AirPods, typed-answer
+focus/scroll, MathJax geometry/performance, live AnkiWeb/PW6 sync, independent
+cross-host reproducibility, or any real-device lifecycle behavior.
 
 ### Baseline failure ledger
 
@@ -249,9 +266,28 @@ independent cross-host reproducibility, or PW6 behavior.
   so that diagnostic build was aborted and replaced with checksum-pinned Node
   plus lockfile-pinned jsdom under ignored `out/`. Clean host, Anki and two
   byte-identical ARMHF package builds then passed at the exact commit.
+- Commit `17936f08ab416388314d626478ba52c61eec56a2` added the fixed PW6
+  5.19.6 rootfs audit and a device `--abi-probe` that loads the real UI and
+  typed backend DSOs but stops before assets, collection access, GTK init or a
+  window. The first audit failure was evidence-tooling identity: the full
+  firmware target OTA `4832160042` had been confused with the shorter rootfs
+  build `483216`. Commit `4afafea506beee50677557560e35f7afefd55981`
+  records and validates them separately.
+- The next audit failure was Docker Desktop filesystem behavior: hard-linking
+  the extracted rootfs from a macOS bind mount into a chroot failed even though
+  the rootfs itself was valid. Commit
+  `860523091d9d731521b1b05de749a3f0b9028685` stages a normal copy in
+  container-local `/tmp`, with narrowly validated cleanup paths.
+- The next failure was another audit-oracle defect: a greedy X11 source regex
+  crossed line boundaries and treated the `LOAD_FN` macro definition as a
+  symbol. Commit `313d52d8aeb7b37b6b421b69609d059b30916ecb` parses one source
+  line at a time and requires the exact nine-symbol set. No symbol requirement
+  was removed. Host, typed-Anki/APKG/sync, two canonical package builds and the
+  full PW6 rootfs audit then passed on that exact SHA; no product ABI failure
+  was observed.
 - There is no red canonical local software gate at this checkpoint. The next
-  missing executable categories are an audited PW6 runtime/rootfs loader check,
-  original COCA plus an unrelated rich APKG, and Kindle computed geometry.
+  missing executable categories are original COCA plus an unrelated rich APKG,
+  independent cross-host reproduction and real PW6 hardware acceptance.
 
 ## Current GitHub-hosted Actions blocker
 
@@ -321,8 +357,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 - typed-answer focus, keyboard and answer-scroll behavior on PW6 WebKit;
 - live AnkiWeb sync and normal/full/media sync acceptance on PW6;
 - independent cross-host reproducibility confirmation;
-- runtime ABI/loader proof against an audited PW6 rootfs or device;
-- native GTK/WebKit shell and CSS-pixel behavior on PW6;
+- native GTK/WebKit window behavior and computed CSS-pixel geometry on PW6;
 - audio sequence behavior on PW6/AirPods;
 - renderer diagnostics daemon behavior on ARMHF/PW6;
 - original unmodified COCA plus an unrelated rich/user APKG and their PW6
@@ -334,17 +369,25 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 ## Immediate next actions
 
-1. Inventory the pinned SDK/rootfs runtime surface with
-   `find third_party/kindle-sdk -type f \( -name 'ld-linux-armhf.so.3' -o -name 'libc.so.6' -o -name 'libwebkit-1.0.so*' -o -name 'libgtk-x11-2.0.so*' \) -print`,
-   then distinguish SDK link evidence from an audited PW6 runtime.
+1. Preserve candidate identity before device transfer with
+   `shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip`; the expected value
+   is `38b19c686201c1a67c97bcadc802809e7a6d3cff131bde91ae88d3bb687a660b`.
 2. Obtain explicit local test access to original COCA and at least one
    unrelated representative APKG, then run the same privacy-reviewed path
    without modifying or committing the decks and without adding deck CSS.
-3. Audit runtime ABI/loader requirements against an official PW6 rootfs or the
-   device, then retain the exact evidence.
-4. Freeze one candidate only after remaining non-hardware gates are green.
-5. Install that exact ZIP on PW6 and run hardware acceptance, renderer metrics and live audio/sync tests.
-6. Repair/rerun hosted Actions later as independent confirmation, not as a separate build definition.
+3. Connect the target PW6, back up user data, follow `docs/INSTALL.md`, and
+   clean-install this exact ZIP into `/mnt/us/extensions/kanki` without
+   deleting/replacing `/mnt/us/anki_data` or touching
+   `/mnt/us/extensions/ranki`.
+4. Run Gate E in `docs/TESTING.md`, retaining build identity, firmware,
+   renderer geometry, audio, diagnostics/privacy, sync, lifecycle and rollback
+   evidence against this exact artifact. The first currently open evidence
+   item is physical PW6 launch; `hardware_execution=not_run` is recorded in
+   the rootfs audit rather than hidden as a pass.
+5. Reproduce the canonical package on an independent host and compare the ZIP
+   byte-for-byte.
+6. Repair/rerun hosted Actions later as independent confirmation, not as a
+   separate build definition.
 
 ## Release rule
 

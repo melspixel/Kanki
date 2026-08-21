@@ -64,6 +64,44 @@ creation order therefore do not affect the archive. A host contract checks
 this property, but release evidence still requires two clean full builds of
 the exact candidate and a byte comparison.
 
+## PW6 5.19.6 rootfs ABI audit
+
+After building the canonical package from a clean checkout, audit that exact
+candidate against Amazon's published PW6 userspace:
+
+```sh
+bash tools/local_pw6_rootfs_audit.sh
+```
+
+The wrapper initializes the fixed nested KindleTool gitlink, builds
+`tools/pw6-rootfs-audit.Dockerfile`, and invokes the canonical read-only audit
+in `tools/audit_pw6_rootfs.sh`. On the first run it downloads the
+412,492,749-byte official PW6 5.19.6 recovery bundle into ignored
+`out/firmware/`, verifies its fixed SHA-256, extracts and verifies the rootfs
+and the firmware's TTS squashfs, then reuses that authenticated cache. All
+additional Linux packages are installed only in the Docker image; no host
+global package installation is required.
+
+The audit refuses a dirty checkout or a package whose `BUILD.json` candidate
+does not equal `HEAD`. It checks every packaged ELF for ARMv7 hard-float,
+compares required GLIBC/GCC/LIBATOMIC symbol versions with the rootfs, resolves
+package plus GTK2/GObject/WebKitGTK/X11/GStreamer dependency closures with the
+PW6 loader, and executes the device UI/backend and audio capability probes via
+QEMU/chroot. The TTS squashfs is staged at `/usr/lib/tts` to model the firmware
+runtime mount; it is not patched or copied into the Kanki package.
+
+Evidence is written below:
+
+```text
+out/firmware/pw6-5.19.6/evidence/<candidate-sha>/
+```
+
+`SUMMARY.txt` must say `pw6_rootfs_audit=pass` and always records
+`hardware_execution=not_run`. This is strong loader/ABI evidence, but it does
+not emulate a display server, audio hardware, Lab126 service behavior or
+Kindle geometry. It never mounts or modifies `/mnt/us`, and no Amazon firmware
+or proprietary runtime bytes enter the release ZIP.
+
 ## Typed Anki host bridge and disposable collection
 
 The package build proves the ARMHF library can compile, but it cannot execute

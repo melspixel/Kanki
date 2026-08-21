@@ -338,6 +338,17 @@ Then full local package:
 bash tools/local_package_docker.sh
 ```
 
+Then authenticate and execute that exact package against the fixed official
+PW6 5.19.6 userspace:
+
+```sh
+bash tools/local_pw6_rootfs_audit.sh
+```
+
+This last command is a read-only Docker/QEMU loader audit, not PW6 hardware
+acceptance. See `docs/LOCAL_BUILD.md` for cache/evidence details and
+`docs/STATUS.md` for the exact current result.
+
 Capture the **first real failure**, not the last 500 lines. Fix one failure class at a time.
 
 Before changing directory layout, obtain at least:
@@ -356,7 +367,8 @@ Issue #11 is authoritative, but expect work in these areas:
 - queue/render/AV/type-answer/answer/bury semantics;
 - effective deck-config autoplay and answer-side question-audio replay;
 - sync/full-sync/media-sync lifecycle;
-- ARMHF Anki library and ABI audit;
+- ARMHF Anki library plus fixed PW6 rootfs ABI/loader audit; real device
+  execution remains separate;
 - native GTK2/WebKit app launch on PW6;
 - Lab126 CSS pixel/full-content zoom on the actual device;
 - old-WebKit generic CSS compatibility corpus;
