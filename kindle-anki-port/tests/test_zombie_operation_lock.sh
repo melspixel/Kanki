@@ -19,7 +19,7 @@ make_zombie() {
     pid_file=$1
     zombie_release=$2
     rm -f "$pid_file" "$zombie_release"
-    python3 - "$pid_file" "$zombie_release" <<'PY' &
+    PYTHONWARNINGS=ignore::DeprecationWarning python3 - "$pid_file" "$zombie_release" <<'PY' &
 import os
 import sys
 import time
