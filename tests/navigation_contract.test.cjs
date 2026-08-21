@@ -6,6 +6,7 @@ const {JSDOM, VirtualConsole} = require('jsdom');
 (() => {
   const root = path.resolve(__dirname, '..');
   const reviewer = fs.readFileSync(path.join(root, 'assets/reviewer/reviewer.js'), 'utf8');
+  const device = fs.readFileSync(path.join(root, 'device/kanki_device.c'), 'utf8');
   const logs = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('log', (message) => logs.push(String(message)));
@@ -35,10 +36,18 @@ const {JSDOM, VirtualConsole} = require('jsdom');
   });
 
   const external = qa.querySelector('#https-link');
+  external.onclick = () => {
+    window.__externalCardHandlerRuns = (window.__externalCardHandlerRuns || 0) + 1;
+  };
   const externalEvent = new window.MouseEvent('click', {bubbles: true, cancelable: true});
   const externalResult = external.dispatchEvent(externalEvent);
   assert.equal(externalResult, false, 'external HTTP navigation must be cancelled');
   assert.equal(externalEvent.defaultPrevented, true, 'external HTTP navigation must prevent default');
+  assert.equal(
+    window.__externalCardHandlerRuns,
+    1,
+    'blocking default navigation must not suppress card-authored click handlers',
+  );
   assert.ok(
     logs.some((line) => line.includes('blocked external reviewer navigation scheme=https')),
     'blocked navigation should log only the scheme',
@@ -62,6 +71,18 @@ const {JSDOM, VirtualConsole} = require('jsdom');
     window.document.querySelector('#qa'),
     qa,
     'navigation policy must preserve the persistent reviewer root',
+  );
+  assert.ok(
+    device.includes('app->view_mode == VIEW_REVIEWER && app->reviewer_ready'),
+    'native WebKit policy must also guard the initialized reviewer document',
+  );
+  assert.ok(
+    device.includes('blocked external reviewer navigation scheme=%s'),
+    'native policy logging must identify only the blocked scheme',
+  );
+  assert.ok(
+    !device.includes('blocked external reviewer navigation uri=%s'),
+    'native policy must not log private card URLs',
   );
 
   window.close();

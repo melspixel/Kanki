@@ -119,6 +119,37 @@
     while (node.firstChild) node.removeChild(node.firstChild);
   }
 
+  function navigationScheme(value) {
+    var match = /^\s*([a-z][a-z0-9+.-]*):/i.exec(value || '');
+    return match ? match[1].toLowerCase() : '';
+  }
+
+  function onReviewerNavigation(event) {
+    var node;
+    var href;
+    var scheme;
+    event = event || window.event;
+    node = event ? (event.target || event.srcElement) : null;
+    if (node && node.nodeType === 3) node = node.parentNode;
+    while (node && node !== qa && String(node.tagName || '').toLowerCase() !== 'a') {
+      node = node.parentNode;
+    }
+    if (!node || node === qa) return true;
+    href = node.getAttribute('href') || '';
+    if (!href || /^\s*#/.test(href) || /^\s*javascript:/i.test(href) ||
+        /^\s*kanki:/i.test(href)) return true;
+    scheme = navigationScheme(href) || 'relative';
+    if (event.preventDefault) event.preventDefault();
+    event.returnValue = false;
+    if (window.console && window.console.log) {
+      window.console.log('blocked external reviewer navigation scheme=' + scheme);
+    }
+    return false;
+  }
+
+  if (qa.addEventListener) qa.addEventListener('click', onReviewerNavigation, true);
+  else qa.onclick = onReviewerNavigation;
+
   function executeScripts(root) {
     var scripts = root.getElementsByTagName('script');
     var pending = [];

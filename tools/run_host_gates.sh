@@ -61,6 +61,7 @@ fi
 
 printf '%s\n' '== reviewer contracts =='
 node tests/renderer_contract.test.cjs
+node tests/navigation_contract.test.cjs
 node tests/css_compat.test.cjs
 node tests/diagnostics_contract.test.cjs
 

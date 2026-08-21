@@ -125,6 +125,7 @@ struct App {
     RatingContext rating_contexts[4];
 
     ViewMode view_mode;
+    int reviewer_ready;
     int collection_open;
     char *startup_error;
     char *deck_html;
@@ -471,6 +472,7 @@ static void set_review_controls(App *app, const char *mode, const char *uri) {
 
 static void load_decks(App *app) {
     app->view_mode = VIEW_DECKS;
+    app->reviewer_ready = 0;
     set_review_controls(app, "none", "");
     app->ui.webkit_web_view_load_html_string(app->web_view, app->deck_html,
                                               "file:///mnt/us/extensions/kanki/assets/device/");
@@ -490,6 +492,7 @@ static void configure_native_css_pixels(App *app) {
 
 static void load_reviewer(App *app) {
     app->view_mode = VIEW_REVIEWER;
+    app->reviewer_ready = 0;
     set_review_controls(app, "none", "");
     configure_native_css_pixels(app);
     app->ui.webkit_web_view_load_html_string(app->web_view, app->reviewer_html,
@@ -498,6 +501,7 @@ static void load_reviewer(App *app) {
 
 static void load_sync(App *app) {
     app->view_mode = VIEW_SYNC;
+    app->reviewer_ready = 0;
     set_review_controls(app, "none", "");
     app->ui.webkit_web_view_load_html_string(app->web_view, app->sync_html,
                                               "file:///mnt/us/extensions/kanki/assets/device/");
@@ -551,6 +555,7 @@ static void dispatch_uri(App *app, const char *uri) {
                 execute_script(app, script);
                 free(base);
             }
+            app->reviewer_ready = 1;
             send_next_card(app);
         } else if (view && strcmp(view, "sync") == 0 && app->have_sync_status) {
             const char *message;
@@ -649,6 +654,8 @@ static gboolean on_navigation_policy(void *web_view, void *frame, void *request,
                                      void *action, void *decision, void *user_data) {
     App *app = user_data;
     const char *uri;
+    char scheme[24];
+    size_t scheme_length = 0;
     (void)web_view;
     (void)frame;
     (void)action;
@@ -657,6 +664,28 @@ static gboolean on_navigation_policy(void *web_view, void *frame, void *request,
         app->ui.webkit_web_policy_decision_ignore(decision);
         dispatch_uri(app, uri);
         return 1;
+    }
+    if (app->view_mode == VIEW_REVIEWER && app->reviewer_ready && uri) {
+        const unsigned char *cursor = (const unsigned char *)uri;
+        while (*cursor && isspace(*cursor)) cursor++;
+        if (isalpha(*cursor)) {
+            while (cursor[scheme_length] && scheme_length + 1 < sizeof(scheme) &&
+                   (isalnum(cursor[scheme_length]) || cursor[scheme_length] == '+' ||
+                    cursor[scheme_length] == '-' || cursor[scheme_length] == '.')) {
+                scheme[scheme_length] = (char)tolower(cursor[scheme_length]);
+                scheme_length++;
+            }
+        }
+        scheme[scheme_length] = '\0';
+        if (cursor[scheme_length] != ':' ||
+            (strcmp(scheme, "javascript") != 0 &&
+             !((strcmp(scheme, "file") == 0 || strcmp(scheme, "about") == 0) &&
+               strchr(uri, '#')))) {
+            app->ui.webkit_web_policy_decision_ignore(decision);
+            log_message(app, "blocked external reviewer navigation scheme=%s",
+                        scheme[0] ? scheme : "relative");
+            return 1;
+        }
     }
     return 0;
 }
