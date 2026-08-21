@@ -51,6 +51,7 @@ run python3 "$ROOT/tests/test_prepare_pw6_rootfs.py"
 run python3 "$ROOT/tests/test_rootfs_prepare_script.py"
 run python3 "$ROOT/tests/test_build_entrypoints.py"
 run sh -n "$ROOT/testenv/scripts/prepare-pw6-rootfs.sh"
+run sh -n "$ROOT/testenv/tests/audio/test-audio.sh"
 run node --check "$ROOT/web/bridge.js"
 run node --check "$ROOT/web/css_compat.js"
 run node --check "$ROOT/web/decks.js"
@@ -68,6 +69,7 @@ run "$CC" -O2 -std=c99 -Wall -Wextra -Werror -I"$ROOT/core" \
     "$ROOT/native/sync.c" -ldl -o "$BUILD/kap-sync-host"
 run "$BUILD/kap-audio-host" --self-test
 run "$BUILD/kap-sync-host" --self-test
+run sh "$ROOT/testenv/tests/audio/test-audio.sh"
 run "$ROOT/tests/test_lifecycle.sh"
 run "$ROOT/tests/test_sync_wrapper_signal.sh"
 run sh "$ROOT/tests/test_zombie_operation_lock.sh"
