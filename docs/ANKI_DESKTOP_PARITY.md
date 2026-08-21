@@ -41,9 +41,9 @@ Kanki equivalents:
 | Platform scaling | Desktop Qt/WebEngine uses CSS pixels/device scale | Lab126 WebKit native CSS-pixel/pixel-density/full-content-zoom path | Implemented feature path; initial-view lifecycle audit below |
 | AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` | Implemented; integration evidence pending |
 | Replay button | Reviewer-owned semantic control | Reviewer-owned 40px semantic control | Implemented; unrelated SVG must stay untouched |
-| Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Near parity; verify cases below |
-| Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` | **Known placement delta: fix required** |
-| Answer separator with FrontSide | Remove `<hr id=answer>` temporarily, then place it immediately before comparison at `[[type:...]]` replacement | Current bridge may prepend separator to complete answer document | **Bug candidate; must fix/test before release** |
+| Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Implemented structurally; fixture evidence pending |
+| Typed answer result | Compare typed/correct answer and insert comparison at marker | Bridge calls Anki `compare_answer()` and replaces marker in place | Structurally equivalent; fixture evidence pending |
+| Answer separator with FrontSide | Remove `<hr id=answer>` temporarily, then place it immediately before comparison at `[[type:...]]` replacement | Bridge appends separator to the marker-local replacement before `replace_type_markers()` | Structurally equivalent; source contract added |
 | Autoplay | `Card.autoplay()` is deck-config driven | Reviewer currently auto-plays first extracted AV tag | **Semantic delta; bridge should expose `!disable_autoplay`** |
 | Answer-side question replay | `Card.replay_question_audio_on_answer_side()` is deck-config driven | Current packet exposes answer tags only | **Semantic delta; bridge should expose `!skip_question_when_replaying_answer`** |
 | Answer buttons | Pinned v3 scheduler's `answerButtons()` returns 4 | Native bottom bar owns 4 buttons | Equivalent for supported 26.08.1 v3 scheduler; keep interval labels backend-driven |
@@ -74,7 +74,9 @@ Desktop `body_classes_for_card_ord()` produces `card card{ord+1}` plus platform/
 
 `kindle` is an intentional additional class for note authors who choose to target Kindle. It must not be used by Kanki itself as a route to one-deck typography overrides.
 
-### 3. Typed answer separator placement is a known discrepancy
+### 3. Typed answer separator placement matches desktop structurally
+
+A second source audit corrected an earlier suspicion.
 
 Desktop answer filtering removes `<hr id=answer>` temporarily. If the template uses `{{FrontSide}}`, the comparison replacement at `[[type:...]]` is constructed as:
 
@@ -83,15 +85,17 @@ Desktop answer filtering removes `<hr id=answer>` temporarily. If the template u
 <div style="font-family: ...; font-size: ...">comparison</div>
 ```
 
-That places the separator **at the type-answer marker**, before the comparison.
+Kanki's `render_type_answer()` follows the same structural order: it removes the separator from the answer, builds the comparison replacement, prepends `<hr id=answer>` **to that replacement**, then calls `replace_type_markers(&without_separator, &replacement)`. It does not prepend the separator to the whole answer document.
 
-The current Kanki bridge removes the separator and, after replacing the marker, may prepend `<hr id=answer>` to the entire answer string. This can move the question/answer separator to the top of the rendered card and is not desktop-equivalent.
+`tests/bridge_source_contract.py` now guards this property so a later refactor cannot accidentally reintroduce the earlier suspected bug.
 
-Required fix before renderer parity is closed:
+Still required before the parity gate closes:
 
-- preserve desktop marker-local insertion;
-- add fixtures for basic type answer, `{{FrontSide}}`, cloze type answer, unknown field and empty field;
-- verify answer scrolling still targets the restored separator.
+- executable fixtures for basic type answer;
+- `{{FrontSide}}` type answer;
+- cloze type answer;
+- unknown/empty field behavior;
+- answer scroll target on real Kindle WebKit.
 
 ### 4. Autoplay must be data-driven
 
@@ -164,4 +168,4 @@ Never let card link navigation destroy the reviewer lifecycle accidentally.
 
 ## Release gate
 
-Any row marked **Semantic delta**, **Bug candidate** or **Known placement delta** remains open in issue #11 until code plus same-commit test evidence exists. The renderer corpus must include type-answer and autoplay/audio semantics in addition to visual layout fixtures.
+Any row marked **Semantic delta** remains open in issue #11 until code plus same-commit test evidence exists. Structurally equivalent rows still require executable/real-device evidence where listed. The renderer corpus must include type-answer and autoplay/audio semantics in addition to visual layout fixtures.
