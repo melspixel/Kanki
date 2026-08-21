@@ -66,6 +66,8 @@ jobs:
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             device/kanki_sync_cli.c -ldl -o kanki-sync
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror \
+            -ffreestanding -fno-builtin -fno-stack-protector -nostdlib \
+            -Wl,-e,_start -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3 \
             device/kanki_raise.c -ldl -o kanki-raise
           file kanki-device kanki-sync kanki-raise
           arm-kindlehf-linux-gnueabihf-readelf -h kanki-device | tee device-elf.txt
@@ -80,6 +82,7 @@ jobs:
           arm-kindlehf-linux-gnueabihf-nm -D kanki-device | grep -E ' U (dlopen|dlsym|dlclose)' | tee device-dynamic-imports.txt
           arm-kindlehf-linux-gnueabihf-nm -D kanki-sync | grep -E ' U (dlopen|dlsym|dlclose)' | tee sync-dynamic-imports.txt
           arm-kindlehf-linux-gnueabihf-nm -D kanki-raise | grep -E ' U (dlopen|dlsym|dlclose)' | tee raise-dynamic-imports.txt
+          ! arm-kindlehf-linux-gnueabihf-nm -D kanki-raise | grep -E ' U (malloc|free|memcpy|memset|fprintf|getenv|setenv|write)$'
       - uses: actions/upload-artifact@v4
         with:
           name: kindle-device-shell
