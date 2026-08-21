@@ -36,6 +36,7 @@ const audio = [];
 window.kankiBridge.playAudio = (source) => audio.push(['sound', source]);
 window.kankiBridge.playTts = (text, lang, voices, speed) =>
   audio.push(['tts', text, lang, voices, speed]);
+window.kankiBridge.playTags = (tags) => audio.push(['sequence', hostValue(tags)]);
 window.kankiBridge.stopAudio = () => audio.push(['stop']);
 window.kankiBridge.renderComplete = () => {};
 window.kankiBridge.renderFailed = (message) => {
@@ -62,6 +63,8 @@ const card = {
   css: '.row{display:flex;gap:8px}#illustration{width:123px;height:77px}',
   question_audio: [{kind: 'sound', source: 'word.mp3'}],
   answer_audio: [{kind: 'tts', text: 'answer', lang: 'en_US', voices: [], speed: 1.0}],
+  autoplay: true,
+  replay_question_audio_on_answer_side: true,
   counts: {new: 1, learning: 2, review: 3},
   intervals: ['1m', '6m', '1d', '4d'],
 };
@@ -82,7 +85,7 @@ assert.strictEqual(document.querySelector('.replay-button > svg').getAttribute('
 assert.strictEqual(document.getElementById('illustration').getAttribute('width'), '123');
 assert.strictEqual(document.getElementById('illustration').getAttribute('height'), '77');
 assert.deepStrictEqual(hostValue(audio[0]), ['sound', 'custom.mp3']);
-assert.deepStrictEqual(hostValue(audio[1]), ['sound', 'word.mp3']);
+assert.deepStrictEqual(hostValue(audio[1]), ['sequence', card.question_audio]);
 
 const replay = document.querySelector('.replay-button');
 replay.onclick();
@@ -96,18 +99,62 @@ window.kankiDevice.nativeResponse(
   'show_answer',
   JSON.stringify({
     ok: true,
-    data: {html: card.answer_html, audio: card.answer_audio},
+    data: {
+      html: card.answer_html,
+      audio: card.answer_audio,
+      question_audio: card.question_audio,
+      autoplay: true,
+      replay_question_audio_on_answer_side: true,
+    },
     error: null,
   }),
 );
 assert.strictEqual(document.getElementById('qa'), qa, 'answer must not reload the page');
 assert.strictEqual(window.__answerRuns, 1, 'answer scripts must execute after insertion');
 assert.strictEqual(document.getElementById('answer-text').textContent, 'answer');
-assert.deepStrictEqual(hostValue(audio[3]), ['tts', 'answer', 'en_US', [], 1]);
+assert.deepStrictEqual(
+  hostValue(audio[3]),
+  ['sequence', card.question_audio.concat(card.answer_audio)],
+  'answer autoplay must replay question audio before answer audio when requested',
+);
 assert.strictEqual(document.querySelectorAll('.replay-button').length, 1);
 
+const beforeAutoplayOff = audio.length;
+window.kankiReviewer.showCard({
+  side: 'question',
+  body_class: 'card card1 isLin kindle',
+  html: '<span>[anki:play:q:0]</span>',
+  css: '',
+  audio: card.question_audio,
+  autoplay: false,
+  autoplay_audio: card.question_audio,
+});
+assert.strictEqual(audio.length, beforeAutoplayOff, 'autoplay=false must not infer playback from AV tags');
+assert.strictEqual(document.querySelectorAll('.replay-button').length, 1, 'replay remains available');
+
+const beforeQuestionReplayOff = audio.length;
+window.kankiDevice.nativeResponse(
+  'show_answer',
+  JSON.stringify({
+    ok: true,
+    data: {
+      html: card.answer_html,
+      audio: card.answer_audio,
+      question_audio: card.question_audio,
+      autoplay: true,
+      replay_question_audio_on_answer_side: false,
+    },
+    error: null,
+  }),
+);
+assert.deepStrictEqual(
+  hostValue(audio[beforeQuestionReplayOff]),
+  ['sequence', card.answer_audio],
+  'answer autoplay must omit question audio when the backend semantic is false',
+);
+
 window.__customAudio.pause();
-assert.deepStrictEqual(hostValue(audio[4]), ['stop']);
+assert.deepStrictEqual(hostValue(audio[audio.length - 1]), ['stop']);
 
 window.kankiDevice.nativeResponse(
   'next_card',

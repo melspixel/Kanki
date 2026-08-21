@@ -29,6 +29,12 @@
 #define REQUEST_CAPACITY 16384
 #define PATH_CAPACITY 4096
 #define TEXT_CAPACITY 8192
+#define MAX_SEQUENCE_ITEMS 16
+
+struct sequence_item {
+    int tts;
+    char value[TEXT_CAPACITY];
+};
 
 static volatile sig_atomic_t keep_running = 1;
 static pid_t active_job = -1;
@@ -326,6 +332,63 @@ static int start_job(const char *value, int tts) {
     return 1;
 }
 
+static int parse_sequence(const char *target,
+                          struct sequence_item items[MAX_SEQUENCE_ITEMS],
+                          size_t *count) {
+    char count_value[32];
+    char kind[16];
+    char key[32];
+    char *end = NULL;
+    long parsed_count;
+    size_t i;
+
+    if (!target || !items || !count ||
+        !query_value(target, "count", count_value, sizeof(count_value))) return 0;
+    errno = 0;
+    parsed_count = strtol(count_value, &end, 10);
+    if (errno != 0 || !end || *end != '\0' || parsed_count < 1 ||
+        parsed_count > MAX_SEQUENCE_ITEMS) return 0;
+
+    *count = (size_t)parsed_count;
+    for (i = 0; i < *count; i += 1) {
+        if (snprintf(key, sizeof(key), "kind%lu", (unsigned long)i) >= (int)sizeof(key) ||
+            !query_value(target, key, kind, sizeof(kind))) return 0;
+        if (strcmp(kind, "sound") == 0) {
+            items[i].tts = 0;
+        } else if (strcmp(kind, "tts") == 0) {
+            items[i].tts = 1;
+        } else {
+            return 0;
+        }
+        if (snprintf(key, sizeof(key), "value%lu", (unsigned long)i) >= (int)sizeof(key) ||
+            !query_value(target, key, items[i].value, sizeof(items[i].value)) ||
+            !items[i].value[0]) return 0;
+    }
+    return 1;
+}
+
+static int start_sequence_job(const struct sequence_item items[MAX_SEQUENCE_ITEMS], size_t count) {
+    pid_t pid;
+    size_t i;
+    stop_active_job();
+    pid = fork();
+    if (pid == 0) {
+        int result = 0;
+        (void)setpgid(0, 0);
+        signal(SIGTERM, SIG_DFL);
+        signal(SIGINT, SIG_DFL);
+        for (i = 0; i < count; i += 1) {
+            result = items[i].tts ? play_tts(items[i].value) : play_source(items[i].value);
+            if (result != 0) break;
+        }
+        _exit(result >= 0 && result <= 255 ? result : 1);
+    }
+    if (pid < 0) return 0;
+    (void)setpgid(pid, pid);
+    active_job = pid;
+    return 1;
+}
+
 static void reply_http(int descriptor, int status_code, const char *message) {
     char response[768];
     const char *status = status_code == 200 ? "OK" :
@@ -346,6 +409,8 @@ static void handle_client(int descriptor) {
     char method[16];
     char target[REQUEST_CAPACITY];
     char value[TEXT_CAPACITY];
+    struct sequence_item sequence[MAX_SEQUENCE_ITEMS];
+    size_t sequence_count = 0;
     ssize_t length = read(descriptor, request, sizeof(request) - 1);
     if (length <= 0) return;
     request[length] = '\0';
@@ -356,6 +421,14 @@ static void handle_client(int descriptor) {
     if (strncmp(target, "/stop", 5) == 0) {
         stop_active_job();
         reply_http(descriptor, 200, "stopped");
+    } else if (strncmp(target, "/sequence?", 10) == 0) {
+        if (!parse_sequence(target, sequence, &sequence_count)) {
+            reply_http(descriptor, 400, "invalid sequence");
+        } else if (!start_sequence_job(sequence, sequence_count)) {
+            reply_http(descriptor, 400, "unable to start sequence");
+        } else {
+            reply_http(descriptor, 200, "playing sequence");
+        }
     } else if (strncmp(target, "/play?", 6) == 0) {
         if (!query_value(target, "src", value, sizeof(value)) || !*value) {
             reply_http(descriptor, 400, "missing src");

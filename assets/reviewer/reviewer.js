@@ -38,6 +38,30 @@
     }, 1500);
   }
 
+  function sequenceValues(tags) {
+    var values = {count: 0};
+    var i;
+    var tag;
+    var index;
+    tags = tags || [];
+    for (i = 0; i < tags.length && values.count < 16; i += 1) {
+      tag = tags[i];
+      if (!tag) continue;
+      index = values.count;
+      if (tag.kind === 'sound' && tag.source) {
+        values['kind' + index] = 'sound';
+        values['value' + index] = tag.source;
+      } else if (tag.kind === 'tts' && tag.text) {
+        values['kind' + index] = 'tts';
+        values['value' + index] = tag.text;
+      } else {
+        continue;
+      }
+      values.count += 1;
+    }
+    return values;
+  }
+
   window.kankiBridge = {
     playAudio: function (source) {
       audioPing('play', {src: source || ''});
@@ -49,6 +73,10 @@
         voices: voices && voices.length ? voices.join(',') : '',
         speed: typeof speed === 'number' ? speed : 1.0
       });
+    },
+    playTags: function (tags) {
+      if (!tags || !tags.length) return;
+      audioPing('sequence', sequenceValues(tags));
     },
     stopAudio: function () {
       audioPing('stop', {});
@@ -184,7 +212,9 @@
 
   function installSemanticAudio(packet) {
     replaceAvMarkers(qa, packet);
-    if (packet.audio && packet.audio.length) playTag(packet.audio[0]);
+    if (packet.autoplay && packet.autoplay_audio && packet.autoplay_audio.length) {
+      window.kankiBridge.playTags(packet.autoplay_audio);
+    }
   }
 
   function showError(error) {
@@ -256,12 +286,19 @@
   }
 
   function packet(card, side) {
+    var questionAudio = card.question_audio || [];
+    var answerAudio = card.answer_audio || [];
+    var sideAudio = side === 'answer' ? answerAudio : questionAudio;
+    var autoplayAudio = side === 'answer' && card.replay_question_audio_on_answer_side ?
+      questionAudio.concat(answerAudio) : sideAudio;
     return {
       side: side,
       body_class: 'card card' + (Number(card.template_ordinal || 0) + 1) + ' isLin kindle',
       html: side === 'answer' ? card.answer_html : card.question_html,
       css: card.css || '',
-      audio: side === 'answer' ? (card.answer_audio || []) : (card.question_audio || [])
+      audio: sideAudio,
+      autoplay: card.autoplay === true,
+      autoplay_audio: autoplayAudio
     };
   }
 
@@ -273,13 +310,22 @@
   }
 
   function showPreparedAnswer(prepared) {
+    var answerAudio;
+    var questionAudio;
+    var autoplayAudio;
     if (!currentCard || !prepared) return;
+    answerAudio = prepared.audio || [];
+    questionAudio = prepared.question_audio || [];
+    autoplayAudio = prepared.replay_question_audio_on_answer_side ?
+      questionAudio.concat(answerAudio) : answerAudio;
     showCard({
       side: 'answer',
       body_class: 'card card' + (Number(currentCard.template_ordinal || 0) + 1) + ' isLin kindle',
       html: prepared.html || '',
       css: currentCard.css || '',
-      audio: prepared.audio || []
+      audio: answerAudio,
+      autoplay: prepared.autoplay === true,
+      autoplay_audio: autoplayAudio
     });
     command('ui/state', {
       mode: 'answer',
