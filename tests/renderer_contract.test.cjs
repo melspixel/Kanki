@@ -51,7 +51,8 @@ const card = {
   card_id: 77,
   template_ordinal: 1,
   question_html:
-    '<section class="row"><script>window.__questionRuns=(window.__questionRuns||0)+1;<\/script>' +
+    '<section class="row"><script>window.__questionRuns=(window.__questionRuns||0)+1;' +
+    'window.__customAudio=new Audio("custom.mp3");window.__customAudio.play();<\/script>' +
     '<span id="sound-marker">[anki:play:q:0]</span><input id="typeans" value="typed">' +
     '<svg id="illustration" width="123" height="77" viewBox="0 0 123 77"><rect width="123" height="77"></rect></svg>' +
     '</section>',
@@ -74,15 +75,18 @@ assert.strictEqual(document.getElementById('qa'), qa, 'reviewer must keep one #q
 assert.strictEqual(document.body.className, 'card card2 isLin kindle');
 assert.strictEqual(deckStyle.textContent, card.css, 'note type CSS must be preserved verbatim');
 assert.strictEqual(window.__questionRuns, 1, 'question scripts must execute after insertion');
+assert.ok(window.__customAudio, 'card scripts must be able to construct Audio');
+assert.strictEqual(window.__customAudio.constructor, window.Audio);
 assert.strictEqual(document.querySelectorAll('.replay-button').length, 1);
 assert.strictEqual(document.querySelector('.replay-button > svg').getAttribute('viewBox'), '0 0 40 40');
 assert.strictEqual(document.getElementById('illustration').getAttribute('width'), '123');
 assert.strictEqual(document.getElementById('illustration').getAttribute('height'), '77');
-assert.deepStrictEqual(hostValue(audio[0]), ['sound', 'word.mp3']);
+assert.deepStrictEqual(hostValue(audio[0]), ['sound', 'custom.mp3']);
+assert.deepStrictEqual(hostValue(audio[1]), ['sound', 'word.mp3']);
 
 const replay = document.querySelector('.replay-button');
 replay.onclick();
-assert.deepStrictEqual(hostValue(audio[1]), ['sound', 'word.mp3']);
+assert.deepStrictEqual(hostValue(audio[2]), ['sound', 'word.mp3']);
 
 const typeInput = document.getElementById('typeans');
 assert.ok(typeInput, 'typed-answer input must remain usable in the question');
@@ -99,8 +103,11 @@ window.kankiDevice.nativeResponse(
 assert.strictEqual(document.getElementById('qa'), qa, 'answer must not reload the page');
 assert.strictEqual(window.__answerRuns, 1, 'answer scripts must execute after insertion');
 assert.strictEqual(document.getElementById('answer-text').textContent, 'answer');
-assert.deepStrictEqual(hostValue(audio[2]), ['tts', 'answer', 'en_US', [], 1]);
+assert.deepStrictEqual(hostValue(audio[3]), ['tts', 'answer', 'en_US', [], 1]);
 assert.strictEqual(document.querySelectorAll('.replay-button').length, 1);
+
+window.__customAudio.pause();
+assert.deepStrictEqual(hostValue(audio[4]), ['stop']);
 
 window.kankiDevice.nativeResponse(
   'next_card',
@@ -114,4 +121,5 @@ assert.ok(!/^\s*svg\s*\{/m.test(css), 'generic SVG rules are forbidden');
 assert.ok(css.includes('.replay-button > svg'));
 assert.ok(!runtime.includes('LOGICAL_VIEWPORT_PX'));
 assert.ok(!runtime.includes('COCA-English'));
+assert.ok(runtime.includes('window.Audio = KankiAudio'));
 console.log('renderer contract: pass');
