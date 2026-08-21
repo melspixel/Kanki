@@ -56,12 +56,19 @@ for fragment in [
     "FIRMWARE_SIZE=412492749",
     "72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c",
     "FIRMWARE_TARGET_OTA=4832160042",
+    "ROOTFS_BUILD=483216",
+    "042-juno_1906_sangria_bellatrix4-$ROOTFS_BUILD",
     "d8c45cccf631e24dcc8556002cc5f37de6571a23729a8e5fb8adb7f6d938a698",
     "b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa",
     "0724e2fca5d8bba72681cc5a9d593c68a76f3b0b22a367e613dd01ffba22c15b",
     "4d559f6c5b3ebf7dd2d5cfb26c7fd9a601234eda",
 ]:
     require(AUDIT, fragment, f"fixed PW6 rootfs identity is missing: {fragment}")
+forbid(
+    AUDIT,
+    "042-juno_1906_sangria_bellatrix4-$FIRMWARE_TARGET_OTA",
+    "full target OTA must not be confused with the shorter rootfs build id",
+)
 
 # The observed ttssrc dependency lives in the firmware's tts.sqsh runtime
 # mount. The audit must model that mount instead of patching the helper.

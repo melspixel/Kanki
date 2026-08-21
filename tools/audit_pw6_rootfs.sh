@@ -9,6 +9,7 @@ FIRMWARE_NAME=update_kindle_all_new_paperwhite_12th_5.19.6.bin
 FIRMWARE_SIZE=412492749
 FIRMWARE_SHA256=72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c
 FIRMWARE_TARGET_OTA=4832160042
+ROOTFS_BUILD=483216
 ROOTFS_GZ_SHA256=d8c45cccf631e24dcc8556002cc5f37de6571a23729a8e5fb8adb7f6d938a698
 ROOTFS_SHA256=b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa
 TTS_SQSH_SHA256=0724e2fca5d8bba72681cc5a9d593c68a76f3b0b22a367e613dd01ffba22c15b
@@ -216,7 +217,7 @@ if [ ! -d "$ROOTFS_TREE" ]; then
 fi
 grep -Fq "Kindle $FIRMWARE_VERSION" "$ROOTFS_TREE/etc/prettyversion.txt" ||
     fail "rootfs pretty version does not match $FIRMWARE_VERSION"
-grep -Fq "042-juno_1906_sangria_bellatrix4-$FIRMWARE_TARGET_OTA" \
+grep -Fq "042-juno_1906_sangria_bellatrix4-$ROOTFS_BUILD" \
     "$ROOTFS_TREE/etc/version.txt" ||
     fail "rootfs system identity does not match the fixed PW6 candidate"
 require_hash "$ROOTFS_TREE/usr/lib/tts.sqsh" "$TTS_SQSH_SHA256" "PW6 TTS squashfs"
@@ -478,6 +479,7 @@ grep -Fq 'gst-play: preloaded /usr/lib/tts/libIvonaEInkCommon.so.1.0' \
     printf 'firmware_version=%s\n' "$FIRMWARE_VERSION"
     printf 'firmware_sha256=%s\n' "$FIRMWARE_SHA256"
     printf 'firmware_target_ota=%s\n' "$FIRMWARE_TARGET_OTA"
+    printf 'rootfs_build=%s\n' "$ROOTFS_BUILD"
     printf 'rootfs_sha256=%s\n' "$ROOTFS_SHA256"
     printf 'tts_sqsh_sha256=%s\n' "$TTS_SQSH_SHA256"
     printf 'package_manifest=pass\n'
