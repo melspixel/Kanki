@@ -10,7 +10,7 @@ This file is the asynchronous coordination surface between VM-side porting work 
 
 GitHub Actions runtime is exhausted. Iterative builds run in the isolated Linux VM/container and all meaningful source, scripts, diagnostics, checksums, reports and final binaries must be persisted back to `melspixel/Kanki:kindle-anki-port`.
 
-The ordinary independent source tree is materialized in GitHub and obsolete split archive staging has been removed. Host semantic evidence, five real-APKG C-ABI integrations, an ARMHF checkpoint, package audit, QEMU static ARM sanity and an exact PW6 5.19.6 runtime manifest are present. The 2026-08-22 continuation additionally hardened sync decisions/error cleanup, added executable reviewer runtime fixtures, reproduced a double-launch race and repaired launcher/sync collection ownership with a shared atomic operation lock.
+The ordinary independent source tree is materialized in GitHub and obsolete split archive staging has been removed. Host semantic evidence, five real-APKG C-ABI integrations, an ARMHF checkpoint, package audit, QEMU static ARM sanity and an exact PW6 5.19.6 runtime manifest are present. The 2026-08-22 continuation additionally hardened sync decisions/error cleanup, repaired launcher/sync collection ownership with a shared atomic operation lock, closed wrapper-SIGKILL and zombie-owner stale-lock windows, and hardened the PW6 firmware acquisition helper so it verifies the manifest's real SHA-256/MD5 keys and uses only official Amazon automatic sources.
 
 Remaining non-hardware work is primarily a full rebuild from the then-current canonical source head, exact-rootfs QEMU execution, further deterministic state/lifecycle review where useful, and final binary/report persistence.
 
@@ -45,12 +45,22 @@ These are hardware-in-the-loop tests, not compilation prerequisites.
 - reviewer public-API runtime fixture matrix: `10` groups pass;
 - double-launch defect: reproduced before repair; deterministic one-start/one-raise regression passes after repair;
 - launch/sync exclusive collection operation lock and stale-lock recovery: deterministic lifecycle fixture pass;
+- pre-publication wrapper-SIGKILL zombie-owner defect: reproduced and fixed; `test_zombie_operation_lock.sh` passed `5/5`, `test_sync_wrapper_signal.sh` passed `3/3` in targeted execution;
+- zombie-hardening evidence log SHA-256: `2a97d443b30b172d7e636464f8bfda759e10ce1d120257ab7c8ef97c0e007250`;
+- PW6 shell helper targeted suite: `3` tests pass; helper blob `d01b1d02ced887592926deb5de586b6f40a0a3f0`, mode `100755`;
 - fresh `kap-app`, `kap-audio`, `kap-sync`, `libanki-kindle.so` checkpoint: ARM EABI5 hard-float;
 - cross-toolchain sysroot ceiling: GLIBC_2.18;
 - exact PW6 5.19.6 target libc ceiling: GLIBC_2.35;
-- fresh audited VM package SHA-256: `9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225` (checkpoint only);
+- audited VM package SHA-256: `9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225` (**stale checkpoint only**);
 - QEMU 8.2.2 static ARM sanity: pass;
-- exact-rootfs dynamic QEMU: pending complete rootfs bytes.
+- exact-rootfs dynamic QEMU: pending complete checksum-matching rootfs bytes.
+
+Detailed current reports:
+
+```text
+docs/VM_ZOMBIE_LOCK_HARDENING_20260822.md
+docs/VM_ROOTFS_HELPER_HARDENING_20260822.md
+```
 
 ## Requests a Codex worker may take
 
@@ -69,9 +79,10 @@ This task does **not** compile the project. It only supplies a checksum-verified
 Input firmware record:
 
 ```text
-version:              5.19.6
-version code:         4832160042
-official URL:         https://s3.amazonaws.com/firmwaredownloads/update_kindle_all_new_paperwhite_12th_5.19.6.bin
+version:                  5.19.6
+version code:             4832160042
+official Amazon alias:    https://www.amazon.com/update_KindlePaperwhite_12th_Gen_2024
+official Amazon object:   https://s3.amazonaws.com/firmwaredownloads/update_kindle_all_new_paperwhite_12th_5.19.6.bin
 expected firmware MD5:    697aeb33c02f46b9b0911ab05c28b06d
 expected firmware SHA256: 72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c
 expected rootfs SHA256:   b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa
@@ -85,12 +96,22 @@ testenv/qemu/pw6-5.19.6-rootfs-manifest.json
 
 Required worker procedure:
 
-1. Download the exact official firmware file and verify both MD5 and SHA-256 before extraction.
-2. Extract the rootfs using a documented tool/version without modifying its contents.
-3. Verify the rootfs image SHA-256 above if an image is available.
-4. Run `testenv/scripts/verify-pw6-rootfs.py <ROOTFS> --rootfs-image <IMAGE>` from the current branch where applicable.
+1. Check out the then-current `kindle-anki-port` branch head and record its commit SHA.
+2. Download only from the official Amazon alias/direct object above. The current helper may be used:
+
+   ```sh
+   testenv/scripts/prepare-pw6-rootfs.sh \
+     --download \
+     --firmware <PRIVATE_DIR>/update_kindle_all_new_paperwhite_12th_5.19.6.bin \
+     --output <PRIVATE_DIR>/pw6-5.19.6-rootfs \
+     --keep-image
+   ```
+
+   The helper must report the pinned SHA-256 and MD5 before KindleTool/debugfs extraction. If the helper cannot be used, manually download and verify both hashes before extraction, then use the canonical Python pipeline.
+3. Verify the rootfs image SHA-256 above.
+4. Run `testenv/scripts/verify-pw6-rootfs.py <ROOTFS> --rootfs-image <IMAGE>` from the recorded current branch head where applicable.
 5. Make the **extracted rootfs private bytes** available to the VM through a private/mounted path or approved private artifact. Do not commit firmware/rootfs bytes into GitHub source.
-6. Commit only the sanitized verification report containing tool versions, commands, manifest hash and final `PW6 rootfs verification: PASS`.
+6. Commit only a sanitized verification report containing source commit, tool versions, exact commands, firmware SHA-256/MD5, rootfs SHA-256, manifest hash and final `PW6 rootfs verification: PASS`.
 
 Acceptance criteria:
 
@@ -103,6 +124,14 @@ target GLIBC max = 2.35
 verify-pw6-rootfs.py = PASS
 ```
 
+Output to VM/private channel:
+
+```text
+<PRIVATE_DIR>/pw6-5.19.6-rootfs/
+<PRIVATE_DIR>/pw6-rootfs.img                    # if --keep-image was used
+sanitized GitHub report with no proprietary bytes
+```
+
 No device serial, credentials, Wi-Fi state or user content may enter the report.
 
 ### Task C — independent package/lifecycle audit
@@ -112,7 +141,7 @@ Review `native/app.c` plus `app_part*.inc`, `native/audio.c`, `native/sync.c`, `
 The current source intentionally uses `${KAP_OPERATION_LOCK_DIR:-$APP/.kap-operation.lock}` for launch/sync mutual exclusion. Audit this mechanism specifically for:
 
 - TOCTOU gaps before child PID publication;
-- stale/dead owner reclamation;
+- stale/dead/zombie owner reclamation;
 - live sync owner refusal behavior;
 - launcher-triggered sync followed by relaunch;
 - signal/error cleanup of lock ownership;
