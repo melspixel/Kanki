@@ -1,5 +1,7 @@
 /target/
 /out/
+/node_modules
+/.pnpm-store/
 *.log
 *.zip
 .DS_Store
