@@ -91,7 +91,10 @@ grep -Fqx 'kap-sync self-test: ok' "$QEMU/sync-self-test.txt" || {
 QEMU_BUILD_COMMIT=$(sed -n 's/^source_commit=//p' "$QEMU/QEMU-PROVENANCE.txt")
 QEMU_ANKI_COMMIT=$(sed -n 's/^anki_commit=//p' "$QEMU/QEMU-PROVENANCE.txt")
 QEMU_MANIFEST_SHA256=$(sed -n 's/^rootfs_manifest_sha256=//p' "$QEMU/QEMU-PROVENANCE.txt")
+QEMU_ROOTFS_VERIFIED=$(sed -n 's/^rootfs_verified=//p' "$QEMU/QEMU-PROVENANCE.txt")
+QEMU_ROOTFS_IMAGE_SHA256=$(sed -n 's/^rootfs_image_sha256=//p' "$QEMU/QEMU-PROVENANCE.txt")
 CANONICAL_MANIFEST_SHA256=$(sha256sum "$CANONICAL_ROOTFS_MANIFEST" | awk '{print $1}')
+EXPECTED_ROOTFS_IMAGE_SHA256=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["rootfs_image"]["sha256"])' "$CANONICAL_ROOTFS_MANIFEST")
 [ "$QEMU_BUILD_COMMIT" = "$BUILD_COMMIT" ] || {
   echo "QEMU source_commit mismatch: $QEMU_BUILD_COMMIT != $BUILD_COMMIT" >&2
   exit 66
@@ -102,6 +105,18 @@ CANONICAL_MANIFEST_SHA256=$(sha256sum "$CANONICAL_ROOTFS_MANIFEST" | awk '{print
 }
 [ "$QEMU_MANIFEST_SHA256" = "$CANONICAL_MANIFEST_SHA256" ] || {
   echo "QEMU rootfs manifest hash mismatch: $QEMU_MANIFEST_SHA256 != $CANONICAL_MANIFEST_SHA256" >&2
+  exit 66
+}
+[ "$QEMU_ROOTFS_VERIFIED" = true ] || {
+  echo "QEMU provenance does not record rootfs_verified=true" >&2
+  exit 66
+}
+[ "$QEMU_ROOTFS_IMAGE_SHA256" = "$EXPECTED_ROOTFS_IMAGE_SHA256" ] || {
+  echo "QEMU rootfs image hash mismatch: $QEMU_ROOTFS_IMAGE_SHA256 != $EXPECTED_ROOTFS_IMAGE_SHA256" >&2
+  exit 66
+}
+grep -Fqx "rootfs image sha256: PASS $EXPECTED_ROOTFS_IMAGE_SHA256" "$QEMU/rootfs-verification.txt" || {
+  echo "rootfs-verification.txt does not prove canonical PW6 rootfs image SHA-256" >&2
   exit 66
 }
 for binary in libanki-kindle.so kap-app kap-audio kap-sync; do
@@ -201,8 +216,9 @@ cp "$ARMHF"/*.abi.txt "$ARMHF"/*.glibc.txt "$RELEASE/"
 cp "$QEMU/QEMU-SMOKE.txt" "$QEMU/QEMU-PROVENANCE.txt" \
   "$QEMU/rootfs-verification.txt" "$QEMU/backend-smoke.txt" \
   "$QEMU/audio-self-test.txt" "$QEMU/sync-self-test.txt" "$RELEASE/"
-printf 'build_commit=%s\nanki_commit=%s\nsource_date_epoch=%s\nrootfs_manifest_sha256=%s\nqemu_provenance_sha256=%s\narchive_sha256=%s\n' \
+printf 'build_commit=%s\nanki_commit=%s\nsource_date_epoch=%s\nrootfs_manifest_sha256=%s\nrootfs_image_sha256=%s\nqemu_provenance_sha256=%s\narchive_sha256=%s\n' \
   "$BUILD_COMMIT" "$ANKI_COMMIT" "$SOURCE_DATE_EPOCH" "$CANONICAL_MANIFEST_SHA256" \
+  "$EXPECTED_ROOTFS_IMAGE_SHA256" \
   "$(sha256sum "$QEMU/QEMU-PROVENANCE.txt" | awk '{print $1}')" \
   "$(sha256sum "$ARCHIVE" | awk '{print $1}')" \
   > "$RELEASE/PACKAGE-PROVENANCE.txt"
