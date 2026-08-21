@@ -31,6 +31,7 @@ SIGNATURES = {
     "kanki_close_collection_json": [ctypes.c_void_p],
     "kanki_deck_tree_json": [ctypes.c_void_p],
     "kanki_health_json": [ctypes.c_void_p],
+    "kanki_set_current_deck_json": [ctypes.c_void_p, ctypes.c_int64],
     "kanki_next_card_json": [ctypes.c_void_p],
     "kanki_prepare_answer_json": [ctypes.c_void_p, ctypes.c_char_p],
     "kanki_answer_json": [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32],
@@ -84,13 +85,31 @@ def sound_sources(tags):
     return [tag.get("source") for tag in tags if tag.get("kind") == "sound"]
 
 
+def find_deck(node, *, deck_id=None, name=None):
+    if (deck_id is None or int(node.get("id", -1)) == deck_id) and (
+        name is None or node.get("name") == name
+    ):
+        return node
+    for child in node.get("children", []):
+        match = find_deck(child, deck_id=deck_id, name=name)
+        if match is not None:
+            return match
+    return None
+
+
 core = new_core()
 answered = {}
 buried_card_id = None
 try:
     open_collection(core)
     tree = owned_json("integration_decks", "kanki_deck_tree_json", core)
-    require(tree["children"][0]["counts"]["new"] == 5, "fixture must expose five new cards")
+    default_deck = find_deck(tree, deck_id=1)
+    filtered_deck = find_deck(tree, name="Kanki filtered playback")
+    require(default_deck is not None, "fixture default deck missing")
+    require(filtered_deck is not None, "fixture filtered deck missing")
+    require(default_deck["counts"]["new"] == 5, "default fixture must expose five new cards")
+    require(filtered_deck["counts"]["new"] == 1, "filtered fixture must expose one new card")
+    owned_json("select_default", "kanki_set_current_deck_json", core, 1)
 
     for rating in range(1, 5):
         card = owned_json(f"queue_{rating}", "kanki_next_card_json", core)
@@ -170,11 +189,64 @@ require(buried_count == 1, "buried card was not persisted with the user-buried q
 print(f"persistence={json.dumps({'revlog': len(revlog), 'buried': buried_count}, separators=(',', ':'))}")
 
 reopen_core = new_core()
+filtered_card_id = None
 try:
     open_collection(reopen_core, "reopen")
     owned_json("reopen_health", "kanki_health_json", reopen_core)
+    reopen_tree = owned_json("reopen_decks", "kanki_deck_tree_json", reopen_core)
+    filtered_deck = find_deck(reopen_tree, name="Kanki filtered playback")
+    require(filtered_deck is not None, "filtered deck was not persisted")
+    owned_json(
+        "select_filtered",
+        "kanki_set_current_deck_json",
+        reopen_core,
+        int(filtered_deck["id"]),
+    )
+    filtered_card = owned_json("queue_filtered", "kanki_next_card_json", reopen_core)
+    require(filtered_card.get("finished") is False, "filtered deck returned no card")
+    filtered_card_id = int(filtered_card["card_id"])
+    require(
+        sound_sources(filtered_card.get("question_audio", [])) == ["q6.mp3"],
+        "filtered deck returned the wrong source card",
+    )
+    require(filtered_card.get("autoplay") is False, "disabled autoplay was not inherited")
+    require(
+        filtered_card.get("replay_question_audio_on_answer_side") is False,
+        "disabled question replay was not inherited",
+    )
+    filtered_answer = owned_json(
+        "prepare_filtered",
+        "kanki_prepare_answer_json",
+        reopen_core,
+        b"Answer 6",
+    )
+    require(filtered_answer.get("autoplay") is False, "prepared autoplay changed")
+    require(
+        filtered_answer.get("replay_question_audio_on_answer_side") is False,
+        "prepared question replay changed",
+    )
     owned_json("reopen_close", "kanki_close_collection_json", reopen_core)
 finally:
     library.kanki_core_free(reopen_core)
+
+require(filtered_card_id is not None, "filtered fixture card was not observed")
+with sqlite3.connect(collection_path) as database:
+    filtered_deck_id, original_deck_id = database.execute(
+        "select did, odid from cards where id = ?", (filtered_card_id,)
+    ).fetchone()
+require(original_deck_id > 0, "filtered fixture card lost its original deck")
+require(filtered_deck_id != original_deck_id, "filtered fixture card did not move decks")
+print(
+    "filtered_playback="
+    + json.dumps(
+        {
+            "autoplay": False,
+            "replay_question": False,
+            "original_deck": original_deck_id,
+            "filtered_deck": filtered_deck_id,
+        },
+        separators=(",", ":"),
+    )
+)
 
 print("anki bridge integration: pass")

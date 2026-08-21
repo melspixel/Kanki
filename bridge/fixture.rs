@@ -7,7 +7,13 @@ use std::io;
 use std::path::PathBuf;
 
 use anki::collection::CollectionBuilder;
-use anki::prelude::DeckId;
+use anki::deckconfig::UpdateDeckConfigsRequest;
+use anki::decks::{FilteredSearchOrder, FilteredSearchTerm};
+use anki::prelude::{DeckConfigId, DeckId};
+use anki_proto::deck_config::UpdateDeckConfigsMode;
+
+const DISABLED_DECK_NAME: &str = "Kanki playback disabled";
+const FILTERED_DECK_NAME: &str = "Kanki filtered playback";
 
 fn argument(name: &str, value: Option<String>) -> Result<PathBuf, Box<dyn Error>> {
     value.map(PathBuf::from).ok_or_else(|| {
@@ -65,7 +71,56 @@ fn main() -> Result<(), Box<dyn Error>> {
         let _ = collection.add_note(&mut note, DeckId(1))?;
     }
 
+    let disabled_deck = collection.get_or_create_normal_deck(DISABLED_DECK_NAME)?;
+    let update_state = collection.get_deck_configs_for_update(disabled_deck.id)?;
+    let limits = update_state
+        .current_deck
+        .as_ref()
+        .and_then(|deck| deck.limits.clone())
+        .unwrap_or_default();
+    let mut disabled_config = collection
+        .get_deck_config(DeckConfigId(1), true)?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "default deck config missing"))?;
+    disabled_config.id = DeckConfigId(0);
+    disabled_config.name = "Kanki playback disabled".to_string();
+    disabled_config.inner.disable_autoplay = true;
+    disabled_config.inner.skip_question_when_replaying_answer = true;
+    let _ = collection.update_deck_configs(UpdateDeckConfigsRequest {
+        target_deck_id: disabled_deck.id,
+        configs: vec![disabled_config],
+        removed_config_ids: vec![],
+        mode: UpdateDeckConfigsMode::Normal,
+        card_state_customizer: update_state.card_state_customizer,
+        limits,
+        new_cards_ignore_review_limit: update_state.new_cards_ignore_review_limit,
+        apply_all_parent_limits: update_state.apply_all_parent_limits,
+        fsrs: update_state.fsrs,
+        fsrs_reschedule: false,
+        fsrs_health_check: update_state.fsrs_health_check,
+    })?;
+
+    let mut disabled_note = notetype.new_note();
+    disabled_note.set_field(
+        0,
+        "Question 6 [sound:q6.mp3] <svg id=illustration-6 viewBox=\"0 0 20 10\"><rect width=\"20\" height=\"10\"></rect></svg>",
+    )?;
+    disabled_note.set_field(1, "Answer 6 [sound:a6.mp3]".to_string())?;
+    let _ = collection.add_note(&mut disabled_note, disabled_deck.id)?;
+
+    let mut filtered = collection.get_or_create_filtered_deck(DeckId(0))?;
+    filtered.human_name = FILTERED_DECK_NAME.to_string();
+    filtered.config.search_terms = vec![FilteredSearchTerm {
+        search: format!(r#"deck:"{DISABLED_DECK_NAME}" is:new"#),
+        limit: 1,
+        order: FilteredSearchOrder::Added as i32,
+    }];
+    let filtered_deck_id = collection.add_or_update_filtered_deck(filtered)?.output;
+    let _ = collection.set_current_deck(DeckId(1))?;
+
     collection.close(None)?;
-    println!("seeded_notes=5");
+    println!(
+        "seeded_notes=6 disabled_deck={} filtered_deck={}",
+        disabled_deck.id.0, filtered_deck_id.0
+    );
     Ok(())
 }
