@@ -23,6 +23,7 @@
 #define DEFAULT_MEDIA_DB DATA_DIR "/media.db2"
 #define DECK_PAGE KANKI_DIR "/assets/device/decks.html"
 #define REVIEWER_PAGE KANKI_DIR "/assets/device/reviewer-shell.html"
+#define SYNC_PAGE KANKI_DIR "/assets/device/sync.html"
 #define LOG_PATH KANKI_DIR "/kanki.log"
 
 #ifndef KANKI_BUILD_COMMIT
@@ -93,7 +94,8 @@ typedef struct {
 typedef enum {
     VIEW_NONE = 0,
     VIEW_DECKS,
-    VIEW_REVIEWER
+    VIEW_REVIEWER,
+    VIEW_SYNC
 } ViewMode;
 
 typedef struct App App;
@@ -127,6 +129,11 @@ struct App {
     char *startup_error;
     char *deck_html;
     char *reviewer_html;
+    char *sync_html;
+    int requested_sync;
+    int start_sync;
+    int have_sync_status;
+    int last_sync_status;
     char media_base[512];
     FILE *log;
 };
@@ -489,6 +496,13 @@ static void load_reviewer(App *app) {
                                               "file:///mnt/us/extensions/kanki/assets/device/");
 }
 
+static void load_sync(App *app) {
+    app->view_mode = VIEW_SYNC;
+    set_review_controls(app, "none", "");
+    app->ui.webkit_web_view_load_html_string(app->web_view, app->sync_html,
+                                              "file:///mnt/us/extensions/kanki/assets/device/");
+}
+
 static void send_deck_tree(App *app) {
     char *response;
     if (!app->core || !app->collection_open) {
@@ -538,6 +552,16 @@ static void dispatch_uri(App *app, const char *uri) {
                 free(base);
             }
             send_next_card(app);
+        } else if (view && strcmp(view, "sync") == 0 && app->have_sync_status) {
+            const char *message;
+            char script[512];
+            if (app->last_sync_status == 0) message = "Sync completed successfully.";
+            else if (app->last_sync_status == 75) message = "A full sync is required. Choose Full Upload or Full Download explicitly.";
+            else message = "The previous sync failed. See kanki.log for the redacted diagnostic result.";
+            snprintf(script, sizeof(script),
+                     "var s=document.getElementById('status');if(s){s.style.display='block';s.textContent='%s';}",
+                     message);
+            execute_script(app, script);
         }
         free(view);
     } else if (strcmp(command, "deck/select") == 0) {
@@ -599,6 +623,14 @@ static void dispatch_uri(App *app, const char *uri) {
         } else {
             send_response(app, "kankiDevice", "bury", response);
         }
+    } else if (strcmp(command, "sync/run") == 0) {
+        char *mode = query_value(uri, "mode");
+        if (mode && strcmp(mode, "normal") == 0) app->requested_sync = 80;
+        else if (mode && strcmp(mode, "upload") == 0) app->requested_sync = 81;
+        else if (mode && strcmp(mode, "download") == 0) app->requested_sync = 82;
+        else send_local_error(app, "kankiDevice", "sync", "invalid sync mode");
+        if (app->requested_sync) app->ui.gtk_main_quit();
+        free(mode);
     } else if (strcmp(command, "ui/state") == 0) {
         char *mode = query_value(uri, "mode");
         set_review_controls(app, mode, uri);
@@ -660,6 +692,12 @@ static void on_show_answer_clicked(void *button, void *user_data) {
     App *app = user_data;
     (void)button;
     execute_script(app, "if(window.kankiDevice){window.kankiDevice.requestShowAnswer();}");
+}
+
+static void on_sync_clicked(void *button, void *user_data) {
+    App *app = user_data;
+    (void)button;
+    load_sync(app);
 }
 
 static void on_rating_clicked(void *button, void *user_data) {
@@ -732,13 +770,13 @@ static int build_window(App *app, int *argc, char ***argv) {
                    (GCallback)on_navigation_policy, app);
     connect_signal(app, app->back_button, "clicked", (GCallback)on_back_clicked, app);
     connect_signal(app, app->bury_button, "clicked", (GCallback)on_bury_clicked, app);
+    connect_signal(app, app->sync_button, "clicked", (GCallback)on_sync_clicked, app);
     connect_signal(app, app->show_answer_button, "clicked", (GCallback)on_show_answer_clicked, app);
     connect_signal(app, app->close_button, "clicked", (GCallback)on_close_clicked, app);
     for (i = 0; i < 4; i++) {
         connect_signal(app, app->rating_buttons[i], "clicked", (GCallback)on_rating_clicked,
                        &app->rating_contexts[i]);
     }
-    app->ui.gtk_widget_set_sensitive(app->sync_button, 0);
     app->ui.gtk_widget_show_all(app->window);
     set_review_controls(app, "none", "");
     return 1;
@@ -758,6 +796,7 @@ static void cleanup(App *app) {
     free(app->startup_error);
     free(app->deck_html);
     free(app->reviewer_html);
+    free(app->sync_html);
     if (app->backend_lib) dlclose(app->backend_lib);
     if (app->webkit_lib) dlclose(app->webkit_lib);
     if (app->gobject_lib) dlclose(app->gobject_lib);
@@ -768,20 +807,34 @@ static void cleanup(App *app) {
 int main(int argc, char **argv) {
     App app;
     const char *backend_path = DEFAULT_BACKEND;
+    int i;
+    int exit_status;
     memset(&app, 0, sizeof(app));
     app.log = fopen(LOG_PATH, "a");
     if (!app.log) app.log = stderr;
     snprintf(app.media_base, sizeof(app.media_base), "file://%s/", DEFAULT_MEDIA);
     log_message(&app, "start build=%s anki=%s", KANKI_BUILD_COMMIT, KANKI_ANKI_COMMIT);
 
-    if (argc > 2 && strcmp(argv[1], "--backend") == 0) backend_path = argv[2];
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) backend_path = argv[++i];
+        else if (strcmp(argv[i], "--start-sync") == 0) app.start_sync = 1;
+        else if (strcmp(argv[i], "--sync-status") == 0 && i + 1 < argc) {
+            app.last_sync_status = atoi(argv[++i]);
+            app.have_sync_status = 1;
+        } else {
+            fprintf(stderr, "usage: %s [--backend PATH] [--start-sync] [--sync-status CODE]\n", argv[0]);
+            cleanup(&app);
+            return 64;
+        }
+    }
     if (!load_ui(&app)) {
         cleanup(&app);
         return 2;
     }
     app.deck_html = read_file(DECK_PAGE);
     app.reviewer_html = read_file(REVIEWER_PAGE);
-    if (!app.deck_html || !app.reviewer_html) {
+    app.sync_html = read_file(SYNC_PAGE);
+    if (!app.deck_html || !app.reviewer_html || !app.sync_html) {
         log_message(&app, "failed to read UI assets");
         cleanup(&app);
         return 3;
@@ -792,9 +845,11 @@ int main(int argc, char **argv) {
         cleanup(&app);
         return 4;
     }
-    load_decks(&app);
+    if (app.start_sync) load_sync(&app);
+    else load_decks(&app);
     if (app.ui.gtk_widget_grab_focus) app.ui.gtk_widget_grab_focus(app.web_view);
     app.ui.gtk_main();
+    exit_status = app.requested_sync;
     cleanup(&app);
-    return 0;
+    return exit_status;
 }
