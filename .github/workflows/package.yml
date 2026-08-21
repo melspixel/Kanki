@@ -127,7 +127,7 @@ jobs:
           cp assets/device/* "$EXT/assets/device/"
           cp assets/reviewer/reviewer.css assets/reviewer/reviewer.js \
              assets/reviewer/css_compat.js assets/reviewer/css_runtime.js \
-             "$EXT/assets/reviewer/"
+             assets/reviewer/diagnostics.js "$EXT/assets/reviewer/"
           cp scripts/kanki-launch.sh scripts/kanki-sync.sh scripts/kanki-report.sh "$EXT/"
           cp packaging/config.example.ini "$EXT/"
           cp THIRD_PARTY_NOTICES.md docs/INSTALL.md "$EXT/"
@@ -160,9 +160,11 @@ jobs:
           test -x "$EXT/kanki-report.sh"
           test -f "$EXT/assets/reviewer/css_compat.js"
           test -f "$EXT/assets/reviewer/css_runtime.js"
+          test -f "$EXT/assets/reviewer/diagnostics.js"
           test -f "$EXT/assets/device/sync.html"
           grep -q 'css_compat.js' "$EXT/assets/device/reviewer-shell.html"
           grep -q 'css_runtime.js' "$EXT/assets/device/reviewer-shell.html"
+          grep -q 'diagnostics.js' "$EXT/assets/device/reviewer-shell.html"
           grep -q 'kanki://sync/run?mode=normal' "$EXT/assets/device/sync.html"
           grep -q 'kanki://sync/run?mode=upload' "$EXT/assets/device/sync.html"
           grep -q 'kanki://sync/run?mode=download' "$EXT/assets/device/sync.html"
