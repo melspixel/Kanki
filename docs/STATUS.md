@@ -5,8 +5,8 @@
 **Closure tracker:** issue #11  
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
-**Checkpoint:** 2026-08-21
-**Current fully recorded non-hardware candidate:** `313d52d8aeb7b37b6b421b69609d059b30916ecb`
+**Checkpoint:** 2026-08-22
+**Current fully recorded non-hardware candidate:** `7a0d83975d7f8180f22abec8cc7596e03622ce66`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -85,13 +85,14 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware candidate is recorded for exact SHA
-`313d52d8aeb7b37b6b421b69609d059b30916ecb`:
+`7a0d83975d7f8180f22abec8cc7596e03622ce66`:
 
 - host: macOS 26.4.1 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
 - `sh tools/run_host_gates.sh` — **PASS** using project-local Rust 1.92.0,
   checksum-pinned Node 20.18.2 and lockfile-pinned jsdom 24.1.3; fmt, clippy, policy, native/source
-  syntax, 13 Rust unit tests, doc tests, renderer/CSS/diagnostics contracts,
+  syntax, 10 retained Rust host-oracle tests, doc tests,
+  renderer/CSS/diagnostics contracts,
   semantic ordered-audio and external-navigation contracts, and the app
   self-test passed. The real checksum-verified MathJax 2.7.9 distribution
   produced inline and display SVG across two dynamic renders of the same
@@ -135,13 +136,13 @@ The current clean local non-hardware candidate is recorded for exact SHA
 - two consecutive clean invocations of the same canonical package command on
   this SHA produced byte-identical ZIPs, `BUILD.json`, manifests and archive
   evidence. Both archives contain 1,296 sorted regular files, use source date
-  epoch `1787326978`, and have the same SHA-256;
+  epoch `1787328893`, and have the same SHA-256;
 - package SHA-256:
-  `38b19c686201c1a67c97bcadc802809e7a6d3cff131bde91ae88d3bb687a660b`;
-- byte-identical companion evidence hashes are `8231e0553144b7b332ca6ce7667ef06dda9a0ab4609975cbe2111d7521a03633`
-  for `BUILD.json`, `23c3ed0c520f87a1d95b573a6bd47de70afe7881f709ac24cee3f55f4402d49b`
+  `340d13ff134247c61fd98ca8f29ce15eaebbd6e31a489ea49367b265d0370b85`;
+- byte-identical companion evidence hashes are `7e98b6993a8563f58840ad4a29b450b24141dfb38e84344c011beff64216b1d9`
+  for `BUILD.json`, `bf131102e51defdb222600509c4e62cb7d51014ecc9285ef4d4516f5219e4b67`
   for the 1,290-entry manifest, and
-  `d39680f29bc2f481243d15790812f592f48221906f3304c9baf7e2d742fe1cf2`
+  `044ca3d3cfe13655fc998c86d622ebb8438ca4613cb735c1c536b8e1da69d3fd`
   for `archive-info.txt`;
 - `bash tools/local_pw6_rootfs_audit.sh` — **PASS** against the authenticated
   official PW6 5.19.6 recovery bundle. The audit verified the 412,492,749-byte
@@ -158,7 +159,7 @@ The current clean local non-hardware candidate is recorded for exact SHA
   symbols plus all four Lab126 CSS-pixel/zoom symbols, and instantiated
   `mixersink` and `ttssrc` after modeling the firmware's `/usr/lib/tts` mount.
   Evidence is under ignored
-  `out/firmware/pw6-5.19.6/evidence/313d52d8aeb7b37b6b421b69609d059b30916ecb/`;
+  `out/firmware/pw6-5.19.6/evidence/7a0d83975d7f8180f22abec8cc7596e03622ce66/`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -176,14 +177,14 @@ cross-host reproducibility, or any real-device lifecycle behavior.
 
 ### Repository maintenance checkpoint
 
-Repository cleanup through exact rewrite SHA
-`a7b779a73c11a15c4980a1294a284a285c4a8672` passed
-`sh tools/run_host_gates.sh` with the existing project-local Rust 1.92.0,
-Node 20.18.2 and locked jsdom/MathJax dependencies. The first invocation after
-session restoration stopped before tests because `cargo` was absent from the
-restored shell PATH; selecting the already-installed project-local toolchain
-resolved the environment precondition. No compiler, test or package failure
-was introduced by the cleanup.
+Repository cleanup culminated in exact rewrite SHA
+`7a0d83975d7f8180f22abec8cc7596e03622ce66`. The complete same-SHA matrix
+above passed: host gates, disposable Anki review/APKG/sync integration, two
+byte-identical canonical ARMHF packages and the authenticated PW6 rootfs
+audit. The first host invocation after session restoration stopped before
+tests because `cargo` was absent from the restored shell PATH; selecting the
+already-installed project-local Rust 1.92.0 resolved the environment
+precondition. No compiler, test or package failure was introduced by cleanup.
 
 The useful ownership documentation was integrated, obsolete UI migration
 scripts and the sole obsolete Rust backend scaffold were removed after
@@ -195,15 +196,13 @@ branches were deleted atomically with exact-SHA leases. Superseded PRs #8, #9,
 `3c0f59d6bc159c86d24748f87677499ed9515bb7`), so that branch and PR #14 were
 excluded pending stabilization and a fresh audit.
 
-This maintenance SHA has host evidence but is not promoted over the fully
-recorded non-hardware candidate `313d52d8aeb7b37b6b421b69609d059b30916ecb`:
-its canonical package/rootfs evidence has not yet been rerun. The first open
-release-evidence failure remains physical PW6 Gate E
+This exact SHA is now the fully recorded non-hardware candidate. The first
+open release-evidence failure remains physical PW6 Gate E
 (`hardware_execution=not_run`), and no original COCA/user APKG is locally
-available. The next verification command for the cleanup head is:
+available. Before transferring the candidate, the next command is:
 
 ```sh
-bash tools/local_package_docker.sh
+shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip
 ```
 
 ### Baseline failure ledger
@@ -403,7 +402,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 1. Preserve candidate identity before device transfer with
    `shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip`; the expected value
-   is `38b19c686201c1a67c97bcadc802809e7a6d3cff131bde91ae88d3bb687a660b`.
+   is `340d13ff134247c61fd98ca8f29ce15eaebbd6e31a489ea49367b265d0370b85`.
 2. Obtain explicit local test access to original COCA and at least one
    unrelated representative APKG, then run the same privacy-reviewed path
    without modifying or committing the decks and without adding deck CSS.
