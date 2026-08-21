@@ -1,33 +1,41 @@
-use std::{
-    ffi::{CStr, CString, c_char},
-    panic::{AssertUnwindSafe, catch_unwind},
-    path::PathBuf,
-    ptr,
-    time::Instant,
-};
+// Semantic C ABI embedded into the pinned Anki rslib at build time.
+// The UI never sees protobuf service/method numbers.
 
-use anki_proto::{
-    card_rendering::{ExtractAvTagsRequest, RenderExistingCardRequest},
-    cards::{CardId, CardIds},
-    collection::OpenCollectionRequest,
-    deck_config::DeckConfigId,
-    decks::{DeckId, DeckTreeRequest, deck::kind_container::Kind as DeckKind},
-    generic::Empty,
-    scheduler::{
-        BuryOrSuspendCardsRequest, CardAnswer, GetQueuedCardsRequest, QueuedCard, SchedulingState,
-        SchedulingStates, scheduling_state,
-    },
+use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
+use std::ptr;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+use anki_proto::backend::BackendInit;
+use anki_proto::card_rendering::{
+    av_tag, rendered_template_node, CompareAnswerRequest, ExtractAvTagsRequest,
+    ExtractClozeForTypingRequest, RenderExistingCardRequest, RenderedTemplateNode,
 };
-use anki_proto_gen::services::{
-    CardRenderingService, CollectionService, DeckConfigService, DecksService, SchedulerService,
+use anki_proto::collection::{CloseCollectionRequest, OpenCollectionRequest};
+use anki_proto::deck_config::DeckConfigId;
+use anki_proto::decks::{
+    deck::Kind as DeckKind, set_deck_collapsed_request, DeckId, DeckTreeNode, DeckTreeRequest,
+    SetDeckCollapsedRequest,
+};
+use anki_proto::notes::NoteId;
+use anki_proto::notetypes::NotetypeId;
+use anki_proto::scheduler::{
+    bury_or_suspend_cards_request, card_answer, BuryOrSuspendCardsRequest, CardAnswer,
+    GetQueuedCardsRequest, SchedulingStates,
 };
 use prost::Message;
 use serde::Serialize;
 
-use crate::backend::Backend;
+use crate::backend::{init_backend, Backend};
+use crate::services::{
+    BackendCollectionService, CardRenderingService, DeckConfigService, DecksService, NotesService,
+    NotetypesService, SchedulerService,
+};
 
-const KANKI_BRIDGE_API: u32 = 1;
+const TYPE_PREFIX: &str = "[[type:";
+const TYPE_SUFFIX: &str = "]]";
 
+#[repr(C)]
 pub struct KankiCore {
     backend: Backend,
     current: Option<CurrentReview>,
@@ -36,50 +44,59 @@ pub struct KankiCore {
 #[derive(Clone)]
 struct CurrentReview {
     card_id: i64,
-    note_id: i64,
     states: SchedulingStates,
+    started: Instant,
+    answer_html: String,
+    answer_audio: Vec<AvDto>,
     question_audio: Vec<AvDto>,
     autoplay: bool,
     replay_question_audio_on_answer_side: bool,
-    shown_at: Instant,
+    type_answer: Option<TypeAnswerState>,
+    had_type_marker: bool,
+}
+
+#[derive(Clone)]
+struct TypeAnswerState {
+    expected: String,
+    font: String,
+    size: u32,
+    combining: bool,
+}
+
+struct ParsedTypeSpec {
+    field: String,
+    cloze: bool,
+    combining: bool,
 }
 
 #[derive(Serialize)]
 struct Envelope<T: Serialize> {
     ok: bool,
-    data: T,
-}
-
-#[derive(Serialize)]
-struct ErrorEnvelope {
-    ok: bool,
-    error: String,
+    data: Option<T>,
+    error: Option<String>,
 }
 
 #[derive(Serialize)]
 struct BuildInfo {
-    bridge_api: u32,
-    anki_release: &'static str,
-    anki_commit: &'static str,
-    schema_max: i32,
+    api_version: u32,
+    anki_version: &'static str,
+    architecture: &'static str,
+    typed_backend: bool,
 }
 
 #[derive(Serialize)]
-struct OpenInfo {
-    collection_path: String,
-    schema_max: i32,
+struct CountsDto {
+    new: u32,
+    learning: u32,
+    review: u32,
 }
 
 #[derive(Serialize)]
 struct DeckDto {
     id: i64,
     name: String,
-    level: u32,
     collapsed: bool,
-    filtered: bool,
-    new_count: u32,
-    learn_count: u32,
-    review_count: u32,
+    counts: CountsDto,
     children: Vec<DeckDto>,
 }
 
@@ -115,19 +132,18 @@ impl Default for PlaybackPreferences {
 #[derive(Serialize)]
 struct ReviewDto {
     finished: bool,
-    card_id: i64,
-    note_id: i64,
-    deck_id: i64,
-    original_deck_id: i64,
-    template_ordinal: u32,
-    question_html: String,
-    answer_html: String,
-    css: String,
+    card_id: Option<i64>,
+    template_ordinal: Option<u32>,
+    question_html: Option<String>,
+    answer_html: Option<String>,
+    css: Option<String>,
     question_audio: Vec<AvDto>,
     answer_audio: Vec<AvDto>,
+    counts: CountsDto,
+    intervals: Vec<String>,
+    type_answer: bool,
     autoplay: bool,
     replay_question_audio_on_answer_side: bool,
-    intervals: [String; 4],
 }
 
 #[derive(Serialize)]
@@ -139,83 +155,113 @@ struct PreparedAnswerDto {
     replay_question_audio_on_answer_side: bool,
 }
 
-#[derive(Serialize)]
-struct MutationDto {
-    changed: bool,
-}
-
-unsafe fn string_arg(ptr: *const c_char, label: &str) -> Result<String, String> {
-    if ptr.is_null() {
-        return Err(format!("{label} is null"));
-    }
-    // SAFETY: the exported C ABI requires non-null, NUL-terminated UTF-8
-    // strings. The null condition was checked above.
-    let bytes = unsafe { CStr::from_ptr(ptr) }.to_bytes();
-    std::str::from_utf8(bytes)
-        .map(|value| value.to_owned())
-        .map_err(|_| format!("{label} is not UTF-8"))
-}
-
-fn json_ptr<T: Serialize>(result: Result<T, String>) -> *mut c_char {
-    let text = match result {
-        Ok(value) => serde_json::to_string(&Envelope {
+fn response<T: Serialize>(result: Result<T, String>) -> *mut c_char {
+    let json = match result {
+        Ok(data) => serde_json::to_string(&Envelope {
             ok: true,
-            data: value,
+            data: Some(data),
+            error: None,
         }),
-        Err(error) => serde_json::to_string(&ErrorEnvelope { ok: false, error }),
+        Err(error) => serde_json::to_string(&Envelope::<serde_json::Value> {
+            ok: false,
+            data: None,
+            error: Some(error),
+        }),
     }
-    .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"serialization failure\"}".to_owned());
-    CString::new(text)
-        .map(CString::into_raw)
-        .unwrap_or(ptr::null_mut())
+    .unwrap_or_else(|err| {
+        format!(
+            "{{\"ok\":false,\"data\":null,\"error\":\"JSON serialization failed: {}\"}}",
+            err
+        )
+    });
+    CString::new(json.replace('\0', "�"))
+        .expect("replacement removed NUL")
+        .into_raw()
 }
 
-fn panic_safe<T: Serialize>(operation: impl FnOnce() -> Result<T, String>) -> *mut c_char {
-    match catch_unwind(AssertUnwindSafe(operation)) {
-        Ok(result) => json_ptr(result),
-        Err(_) => json_ptr::<MutationDto>(Err("backend panic trapped at C ABI".to_owned())),
+fn c_string(ptr: *const c_char, name: &str) -> Result<String, String> {
+    if ptr.is_null() {
+        return Err(format!("{name} was NULL"));
     }
+    unsafe { CStr::from_ptr(ptr) }
+        .to_str()
+        .map(str::to_owned)
+        .map_err(|_| format!("{name} was not UTF-8"))
 }
 
 fn core_mut<'a>(ptr: *mut KankiCore) -> Result<&'a mut KankiCore, String> {
-    // SAFETY: all exported entry points validate null before dereferencing. A
-    // handle must originate from kanki_core_new and remain live until
-    // kanki_core_free.
-    unsafe { ptr.as_mut() }.ok_or_else(|| "core is null".to_owned())
+    if ptr.is_null() {
+        Err("KankiCore was NULL".into())
+    } else {
+        Ok(unsafe { &mut *ptr })
+    }
 }
 
-fn map_av(tags: anki_proto::card_rendering::ExtractAvTagsResponse) -> Vec<AvDto> {
-    tags.av_tags
-        .into_iter()
-        .filter_map(|tag| match tag.value? {
-            anki_proto::card_rendering::av_tag::Value::SoundOrVideo(sound) => {
-                Some(AvDto::Sound {
-                    source: sound.filename,
-                })
-            }
-            anki_proto::card_rendering::av_tag::Value::Tts(tts) => Some(AvDto::Tts {
+fn deck_dto(node: DeckTreeNode) -> DeckDto {
+    DeckDto {
+        id: node.deck_id,
+        name: node.name,
+        collapsed: node.collapsed,
+        counts: CountsDto {
+            new: node.new_count,
+            learning: node.learn_count,
+            review: node.review_count,
+        },
+        children: node.children.into_iter().map(deck_dto).collect(),
+    }
+}
+
+fn render_full_text(nodes: Vec<RenderedTemplateNode>, side: &str) -> Result<String, String> {
+    let mut nodes = nodes.into_iter();
+    let node = nodes
+        .next()
+        .ok_or_else(|| format!("Anki returned no {side} node for a full render"))?;
+    if nodes.next().is_some() {
+        return Err(format!(
+            "Anki returned multiple {side} nodes for a full render"
+        ));
+    }
+    match node.value {
+        Some(rendered_template_node::Value::Text(text)) => Ok(text),
+        Some(rendered_template_node::Value::Replacement(_)) => Err(format!(
+            "Anki returned a partial {side} replacement for a full render"
+        )),
+        None => Err(format!(
+            "Anki returned an empty {side} node for a full render"
+        )),
+    }
+}
+
+fn extract_av(
+    backend: &Backend,
+    text: String,
+    question_side: bool,
+) -> Result<(String, Vec<AvDto>), String> {
+    let response = backend
+        .with_col(|col| {
+            CardRenderingService::extract_av_tags(
+                col,
+                ExtractAvTagsRequest {
+                    text,
+                    question_side,
+                },
+            )
+        })
+        .map_err(|err| err.to_string())?;
+    let mut tags = Vec::new();
+    for tag in response.av_tags {
+        match tag.value {
+            Some(av_tag::Value::SoundOrVideo(source)) => tags.push(AvDto::Sound { source }),
+            Some(av_tag::Value::Tts(tts)) => tags.push(AvDto::Tts {
                 text: tts.field_text,
                 lang: tts.lang,
                 voices: tts.voices,
                 speed: tts.speed,
             }),
-        })
-        .collect()
-}
-
-fn extract_av(backend: &Backend, text: &str, question_side: bool) -> Result<Vec<AvDto>, String> {
-    backend
-        .with_col(|col| {
-            CardRenderingService::extract_av_tags(
-                col,
-                ExtractAvTagsRequest {
-                    text: text.to_owned(),
-                    question_side,
-                },
-            )
-        })
-        .map(map_av)
-        .map_err(|error| error.to_string())
+            None => {}
+        }
+    }
+    Ok((response.text, tags))
 }
 
 fn playback_preferences(
@@ -235,19 +281,16 @@ fn playback_preferences(
                     did: effective_deck_id,
                 },
             )?;
-            let Some(container) = deck.kind else {
+            let Some(DeckKind::Normal(normal)) = deck.kind else {
                 return Ok(None);
             };
-            let Some(DeckKind::Normal(normal)) = container.kind else {
-                return Ok(None);
-            };
-            let config = DeckConfigService::get_deck_config(
+            DeckConfigService::get_deck_config(
                 col,
                 DeckConfigId {
                     dcid: normal.config_id,
                 },
-            )?;
-            Ok(Some(config))
+            )
+            .map(Some)
         })
         .map_err(|error| error.to_string())?;
 
@@ -260,574 +303,575 @@ fn playback_preferences(
     })
 }
 
-fn state_for_rating(states: &SchedulingStates, rating: u32) -> Result<SchedulingState, String> {
-    let current = states
-        .current
-        .as_ref()
-        .ok_or_else(|| "queue item has no current scheduling state".to_owned())?;
-    let choice = match rating {
-        1 => states.again.as_ref(),
-        2 => states.hard.as_ref(),
-        3 => states.good.as_ref(),
-        4 => states.easy.as_ref(),
-        _ => None,
+fn now_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
+}
+
+fn html_escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(ch),
+        }
     }
-    .ok_or_else(|| "rating is not available".to_owned())?;
-    let mut choice = choice.clone();
-    let custom_data = match current.value.as_ref() {
-        Some(scheduling_state::Value::NormalLearn(state)) => state.custom_data.clone(),
-        Some(scheduling_state::Value::NormalReview(state)) => state.custom_data.clone(),
-        Some(scheduling_state::Value::Filtered(state)) => state.custom_data.clone(),
-        None => String::new(),
-    };
-    match choice.value.as_mut() {
-        Some(scheduling_state::Value::NormalLearn(state)) => {
-            state.custom_data = custom_data;
-        }
-        Some(scheduling_state::Value::NormalReview(state)) => {
-            state.custom_data = custom_data;
-        }
-        Some(scheduling_state::Value::Filtered(state)) => {
-            state.custom_data = custom_data;
-        }
-        None => {}
+    out
+}
+
+fn first_type_spec(text: &str) -> Option<String> {
+    let start = text.find(TYPE_PREFIX)? + TYPE_PREFIX.len();
+    let close = text[start..].find(TYPE_SUFFIX)? + start;
+    Some(text[start..close].to_owned())
+}
+
+fn replace_type_markers(text: &str, replacement: &str) -> String {
+    let mut out = String::with_capacity(text.len() + replacement.len());
+    let mut cursor = 0;
+    while let Some(relative_start) = text[cursor..].find(TYPE_PREFIX) {
+        let marker_start = cursor + relative_start;
+        let spec_start = marker_start + TYPE_PREFIX.len();
+        out.push_str(&text[cursor..marker_start]);
+        let Some(relative_close) = text[spec_start..].find(TYPE_SUFFIX) else {
+            out.push_str(&text[marker_start..]);
+            return out;
+        };
+        out.push_str(replacement);
+        cursor = spec_start + relative_close + TYPE_SUFFIX.len();
     }
-    Ok(choice)
+    out.push_str(&text[cursor..]);
+    out
 }
 
-fn answer_separator_expression() -> &'static str {
-    "(?si)<hr\\s+id=[\"']?answer[\"']?\\s*/?>"
+fn parse_type_spec(spec: &str) -> ParsedTypeSpec {
+    let mut field = spec.to_owned();
+    let mut cloze = false;
+    let mut combining = true;
+    loop {
+        if let Some(rest) = field.strip_prefix("cloze:") {
+            cloze = true;
+            field = rest.to_owned();
+            continue;
+        }
+        if let Some(rest) = field.strip_prefix("nc:") {
+            combining = false;
+            field = rest.to_owned();
+            continue;
+        }
+        break;
+    }
+    ParsedTypeSpec {
+        field,
+        cloze,
+        combining,
+    }
 }
 
-fn type_marker_expression() -> &'static str {
-    r"(?s)\[\[type:(.+?)\]\]"
+fn type_input_html(font: &str, size: u32) -> String {
+    format!(
+        "<center><input type=\"text\" id=\"typeans\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" style=\"font-family:'{}';font-size:{}px\"></center>",
+        html_escape(font),
+        size
+    )
 }
 
-fn replace_type_markers(html: &str, replacement: &str) -> String {
-    regex::Regex::new(type_marker_expression())
-        .expect("static type-answer regex must compile")
-        .replace_all(html, replacement)
-        .into_owned()
-}
-
-fn strip_answer_separator(html: &str) -> (String, bool) {
-    let re = regex::Regex::new(answer_separator_expression())
-        .expect("static answer separator regex must compile");
-    let had = re.is_match(html);
-    (re.replace_all(html, "").into_owned(), had)
-}
-
-fn parse_type_field(question_html: &str) -> Option<String> {
-    regex::Regex::new(type_marker_expression())
-        .expect("static type-answer regex must compile")
-        .captures(question_html)
-        .and_then(|captures| captures.get(1))
-        .map(|matched| matched.as_str().trim().to_owned())
-}
-
-fn html_escape_attribute(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('"', "&quot;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn type_answer_value(
+fn prepare_type_question(
     backend: &Backend,
+    html: String,
     note_id: i64,
-    card_ordinal: u32,
-    field_name: &str,
-) -> Result<(String, String, u32), String> {
-    backend
-        .with_col(|col| {
-            let note = anki_proto_gen::services::NotesService::get_note(
-                col,
-                anki_proto::notes::NoteId { nid: note_id },
-            )?;
-            let notetype = anki_proto_gen::services::NoteTypesService::get_notetype(
-                col,
-                anki_proto::notetypes::NotetypeId { ntid: note.notetype_id },
-            )?;
-            let fields = notetype.fields;
-            let base = field_name.strip_prefix("cloze:").unwrap_or(field_name);
-            let position = fields.iter().position(|field| field.name == base);
-            let value = position
-                .and_then(|index| note.fields.get(index).cloned())
-                .unwrap_or_default();
-            let field = position.and_then(|index| fields.get(index));
-            let font = field
-                .map(|field| field.config.font_name.clone())
-                .unwrap_or_default();
-            let size = field.map(|field| field.config.font_size).unwrap_or(20);
-            let value = if field_name.starts_with("cloze:") {
-                extract_cloze_for_typing(&value, card_ordinal)
-            } else {
-                value
-            };
-            Ok((value, font, size))
-        })
-        .map_err(|error| error.to_string())
-}
-
-fn extract_cloze_for_typing(text: &str, card_ordinal: u32) -> String {
-    let number = card_ordinal + 1;
-    let pattern = format!(r"(?s)\{{\{{c{}::(.*?)(?:::(.*?))?\}}\}}", number);
-    let re = regex::Regex::new(&pattern).expect("generated cloze regex must compile");
-    re.captures_iter(text)
-        .filter_map(|capture| capture.get(1).map(|matched| matched.as_str().to_owned()))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-fn render_type_answer(
-    backend: &Backend,
-    current: &CurrentReview,
-    answer_html: &str,
-    field_name: &str,
-    card_ordinal: u32,
-    typed: &str,
-) -> Result<String, String> {
-    let (correct, font, size) = type_answer_value(backend, current.note_id, card_ordinal, field_name)?;
-    let (without_separator, had_separator) = strip_answer_separator(answer_html);
-    if had_separator && !regex::Regex::new(type_marker_expression()).unwrap().is_match(&without_separator) {
-        return Ok(answer_html.to_owned());
+    template_idx: u32,
+) -> Result<(String, Option<TypeAnswerState>, bool), String> {
+    let Some(spec_text) = first_type_spec(&html) else {
+        return Ok((html, None, false));
+    };
+    let spec = parse_type_spec(&spec_text);
+    if spec.field.is_empty() {
+        return Ok((
+            replace_type_markers(
+                &html,
+                "<span class=\"kanki-type-warning\">Type answer field is empty.</span>",
+            ),
+            None,
+            true,
+        ));
     }
-    let comparison = backend
+
+    let (note, notetype) = backend
         .with_col(|col| {
-            CardRenderingService::compare_answer(
+            let note = NotesService::get_note(col, NoteId { nid: note_id })?;
+            let notetype = NotetypesService::get_notetype(
                 col,
-                anki_proto::card_rendering::CompareAnswerRequest {
-                    expected: correct,
-                    provided: typed.to_owned(),
-                    combining: true,
+                NotetypeId {
+                    ntid: note.notetype_id,
                 },
-            )
+            )?;
+            Ok((note, notetype))
         })
-        .map_err(|error| error.to_string())?
-        .val;
+        .map_err(|err| err.to_string())?;
+
+    let Some(field_index) = notetype
+        .fields
+        .iter()
+        .position(|field| field.name == spec.field)
+    else {
+        let warning = format!(
+            "<span class=\"kanki-type-warning\">Type answer field not found: {}</span>",
+            html_escape(&spec.field)
+        );
+        return Ok((replace_type_markers(&html, &warning), None, true));
+    };
+
+    let mut expected = note.fields.get(field_index).cloned().unwrap_or_default();
+    if spec.cloze {
+        expected = backend
+            .with_col(|col| {
+                CardRenderingService::extract_cloze_for_typing(
+                    col,
+                    ExtractClozeForTypingRequest {
+                        text: expected,
+                        ordinal: template_idx.saturating_add(1),
+                    },
+                )
+            })
+            .map_err(|err| err.to_string())?
+            .val;
+    }
+    if expected.is_empty() {
+        return Ok((replace_type_markers(&html, ""), None, true));
+    }
+
+    let config = notetype.fields[field_index].config.as_ref();
+    let font = config
+        .map(|config| config.font_name.clone())
+        .filter(|font| !font.is_empty())
+        .unwrap_or_else(|| "Arial".to_owned());
+    let size = config
+        .map(|config| config.font_size)
+        .filter(|size| *size > 0)
+        .unwrap_or(20);
+    let state = TypeAnswerState {
+        expected,
+        font: font.clone(),
+        size,
+        combining: spec.combining,
+    };
+    Ok((
+        replace_type_markers(&html, &type_input_html(&font, size)),
+        Some(state),
+        true,
+    ))
+}
+
+fn render_type_answer(answer_html: &str, state: &TypeAnswerState, comparison: &str) -> String {
+    let had_answer_separator = answer_html.contains("<hr id=answer>");
+    let without_separator = answer_html.replace("<hr id=answer>", "");
+    if had_answer_separator && first_type_spec(&without_separator).is_none() {
+        return answer_html.to_owned();
+    }
     let mut replacement = String::new();
-    if had_separator {
+    if had_answer_separator {
         replacement.push_str("<hr id=answer>");
     }
     replacement.push_str(&format!(
-        "<div style=\"font-family: {}; font-size: {}px\">{}</div>",
-        html_escape_attribute(&font),
-        size,
+        "<div style=\"font-family:'{}';font-size:{}px\">{}</div>",
+        html_escape(&state.font),
+        state.size,
         comparison
     ));
-    Ok(replace_type_markers(&without_separator, &replacement))
+    let html = replace_type_markers(&without_separator, &replacement);
+    html
 }
 
-fn prepare_question_type_input(
-    backend: &Backend,
-    note_id: i64,
-    card_ordinal: u32,
-    html: &str,
-) -> Result<String, String> {
-    let Some(field_name) = parse_type_field(html) else {
-        return Ok(html.to_owned());
-    };
-    let (correct, font, size) = type_answer_value(backend, note_id, card_ordinal, &field_name)?;
-    let replacement = if correct.trim().is_empty() {
-        format!(
-            "<span class=\"type-empty\">The '{}' field is empty.</span>",
-            html_escape_attribute(&field_name)
-        )
-    } else {
-        format!(
-            "<input id=\"typeans\" class=\"typeans\" type=\"text\" autocomplete=\"off\" autocorrect=\"off\" autocapitalize=\"off\" spellcheck=\"false\" style=\"font-family: {}; font-size: {}px\">",
-            html_escape_attribute(&font),
-            size
-        )
-    };
-    Ok(replace_type_markers(html, &replacement))
-}
-
-fn flatten_deck(node: anki_proto::decks::DeckTreeNode) -> DeckDto {
-    DeckDto {
-        id: node.deck_id,
-        name: node.name,
-        level: node.level,
-        collapsed: node.collapsed,
-        filtered: node.filtered,
-        new_count: node.new_count,
-        learn_count: node.learn_count,
-        review_count: node.review_count,
-        children: node.children.into_iter().map(flatten_deck).collect(),
-    }
-}
-
-fn render_card_side(
-    backend: &Backend,
-    card_id: i64,
-    browser: bool,
-) -> Result<anki_proto::card_rendering::RenderCardResponse, String> {
-    backend
-        .with_col(|col| {
-            CardRenderingService::render_existing_card(
-                col,
-                RenderExistingCardRequest {
-                    card_id,
-                    browser,
-                    partial_render: false,
-                },
-            )
-        })
-        .map_err(|error| error.to_string())
-}
-
-fn next_review_card(core: &mut KankiCore, fetch_limit: u32) -> Result<ReviewDto, String> {
-    let queued = core
-        .backend
-        .with_col(|col| {
-            SchedulerService::get_queued_cards(
-                col,
-                GetQueuedCardsRequest {
-                    fetch_limit,
-                    intraday_learning_only: false,
-                },
-            )
-        })
-        .map_err(|error| error.to_string())?
-        .cards
-        .into_iter()
-        .next();
-    let Some(queued) = queued else {
-        core.current = None;
-        return Ok(ReviewDto {
-            finished: true,
-            card_id: 0,
-            note_id: 0,
-            deck_id: 0,
-            original_deck_id: 0,
-            template_ordinal: 0,
-            question_html: String::new(),
-            answer_html: String::new(),
-            css: String::new(),
-            question_audio: Vec::new(),
-            answer_audio: Vec::new(),
-            autoplay: false,
-            replay_question_audio_on_answer_side: false,
-            intervals: [String::new(), String::new(), String::new(), String::new()],
-        });
-    };
-    card_to_dto(core, queued)
-}
-
-fn card_to_dto(core: &mut KankiCore, queued: QueuedCard) -> Result<ReviewDto, String> {
-    let raw_rendered = render_card_side(&core.backend, queued.card.id, false)?;
-    let css = raw_rendered.css.clone();
-    let question_audio = extract_av(&core.backend, &raw_rendered.question_text, true)?;
-    let answer_audio = extract_av(&core.backend, &raw_rendered.answer_text, false)?;
-    let prefs = playback_preferences(&core.backend, &queued.card)?;
-    let question_html = prepare_question_type_input(
-        &core.backend,
-        queued.card.note_id,
-        queued.card.template_idx,
-        &raw_rendered.question_text,
-    )?;
-    let interval_labels = core
-        .backend
-        .with_col(|col| SchedulerService::describe_next_states(col, queued.states.clone()))
-        .map_err(|error| error.to_string())?
-        .vals;
-    let mut intervals = [String::new(), String::new(), String::new(), String::new()];
-    for (target, value) in intervals.iter_mut().zip(interval_labels) {
-        *target = value;
-    }
-    let dto = ReviewDto {
-        finished: false,
-        card_id: queued.card.id,
-        note_id: queued.card.note_id,
-        deck_id: queued.card.deck_id,
-        original_deck_id: queued.card.original_deck_id,
-        template_ordinal: queued.card.template_idx,
-        question_html,
-        answer_html: raw_rendered.answer_text,
-        css,
-        question_audio: question_audio.clone(),
-        answer_audio,
-        autoplay: prefs.autoplay,
-        replay_question_audio_on_answer_side: prefs.replay_question_audio_on_answer_side,
-        intervals,
-    };
-    core.current = Some(CurrentReview {
-        card_id: queued.card.id,
-        note_id: queued.card.note_id,
-        states: queued.states,
-        question_audio,
-        autoplay: prefs.autoplay,
-        replay_question_audio_on_answer_side: prefs.replay_question_audio_on_answer_side,
-        shown_at: Instant::now(),
-    });
-    Ok(dto)
-}
-
-fn decode_request(bytes: &[u8]) -> Result<OpenCollectionRequest, String> {
-    OpenCollectionRequest::decode(bytes).map_err(|error| error.to_string())
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn kanki_build_info_json() -> *mut c_char {
-    json_ptr(Ok(BuildInfo {
-        bridge_api: KANKI_BRIDGE_API,
-        anki_release: "26.08.1",
-        anki_commit: "e5a6fbe27fdd4d57d5f712191b4a753032e57853",
-        schema_max: 18,
-    }))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn kanki_json_free(value: *mut c_char) {
+#[no_mangle]
+pub extern "C" fn kanki_string_free(value: *mut c_char) {
     if !value.is_null() {
-        // SAFETY: callers may only pass strings returned by this module.
-        unsafe { drop(CString::from_raw(value)) };
+        unsafe {
+            let _ = CString::from_raw(value);
+        }
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn kanki_core_new() -> *mut KankiCore {
-    Box::into_raw(Box::new(KankiCore {
-        backend: Backend::new(),
-        current: None,
+#[no_mangle]
+pub extern "C" fn kanki_build_info_json() -> *mut c_char {
+    response(Ok(BuildInfo {
+        api_version: 1,
+        anki_version: env!("CARGO_PKG_VERSION"),
+        architecture: std::env::consts::ARCH,
+        typed_backend: true,
     }))
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
+pub extern "C" fn kanki_core_new(error_out: *mut *mut c_char) -> *mut KankiCore {
+    let init = BackendInit {
+        preferred_langs: vec!["en_US".into()],
+        locale_folder_path: String::new(),
+        server: false,
+    };
+    match init_backend(&init.encode_to_vec()) {
+        Ok(backend) => Box::into_raw(Box::new(KankiCore {
+            backend,
+            current: None,
+        })),
+        Err(error) => {
+            if !error_out.is_null() {
+                unsafe {
+                    *error_out = CString::new(error.replace('\0', "�"))
+                        .expect("replacement removed NUL")
+                        .into_raw();
+                }
+            }
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn kanki_core_free(core: *mut KankiCore) {
     if !core.is_null() {
-        // SAFETY: the handle was allocated by kanki_core_new and this function
-        // is the sole ownership-reclaiming entry point.
-        unsafe { drop(Box::from_raw(core)) };
+        unsafe {
+            let _ = Box::from_raw(core);
+        }
     }
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn kanki_open_collection_json(
     core: *mut KankiCore,
     collection_path: *const c_char,
     media_folder_path: *const c_char,
+    media_db_path: *const c_char,
 ) -> *mut c_char {
-    panic_safe(|| {
+    response((|| {
         let core = core_mut(core)?;
-        // SAFETY: C ABI string pointers are checked and decoded here before use.
-        let collection_path = unsafe { string_arg(collection_path, "collection_path")? };
-        // SAFETY: see collection_path above.
-        let media_folder_path = unsafe { string_arg(media_folder_path, "media_folder_path")? };
-        let request = OpenCollectionRequest {
-            collection_path: collection_path.clone(),
-            media_folder_path,
-            media_db_path: String::new(),
-        };
-        let mut bytes = Vec::new();
-        request.encode(&mut bytes).map_err(|error| error.to_string())?;
-        let decoded = decode_request(&bytes)?;
-        core.backend
-            .open_collection(decoded)
-            .map_err(|error| error.to_string())?;
+        BackendCollectionService::open_collection(
+            &core.backend,
+            OpenCollectionRequest {
+                collection_path: c_string(collection_path, "collection_path")?,
+                media_folder_path: c_string(media_folder_path, "media_folder_path")?,
+                media_db_path: c_string(media_db_path, "media_db_path")?,
+            },
+        )
+        .map_err(|err| err.to_string())?;
         core.current = None;
-        Ok(OpenInfo {
-            collection_path,
-            schema_max: 18,
-        })
-    })
+        Ok(serde_json::json!({"opened": true}))
+    })())
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn kanki_close_collection_json(core: *mut KankiCore) -> *mut c_char {
-    panic_safe(|| {
+    response((|| {
         let core = core_mut(core)?;
+        BackendCollectionService::close_collection(
+            &core.backend,
+            CloseCollectionRequest {
+                downgrade_to_schema11: false,
+            },
+        )
+        .map_err(|err| err.to_string())?;
         core.current = None;
-        CollectionService::close_collection(&mut core.backend, Empty {})
-            .map_err(|error| error.to_string())?;
-        Ok(MutationDto { changed: true })
-    })
+        Ok(serde_json::json!({"closed": true}))
+    })())
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn kanki_deck_tree_json(core: *mut KankiCore) -> *mut c_char {
-    panic_safe(|| {
+    response((|| {
         let core = core_mut(core)?;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .min(i64::MAX as u64) as i64;
         let tree = core
             .backend
-            .with_col(|col| DecksService::deck_tree(col, DeckTreeRequest { timestamp: None }))
-            .map_err(|error| error.to_string())?;
-        Ok(flatten_deck(tree))
-    })
+            .with_col(|col| DecksService::deck_tree(col, DeckTreeRequest { now }))
+            .map_err(|err| err.to_string())?;
+        Ok(deck_dto(tree))
+    })())
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
+pub extern "C" fn kanki_set_current_deck_json(core: *mut KankiCore, deck_id: i64) -> *mut c_char {
+    response((|| {
+        let core = core_mut(core)?;
+        let _changes = core
+            .backend
+            .with_col(|col| DecksService::set_current_deck(col, DeckId { did: deck_id }))
+            .map_err(|err| err.to_string())?;
+        core.current = None;
+        Ok(serde_json::json!({"deck_id": deck_id}))
+    })())
+}
+
+#[no_mangle]
 pub extern "C" fn kanki_set_deck_collapsed_json(
     core: *mut KankiCore,
     deck_id: i64,
-    collapsed: bool,
+    collapsed: u8,
 ) -> *mut c_char {
-    panic_safe(|| {
+    response((|| {
         let core = core_mut(core)?;
-        core.backend
+        let _changes = core
+            .backend
             .with_col(|col| {
                 DecksService::set_deck_collapsed(
                     col,
-                    anki_proto::decks::DeckCollapseRequest {
+                    SetDeckCollapsedRequest {
                         deck_id,
-                        collapsed,
+                        collapsed: collapsed != 0,
+                        scope: set_deck_collapsed_request::Scope::Reviewer as i32,
                     },
                 )
             })
-            .map_err(|error| error.to_string())?;
-        Ok(MutationDto { changed: true })
-    })
+            .map_err(|err| err.to_string())?;
+        Ok(serde_json::json!({"deck_id": deck_id, "collapsed": collapsed != 0}))
+    })())
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn kanki_set_current_deck_json(
-    core: *mut KankiCore,
-    deck_id: i64,
-) -> *mut c_char {
-    panic_safe(|| {
+#[no_mangle]
+pub extern "C" fn kanki_next_card_json(core: *mut KankiCore) -> *mut c_char {
+    response((|| {
         let core = core_mut(core)?;
-        core.backend
-            .with_col(|col| DecksService::set_current_deck(col, DeckId { did: deck_id }))
-            .map_err(|error| error.to_string())?;
-        core.current = None;
-        Ok(MutationDto { changed: true })
-    })
+        let mut queue = core
+            .backend
+            .with_col(|col| {
+                SchedulerService::get_queued_cards(
+                    col,
+                    GetQueuedCardsRequest {
+                        fetch_limit: 1,
+                        intraday_learning_only: false,
+                    },
+                )
+            })
+            .map_err(|err| err.to_string())?;
+
+        let counts = CountsDto {
+            new: queue.new_count,
+            learning: queue.learning_count,
+            review: queue.review_count,
+        };
+        let Some(queued) = queue.cards.pop() else {
+            core.current = None;
+            return Ok(ReviewDto {
+                finished: true,
+                card_id: None,
+                template_ordinal: None,
+                question_html: None,
+                answer_html: None,
+                css: None,
+                question_audio: vec![],
+                answer_audio: vec![],
+                counts,
+                intervals: vec![],
+                type_answer: false,
+                autoplay: false,
+                replay_question_audio_on_answer_side: false,
+            });
+        };
+        let card = queued.card.ok_or("queued card had no card payload")?;
+        let mut states = queued
+            .states
+            .ok_or("queued card had no scheduling states")?;
+        if let Some(current) = states.current.as_mut() {
+            current.custom_data = Some(card.custom_data.clone());
+        }
+        let playback = playback_preferences(&core.backend, &card)?;
+
+        let rendered = core
+            .backend
+            .with_col(|col| {
+                CardRenderingService::render_existing_card(
+                    col,
+                    RenderExistingCardRequest {
+                        card_id: card.id,
+                        browser: false,
+                        partial_render: false,
+                    },
+                )
+            })
+            .map_err(|err| err.to_string())?;
+        let (question_html, question_audio) = extract_av(
+            &core.backend,
+            render_full_text(rendered.question_nodes, "question")?,
+            true,
+        )?;
+        let (answer_html, answer_audio) = extract_av(
+            &core.backend,
+            render_full_text(rendered.answer_nodes, "answer")?,
+            false,
+        )?;
+        let (question_html, type_answer, had_type_marker) = prepare_type_question(
+            &core.backend,
+            question_html,
+            card.note_id,
+            card.template_idx,
+        )?;
+        let intervals = core
+            .backend
+            .with_col(|col| SchedulerService::describe_next_states(col, states.clone()))
+            .map_err(|err| err.to_string())?
+            .vals;
+
+        core.current = Some(CurrentReview {
+            card_id: card.id,
+            states,
+            started: Instant::now(),
+            answer_html: answer_html.clone(),
+            answer_audio: answer_audio.clone(),
+            question_audio: question_audio.clone(),
+            autoplay: playback.autoplay,
+            replay_question_audio_on_answer_side: playback.replay_question_audio_on_answer_side,
+            type_answer: type_answer.clone(),
+            had_type_marker,
+        });
+        Ok(ReviewDto {
+            finished: false,
+            card_id: Some(card.id),
+            template_ordinal: Some(card.template_idx),
+            question_html: Some(question_html),
+            answer_html: Some(answer_html),
+            css: Some(rendered.css),
+            question_audio,
+            answer_audio,
+            counts,
+            intervals,
+            type_answer: type_answer.is_some(),
+            autoplay: playback.autoplay,
+            replay_question_audio_on_answer_side: playback.replay_question_audio_on_answer_side,
+        })
+    })())
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn kanki_next_card_json(
-    core: *mut KankiCore,
-    fetch_limit: u32,
-) -> *mut c_char {
-    panic_safe(|| {
-        let core = core_mut(core)?;
-        next_review_card(core, fetch_limit.max(1))
-    })
-}
-
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn kanki_prepare_answer_json(
     core: *mut KankiCore,
     typed_answer: *const c_char,
 ) -> *mut c_char {
-    panic_safe(|| {
+    response((|| {
         let core = core_mut(core)?;
         let current = core
             .current
             .clone()
-            .ok_or_else(|| "no current review card".to_owned())?;
-        // SAFETY: the optional user-entered string is a C ABI string argument.
-        let typed = unsafe { string_arg(typed_answer, "typed_answer")? };
-        let rendered = render_card_side(&core.backend, current.card_id, false)?;
-        let html = if let Some(field_name) = parse_type_field(&rendered.question_text) {
-            render_type_answer(
-                &core.backend,
-                &current,
-                &rendered.answer_text,
-                &field_name,
-                core.backend
-                    .with_col(|col| {
-                        anki_proto_gen::services::CardsService::get_card(
-                            col,
-                            CardId {
-                                cid: current.card_id,
-                            },
-                        )
-                    })
-                    .map_err(|error| error.to_string())?
-                    .template_idx,
-                &typed,
-            )?
+            .ok_or("no current card is available to show an answer")?;
+        let typed = c_string(typed_answer, "typed_answer")?;
+        let html = if let Some(state) = &current.type_answer {
+            let comparison = core
+                .backend
+                .with_col(|col| {
+                    CardRenderingService::compare_answer(
+                        col,
+                        CompareAnswerRequest {
+                            expected: state.expected.clone(),
+                            provided: typed,
+                            combining: state.combining,
+                        },
+                    )
+                })
+                .map_err(|err| err.to_string())?
+                .val;
+            render_type_answer(&current.answer_html, state, &comparison)
+        } else if current.had_type_marker {
+            replace_type_markers(&current.answer_html, "")
         } else {
-            rendered.answer_text.clone()
+            current.answer_html.clone()
         };
-        let audio = extract_av(&core.backend, &rendered.answer_text, false)?;
         Ok(PreparedAnswerDto {
             html,
-            audio,
+            audio: current.answer_audio,
             question_audio: current.question_audio,
             autoplay: current.autoplay,
             replay_question_audio_on_answer_side: current.replay_question_audio_on_answer_side,
         })
-    })
+    })())
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn kanki_answer_json(
     core: *mut KankiCore,
     rating: u32,
     milliseconds_taken: u32,
 ) -> *mut c_char {
-    panic_safe(|| {
+    response((|| {
         let core = core_mut(core)?;
         let current = core
             .current
             .clone()
-            .ok_or_else(|| "no current review card".to_owned())?;
-        let new_state = state_for_rating(&current.states, rating)?;
-        core.backend
+            .ok_or("no current card is awaiting an answer")?;
+        let (rating_enum, new_state) = match rating {
+            1 => (card_answer::Rating::Again, current.states.again.clone()),
+            2 => (card_answer::Rating::Hard, current.states.hard.clone()),
+            3 => (card_answer::Rating::Good, current.states.good.clone()),
+            4 => (card_answer::Rating::Easy, current.states.easy.clone()),
+            _ => return Err("rating must be 1..=4".into()),
+        };
+        let measured = current.started.elapsed().as_millis().min(u32::MAX as u128) as u32;
+        let _changes = core
+            .backend
             .with_col(|col| {
                 SchedulerService::answer_card(
                     col,
                     CardAnswer {
                         card_id: current.card_id,
                         current_state: current.states.current.clone(),
-                        new_state: Some(new_state),
-                        rating: rating as i32,
-                        answered_at_millis: 0,
+                        new_state,
+                        rating: rating_enum as i32,
+                        answered_at_millis: now_millis(),
                         milliseconds_taken: if milliseconds_taken == 0 {
-                            current.shown_at.elapsed().as_millis().min(u32::MAX as u128) as u32
+                            measured
                         } else {
                             milliseconds_taken
                         },
                     },
                 )
             })
-            .map_err(|error| error.to_string())?;
+            .map_err(|err| err.to_string())?;
         core.current = None;
-        Ok(MutationDto { changed: true })
-    })
+        Ok(serde_json::json!({"card_id": current.card_id, "rating": rating}))
+    })())
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn kanki_bury_current_json(core: *mut KankiCore) -> *mut c_char {
-    panic_safe(|| {
+    response((|| {
         let core = core_mut(core)?;
         let current = core
             .current
             .clone()
-            .ok_or_else(|| "no current review card".to_owned())?;
-        core.backend
+            .ok_or("no current card is available to bury")?;
+        let _changes = core
+            .backend
             .with_col(|col| {
                 SchedulerService::bury_or_suspend_cards(
                     col,
                     BuryOrSuspendCardsRequest {
-                        card_ids: Some(CardIds {
-                            cids: vec![current.card_id],
-                        }),
-                        note_ids: None,
-                        mode: anki_proto::scheduler::bury_or_suspend_cards_request::Mode::BuryUser
-                            as i32,
+                        card_ids: vec![current.card_id],
+                        note_ids: vec![],
+                        mode: bury_or_suspend_cards_request::Mode::BuryUser as i32,
                     },
                 )
             })
-            .map_err(|error| error.to_string())?;
+            .map_err(|err| err.to_string())?;
         core.current = None;
-        Ok(MutationDto { changed: true })
-    })
+        Ok(serde_json::json!({"card_id": current.card_id, "buried": true}))
+    })())
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn kanki_backend_collection_path(
-    core: *mut KankiCore,
-) -> *mut c_char {
-    panic_safe(|| {
+#[no_mangle]
+pub extern "C" fn kanki_health_json(core: *mut KankiCore) -> *mut c_char {
+    response((|| {
         let core = core_mut(core)?;
-        let path = core
+        let _progress = core
             .backend
-            .with_col(|col| Ok(PathBuf::from(&col.path)))
-            .map_err(|error| error.to_string())?;
-        Ok(path.to_string_lossy().to_string())
-    })
+            .latest_progress()
+            .map_err(|err| err.to_string())?;
+        Ok(serde_json::json!({"backend": "responsive"}))
+    })())
 }

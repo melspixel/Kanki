@@ -44,8 +44,67 @@ require("SchedulerService::answer_card", "typed answer call is missing")
 require("CardRenderingService::render_existing_card", "typed card rendering call is missing")
 require("CardRenderingService::extract_av_tags", "typed AV extraction call is missing")
 
-# A future autoplay fix must be based on effective deck-config semantics. Keep
-# the expected upstream field names in this contract once the DTO lands; until
-# then this test deliberately does not claim that autoplay parity is closed.
+# The bridge is compiled inside the pinned Anki rslib, so it must use the
+# generated traits exposed by that crate and preserve the source-owned C ABI
+# consumed by both the native device shell and the safe host client.
+require("use crate::services::{", "bridge must use pinned Anki service traits")
+forbid(
+    "use anki_proto_gen::services",
+    "bridge must not import service traits from the proto generator crate",
+)
+require(
+    "pub extern \"C\" fn kanki_string_free",
+    "semantic ABI string destructor is missing",
+)
+require(
+    "pub extern \"C\" fn kanki_core_new(error_out: *mut *mut c_char)",
+    "semantic ABI core constructor signature drifted",
+)
+require(
+    "media_db_path: *const c_char",
+    "collection ABI must include the media database path",
+)
+require(
+    "pub extern \"C\" fn kanki_next_card_json(core: *mut KankiCore)",
+    "next-card ABI signature drifted",
+)
+require("pub extern \"C\" fn kanki_health_json", "semantic ABI health check is missing")
+
+# Full renders must remain owned by Anki. Kanki only unwraps the one complete
+# Text node guaranteed by partial_render=false; it must not emulate filters or
+# concatenate partial replacement nodes.
+require("partial_render: false", "reviewer render must request a full Anki render")
+require("fn render_full_text(", "full-render node contract must be checked")
+forbid(
+    "out.push_str(&replacement.current_text)",
+    "bridge must not emulate Anki partial-template replacement",
+)
+
+# Desktop reviewer semantics copy the queued card's custom data into the
+# current state before answering, map UI ease 1..=4 to proto rating 0..=3, and
+# record a real answer timestamp.
+require(
+    "current.custom_data = Some(card.custom_data.clone());",
+    "queued card custom data must be preserved for scheduler answers",
+)
+require(
+    "1 => (card_answer::Rating::Again",
+    "Again must map to the typed Anki rating enum",
+)
+require(
+    "4 => (card_answer::Rating::Easy",
+    "Easy must map to the typed Anki rating enum",
+)
+forbid("rating: rating as i32", "UI rating must not be cast directly to the proto enum")
+require("answered_at_millis: now_millis()", "scheduler answer timestamp must be real")
+
+# Playback flags must be derived from the effective Anki deck config, including
+# the original deck for cards currently in a filtered deck.
+require("card.original_deck_id", "filtered-card playback must use its original deck")
+require("!config.disable_autoplay", "autoplay must come from the Anki deck config")
+require(
+    "!config.skip_question_when_replaying_answer",
+    "answer-side question replay must come from the Anki deck config",
+)
 
 print("typed bridge source contract: pass")
