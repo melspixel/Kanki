@@ -27,6 +27,7 @@ printf '%s\n' '== formatting / lint / policy =='
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 python3 tools/check_policy.py
+python3 tests/bridge_source_contract.py
 
 printf '%s\n' '== native/source syntax =='
 cc -std=c11 -D_POSIX_C_SOURCE=200809L -fsigned-char -Wall -Wextra -Werror -fsyntax-only device/kanki_device.c -Ibridge
