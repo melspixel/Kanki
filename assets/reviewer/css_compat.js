@@ -212,6 +212,19 @@
     return /^(start|end|center|stretch|baseline)$/.test(value) ? value : '';
   }
 
+  function boxOrdinalGroup(value) {
+    value = trim(value);
+    if (!/^[+-]?[0-9]+$/.test(value)) return '';
+    var order = parseInt(value, 10);
+    /*
+     * Modern order starts at zero, while the 2009 box model starts at one.
+     * Negative order has no equivalent natural-number group unless every
+     * unstyled sibling is rewritten too, so do not emit an invalid group.
+     */
+    if (order < 0 || order >= 2147483647) return '';
+    return String(order + 1);
+  }
+
   function transformDeclarations(body, vars) {
     var list = declarations(body);
     var output = [];
@@ -240,6 +253,10 @@
       } else if (lower === 'justify-content') {
         var pack = boxPack(value);
         if (pack) output.push('-webkit-box-pack:' + pack);
+        output.push(name + ':' + value);
+      } else if (lower === 'order') {
+        var ordinal = boxOrdinalGroup(value);
+        if (ordinal) output.push('-webkit-box-ordinal-group:' + ordinal);
         output.push(name + ':' + value);
       } else if (lower === 'flex-grow') {
         output.push('-webkit-box-flex:' + value);

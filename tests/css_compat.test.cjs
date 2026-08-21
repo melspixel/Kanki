@@ -65,6 +65,18 @@ assert.match(result.css, /font-size:36px/);
 assert.ok(!result.css.includes('9999px'));
 assert.ok(!result.css.includes('420px'));
 
+const orderCss = window.kankiCssCompat.transform(`
+.positive-order { order: 2; }
+.zero-order { order: 0; }
+.negative-order { order: -1; }
+.noninteger-order { order: 1.5; }
+`).css;
+assert.match(orderCss, /\.positive-order\s*\{-webkit-box-ordinal-group:3;order:2;/);
+assert.match(orderCss, /\.zero-order\s*\{-webkit-box-ordinal-group:1;order:0;/);
+assert.match(orderCss, /\.negative-order\s*\{order:-1;/);
+assert.match(orderCss, /\.noninteger-order\s*\{order:1\.5;/);
+assert.doesNotMatch(orderCss, /-webkit-box-ordinal-group:(?:0|-)/);
+
 const qa = window.document.getElementById('qa');
 window.kankiCssCompat.apply(qa, result);
 assert.strictEqual(window.document.getElementById('first').style.marginRight, '8px');
