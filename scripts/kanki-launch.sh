@@ -65,11 +65,22 @@ export KANKI_GST_LOADER=/lib/ld-linux-armhf.so.3
 export GST_PLUGIN_PATH=/usr/lib/gstreamer-0.10:/usr/lib/gstreamer-1.0
 chmod 755 "$DIR/kanki-device" "$DIR/kanki-audio" "$DIR/kanki-diag" "$DIR/kanki-gst-play" "$DIR/kanki-raise" "$DIR/kanki-sync.sh" "$DIR/kanki-report.sh" 2>/dev/null || true
 
-start_diag() {
+write_diagnostic_config() {
     mkdir -p "$DIR/render-debug" || {
         printf '%s diagnostic directory creation failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
         return 73
     }
+    CONFIG_TMP="$DIR/render-debug/config.js.tmp.$$"
+    if [ -f "$DIR/enable-render-capture" ]; then
+        printf '%s\n' 'window.kankiDiagnostics={rawCapture:true,protocolVersion:1};' >"$CONFIG_TMP"
+    else
+        printf '%s\n' 'window.kankiDiagnostics={rawCapture:false,protocolVersion:1};' >"$CONFIG_TMP"
+    fi
+    mv "$CONFIG_TMP" "$DIR/render-debug/config.js"
+}
+
+start_diag() {
+    write_diagnostic_config
     if [ -f "$DIAG_PID_FILE" ]; then
         OLD_DIAG_PID=$(cat "$DIAG_PID_FILE" 2>/dev/null || true)
         [ -n "$OLD_DIAG_PID" ] && kill "$OLD_DIAG_PID" 2>/dev/null || true
