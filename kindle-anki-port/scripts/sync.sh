@@ -8,6 +8,7 @@ CONFIG=${KAP_CONFIG_FILE:-$APP/config.ini}
 PID_FILE=${KAP_PID_FILE:-$APP/.kap.pid}
 APP_BIN=${KAP_APP_BIN:-$APP/kap-app}
 SYNC_BIN=${KAP_SYNC_BIN:-$APP/kap-sync}
+OP_LOCK=${KAP_OPERATION_LOCK_DIR:-$APP/.kap-operation.lock}
 
 mkdir -p "$APP" "$DATA" "$DATA/backups"
 umask 077
@@ -33,6 +34,45 @@ verified_app_pid() {
     exe=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
     [ "$exe" = "$(canonical_path "$APP_BIN")" ]
 }
+
+op_lock_owned=0
+release_operation_lock() {
+    if [ "$op_lock_owned" = 1 ]; then
+        rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
+        rmdir "$OP_LOCK" 2>/dev/null || true
+        op_lock_owned=0
+    fi
+}
+
+acquire_sync_lock() {
+    if mkdir "$OP_LOCK" 2>/dev/null; then
+        printf '%s\n' "$$" >"$OP_LOCK/pid"
+        printf '%s\n' sync >"$OP_LOCK/mode"
+        op_lock_owned=1
+        return 0
+    fi
+    owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
+    mode=$(cat "$OP_LOCK/mode" 2>/dev/null || true)
+    case "$owner" in
+        ''|*[!0-9]*) owner_alive=0 ;;
+        *) if kill -0 "$owner" 2>/dev/null; then owner_alive=1; else owner_alive=0; fi ;;
+    esac
+    if [ "$owner_alive" = 0 ]; then
+        rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
+        rmdir "$OP_LOCK" 2>/dev/null || true
+        if mkdir "$OP_LOCK" 2>/dev/null; then
+            printf '%s\n' "$$" >"$OP_LOCK/pid"
+            printf '%s\n' sync >"$OP_LOCK/mode"
+            op_lock_owned=1
+            return 0
+        fi
+    fi
+    log "sync refused while operation lock is busy mode=${mode:-unknown} owner=${owner:-unknown}"
+    return 74
+}
+
+acquire_sync_lock
+trap 'release_operation_lock' 0
 
 if [ -f "$PID_FILE" ]; then
     pid=$(cat "$PID_FILE" 2>/dev/null || true)
