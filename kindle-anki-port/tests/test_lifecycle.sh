@@ -126,4 +126,34 @@ KAP_APP_DIR="$LOCK_APP" KAP_DATA_DIR="$LOCK_DATA" KAP_FAKE_MARKER="$TMP/stale-lo
 test -f "$TMP/stale-lock-ran"
 test ! -d "$LOCK_APP/.kap-operation.lock"
 
+# Signals sent to the launcher must be forwarded to the reviewer, return the
+# conventional shell signal status, and leave neither a PID file nor a lock.
+SIGNAL_APP="$TMP/signal-app"
+SIGNAL_DATA="$TMP/signal-data"
+mkdir -p "$SIGNAL_APP/scripts" "$SIGNAL_DATA"
+cp "$ROOT/scripts/launch.sh" "$SIGNAL_APP/scripts/launch.sh"
+cp "$ROOT/scripts/sync.sh" "$SIGNAL_APP/scripts/sync.sh"
+cp "$APP/kap-app" "$SIGNAL_APP/kap-app"
+chmod 755 "$SIGNAL_APP/scripts/"*.sh
+printf '{"build_commit":"signal-build"}\n' >"$SIGNAL_APP/BUILD.json"
+printf 'collection' >"$SIGNAL_DATA/collection.anki2"
+KAP_APP_DIR="$SIGNAL_APP" KAP_DATA_DIR="$SIGNAL_DATA" KAP_FAKE_MODE=wait \
+  "$SIGNAL_APP/scripts/launch.sh" & launcher_pid=$!
+tries=0
+while [ ! -s "$SIGNAL_APP/.kap.pid" ]; do
+    tries=$((tries + 1))
+    test "$tries" -lt 200
+    sleep 0.01
+done
+reviewer_pid=$(cat "$SIGNAL_APP/.kap.pid")
+kill -TERM "$launcher_pid"
+set +e
+wait "$launcher_pid"
+status=$?
+set -e
+test "$status" = 143
+! kill -0 "$reviewer_pid" 2>/dev/null
+test ! -f "$SIGNAL_APP/.kap.pid"
+test ! -d "$SIGNAL_APP/.kap-operation.lock"
+
 echo "test_lifecycle: ok"
