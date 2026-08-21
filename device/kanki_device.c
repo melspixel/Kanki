@@ -84,6 +84,7 @@ typedef struct {
     char *(*set_current_deck)(KankiCore *, int64_t);
     char *(*set_deck_collapsed)(KankiCore *, int64_t, uint8_t);
     char *(*next_card)(KankiCore *);
+    char *(*prepare_answer)(KankiCore *, const char *);
     char *(*answer)(KankiCore *, uint32_t, uint32_t);
     char *(*bury_current)(KankiCore *);
     char *(*health)(KankiCore *);
@@ -243,6 +244,7 @@ static int load_backend(App *app, const char *path) {
     LOAD_REQUIRED(app->backend_lib, &app->backend, set_current_deck, "kanki_set_current_deck_json");
     LOAD_REQUIRED(app->backend_lib, &app->backend, set_deck_collapsed, "kanki_set_deck_collapsed_json");
     LOAD_REQUIRED(app->backend_lib, &app->backend, next_card, "kanki_next_card_json");
+    LOAD_REQUIRED(app->backend_lib, &app->backend, prepare_answer, "kanki_prepare_answer_json");
     LOAD_REQUIRED(app->backend_lib, &app->backend, answer, "kanki_answer_json");
     LOAD_REQUIRED(app->backend_lib, &app->backend, bury_current, "kanki_bury_current_json");
     LOAD_REQUIRED(app->backend_lib, &app->backend, health, "kanki_health_json");
@@ -564,6 +566,17 @@ static void dispatch_uri(App *app, const char *uri) {
         free(collapsed);
     } else if (strcmp(command, "review/next") == 0) {
         send_next_card(app);
+    } else if (strcmp(command, "review/show-answer") == 0) {
+        char *typed = query_value(uri, "typed");
+        char *response;
+        if (!typed) typed = duplicate_string("");
+        if (!typed) {
+            send_local_error(app, "kankiDevice", "show_answer", "out of memory");
+        } else {
+            response = app->backend.prepare_answer(app->core, typed);
+            send_response(app, "kankiDevice", "show_answer", response);
+        }
+        free(typed);
     } else if (strcmp(command, "review/answer") == 0) {
         char *rating = query_value(uri, "rating");
         char *milliseconds = query_value(uri, "ms");
@@ -646,7 +659,7 @@ static void on_bury_clicked(void *button, void *user_data) {
 static void on_show_answer_clicked(void *button, void *user_data) {
     App *app = user_data;
     (void)button;
-    execute_script(app, "if(window.kankiDevice){window.kankiDevice.showAnswer();}");
+    execute_script(app, "if(window.kankiDevice){window.kankiDevice.requestShowAnswer();}");
 }
 
 static void on_rating_clicked(void *button, void *user_data) {

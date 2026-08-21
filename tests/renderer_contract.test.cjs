@@ -52,7 +52,7 @@ const card = {
   template_ordinal: 1,
   question_html:
     '<section class="row"><script>window.__questionRuns=(window.__questionRuns||0)+1;<\/script>' +
-    '<span id="sound-marker">[anki:play:q:0]</span>' +
+    '<span id="sound-marker">[anki:play:q:0]</span><input id="typeans" value="typed">' +
     '<svg id="illustration" width="123" height="77" viewBox="0 0 123 77"><rect width="123" height="77"></rect></svg>' +
     '</section>',
   answer_html:
@@ -84,7 +84,18 @@ const replay = document.querySelector('.replay-button');
 replay.onclick();
 assert.deepStrictEqual(hostValue(audio[1]), ['sound', 'word.mp3']);
 
-window.kankiDevice.showAnswer();
+const typeInput = document.getElementById('typeans');
+assert.ok(typeInput, 'typed-answer input must remain usable in the question');
+assert.strictEqual(typeof typeInput.onkeypress, 'function');
+
+window.kankiDevice.nativeResponse(
+  'show_answer',
+  JSON.stringify({
+    ok: true,
+    data: {html: card.answer_html, audio: card.answer_audio},
+    error: null,
+  }),
+);
 assert.strictEqual(document.getElementById('qa'), qa, 'answer must not reload the page');
 assert.strictEqual(window.__answerRuns, 1, 'answer scripts must execute after insertion');
 assert.strictEqual(document.getElementById('answer-text').textContent, 'answer');

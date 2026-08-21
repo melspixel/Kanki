@@ -175,6 +175,26 @@
     qa.appendChild(box);
   }
 
+  function requestShowAnswer() {
+    if (!currentCard) return false;
+    var input = document.getElementById('typeans');
+    command('review/show-answer', {typed: input ? input.value : ''});
+    return false;
+  }
+
+  function wireTypeAnswer() {
+    var input = document.getElementById('typeans');
+    if (!input) return;
+    input.onkeypress = function (event) {
+      event = event || window.event;
+      if (event && (event.keyCode === 13 || event.which === 13)) {
+        return requestShowAnswer();
+      }
+      return true;
+    };
+    if (input.focus) input.focus();
+  }
+
   function showCard(packet) {
     try {
       document.body.className = packet.body_class;
@@ -182,6 +202,7 @@
       qa.innerHTML = packet.html || '';
       executeScripts(qa);
       installSemanticAudio(packet);
+      if (packet.side === 'question') wireTypeAnswer();
       if (packet.side === 'answer') {
         var answer = document.getElementById('answer');
         if (answer && answer.scrollIntoView) answer.scrollIntoView(true);
@@ -217,9 +238,15 @@
     command('ui/state', {mode: 'question'});
   }
 
-  function showAnswer() {
-    if (!currentCard) return;
-    showCard(packet(currentCard, 'answer'));
+  function showPreparedAnswer(prepared) {
+    if (!currentCard || !prepared) return;
+    showCard({
+      side: 'answer',
+      body_class: 'card card' + (Number(currentCard.template_ordinal || 0) + 1) + ' isLin kindle',
+      html: prepared.html || '',
+      css: currentCard.css || '',
+      audio: prepared.audio || []
+    });
     command('ui/state', {
       mode: 'answer',
       again: currentCard.intervals && currentCard.intervals[0] || '',
@@ -239,7 +266,9 @@
         command('ui/state', {mode: 'none'});
         return;
       }
-      if (name === 'next_card') {
+      if (name === 'show_answer') {
+        showPreparedAnswer(envelope.data);
+      } else if (name === 'next_card') {
         if (!envelope.data || envelope.data.finished) {
           currentCard = null;
           window.kankiBridge.stopAudio();
@@ -261,7 +290,7 @@
   };
   window.kankiDevice = {
     nativeResponse: nativeResponse,
-    showAnswer: showAnswer,
+    requestShowAnswer: requestShowAnswer,
     currentElapsedMilliseconds: function () {
       return Math.max(0, new Date().getTime() - shownAt);
     }
