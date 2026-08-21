@@ -36,12 +36,31 @@ verified_app_pid() {
 }
 
 op_lock_owned=0
+lock_owner_pid=
 release_operation_lock() {
+    rm -f "${OP_LOCK}.pid.$$" 2>/dev/null || true
     if [ "$op_lock_owned" = 1 ]; then
-        rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
-        rmdir "$OP_LOCK" 2>/dev/null || true
+        current_owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
+        if [ -n "$lock_owner_pid" ] && [ "$current_owner" = "$lock_owner_pid" ]; then
+            rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
+            rmdir "$OP_LOCK" 2>/dev/null || true
+        fi
         op_lock_owned=0
+        lock_owner_pid=
     fi
+}
+
+write_lock_owner() {
+    new_owner=$1
+    current_owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
+    [ "$current_owner" = "$lock_owner_pid" ] || return 1
+    tmp="${OP_LOCK}.pid.$$"
+    printf '%s\n' "$new_owner" >"$tmp"
+    if ! mv -f "$tmp" "$OP_LOCK/pid"; then
+        rm -f "$tmp" 2>/dev/null || true
+        return 1
+    fi
+    lock_owner_pid=$new_owner
 }
 
 acquire_sync_lock() {
@@ -49,6 +68,7 @@ acquire_sync_lock() {
         printf '%s\n' "$$" >"$OP_LOCK/pid"
         printf '%s\n' sync >"$OP_LOCK/mode"
         op_lock_owned=1
+        lock_owner_pid=$$
         return 0
     fi
     owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
@@ -64,6 +84,7 @@ acquire_sync_lock() {
             printf '%s\n' "$$" >"$OP_LOCK/pid"
             printf '%s\n' sync >"$OP_LOCK/mode"
             op_lock_owned=1
+            lock_owner_pid=$$
             return 0
         fi
     fi
@@ -103,9 +124,34 @@ backup="$DATA/backups/collection-pre-sync-$(date '+%Y%m%d-%H%M%S').anki2"
 find "$DATA/backups" -type f -name 'collection-pre-sync-*.anki2' -print \
     | sort -r | awk 'NR>5' | while IFS= read -r old; do rm -f "$old"; done
 
+child=
+forward_signal() {
+    signal_name=$1
+    signal_number=$2
+    if [ -n "${child:-}" ] && kill -0 "$child" 2>/dev/null; then
+        kill -"$signal_name" "$child" 2>/dev/null || true
+        wait "$child" 2>/dev/null || true
+    fi
+    child=
+    exit $((128 + signal_number))
+}
+trap 'forward_signal TERM 15' TERM
+trap 'forward_signal INT 2' INT
+trap 'forward_signal HUP 1' HUP
+
 KAP_SYNC_HKEY="$hkey" KAP_SYNC_ENDPOINT="$endpoint" \
     "$SYNC_BIN" --backend "$APP/libanki-kindle.so" \
     --collection "$DATA/collection.anki2" \
-    --media "$DATA/collection.media" --media-db "$DATA/media.db2" "$@"
-
+    --media "$DATA/collection.media" --media-db "$DATA/media.db2" "$@" &
+child=$!
+if ! write_lock_owner "$child"; then
+    log "sync operation lock ownership changed before worker publication"
+    kill -TERM "$child" 2>/dev/null || true
+    wait "$child" 2>/dev/null || true
+    exit 75
+fi
+status=0
+wait "$child" || status=$?
+child=
 unset hkey endpoint
+exit "$status"
