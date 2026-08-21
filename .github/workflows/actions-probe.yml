@@ -5,6 +5,8 @@ on:
     branches: [rewrite-v1]
     paths:
       - '.github/workflows/actions-probe.yml'
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
