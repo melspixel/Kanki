@@ -80,6 +80,17 @@ printf 'smoke fixture\\n' > "$out"
 chmod +x "$out"
 """,
         )
+        debugfs = tools / "fake-debugfs"
+        write_executable(
+            debugfs,
+            f"""#!/bin/sh
+set -eu
+[ "${{1:-}}" = -R ]
+dest=${{2#rdump / }}
+mkdir -p "$dest"
+cp -R {str(rootfs)!r}/. "$dest"/
+""",
+        )
         qemu = tools / "fake-qemu"
         write_executable(
             qemu,
@@ -88,6 +99,7 @@ if [ "${1:-}" = --version ]; then
   echo 'qemu-arm fixture 1.0'
   exit 0
 fi
+if [ -n "${QEMU_ARGS_LOG:-}" ]; then printf '%s\\n' "$*" >> "$QEMU_ARGS_LOG"; fi
 case "$*" in
   *kap-qemu-smoke*) echo 'qemu backend smoke: ok' ;;
   *kap-audio*) echo 'kap-audio self-test: ok' ;;
@@ -118,6 +130,8 @@ esac
                 "ROOTFS_IMAGE": str(rootfs_image),
                 "TOOLCHAIN_BIN": str(tools),
                 "QEMU_ARM": str(qemu),
+                "DEBUGFS": str(debugfs),
+                "QEMU_ARGS_LOG": str(base / "qemu-args.log"),
                 "OUT": str(out),
                 "BUILD_COMMIT": actual_head,
             }
@@ -133,6 +147,7 @@ esac
         result = self.run_gate(env)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual((out / "QEMU-SMOKE.txt").read_text(), "QEMU smoke: PASS\n")
+        self.assertTrue((out / "input-rootfs-verification.txt").is_file())
         verification = (out / "rootfs-verification.txt").read_text()
         self.assertIn("PW6 rootfs verification: PASS", verification)
         image_hash = hashlib.sha256(Path(env["ROOTFS_IMAGE"]).read_bytes()).hexdigest()
@@ -142,13 +157,28 @@ esac
         self.assertIn(f"anki_commit={ANKI_COMMIT}\n", provenance)
         self.assertIn("rootfs_manifest_id=pw6-5.19.6-rootfs-manifest.json\n", provenance)
         self.assertIn("rootfs_manifest_sha256=", provenance)
+        self.assertIn("rootfs_input_verified=true\n", provenance)
         self.assertIn("rootfs_verified=true\n", provenance)
+        self.assertIn("rootfs_runtime_source=verified-image-rdump\n", provenance)
         self.assertIn(f"rootfs_image_sha256={image_hash}\n", provenance)
-        self.assertNotIn(f"rootfs={rootfs}\n", provenance)
         self.assertNotIn(str(rootfs), provenance)
         self.assertNotIn(env["ROOTFS_IMAGE"], provenance)
+        qemu_args = Path(env["QEMU_ARGS_LOG"]).read_text(encoding="utf-8")
+        self.assertNotIn(f"-L {rootfs}", qemu_args)
+        self.assertIn("kap-qemu-rootfs.", qemu_args)
         for name in ("libanki-kindle.so", "kap-app", "kap-audio", "kap-sync"):
             self.assertIn(f"{name}_sha256=", provenance)
+
+    def test_failed_dynamic_rerun_invalidates_old_pass(self) -> None:
+        td, project, armhf, rootfs, out, env = self.make_fixture()
+        self.addCleanup(td.cleanup)
+        first = self.run_gate(env)
+        self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+        Path(env["DEBUGFS"]).write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        second = self.run_gate(env)
+        self.assertEqual(second.returncode, 66, second.stderr + second.stdout)
+        self.assertFalse((out / "QEMU-SMOKE.txt").exists())
+        self.assertFalse((out / "QEMU-PROVENANCE.txt").exists())
 
     def test_missing_rootfs_image_is_rejected(self) -> None:
         td, project, armhf, rootfs, out, env = self.make_fixture()
