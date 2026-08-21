@@ -43,11 +43,16 @@ remove_pid_if_owned() {
 }
 
 op_lock_owned=0
+lock_owner_pid=
 release_operation_lock() {
     if [ "$op_lock_owned" = 1 ]; then
-        rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
-        rmdir "$OP_LOCK" 2>/dev/null || true
+        current_owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
+        if [ -n "$lock_owner_pid" ] && [ "$current_owner" = "$lock_owner_pid" ]; then
+            rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
+            rmdir "$OP_LOCK" 2>/dev/null || true
+        fi
         op_lock_owned=0
+        lock_owner_pid=
     fi
 }
 
@@ -80,6 +85,7 @@ acquire_launch_lock() {
     printf '%s\n' "$$" >"$OP_LOCK/pid"
     printf '%s\n' launch >"$OP_LOCK/mode"
     op_lock_owned=1
+    lock_owner_pid=$$
 }
 
 prepare_launch() {
@@ -130,16 +136,18 @@ chmod 755 "$BIN" "$APP/kap-audio" "$APP/scripts/sync.sh" 2>/dev/null || true
 child=
 forward_signal() {
     signal_name=$1
+    signal_number=$2
     if [ -n "${child:-}" ] && kill -0 "$child" 2>/dev/null; then
         kill -"$signal_name" "$child" 2>/dev/null || true
         wait "$child" 2>/dev/null || true
         remove_pid_if_owned "$child"
     fi
-    exit 128
+    child=
+    exit $((128 + signal_number))
 }
-trap 'forward_signal TERM' TERM
-trap 'forward_signal INT' INT
-trap 'forward_signal HUP' HUP
+trap 'forward_signal TERM 15' TERM
+trap 'forward_signal INT 2' INT
+trap 'forward_signal HUP 1' HUP
 
 while :; do
     if [ "$op_lock_owned" != 1 ]; then prepare_launch; fi
