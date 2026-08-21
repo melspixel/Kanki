@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -26,6 +27,7 @@ class QemuProvenanceTest(unittest.TestCase):
         project = base / "project"
         armhf = base / "armhf"
         rootfs = base / "rootfs"
+        rootfs_image = base / "pw6-rootfs.img"
         tools = base / "tools"
         out = project / "build" / "qemu"
         for path in (
@@ -46,9 +48,19 @@ class QemuProvenanceTest(unittest.TestCase):
         (project / "core" / "kap_core.h").write_text("/* fixture */\n", encoding="utf-8")
         write_executable(
             project / "testenv" / "scripts" / "verify-pw6-rootfs.py",
-            "#!/usr/bin/env python3\nprint('PW6 rootfs verification: PASS')\n",
+            """#!/usr/bin/env python3
+import hashlib
+import sys
+if '--rootfs-image' not in sys.argv:
+    raise SystemExit('missing --rootfs-image')
+image = sys.argv[sys.argv.index('--rootfs-image') + 1]
+digest = hashlib.sha256(open(image, 'rb').read()).hexdigest()
+print(f'rootfs image sha256: PASS {digest}')
+print('PW6 rootfs verification: PASS')
+""",
         )
         (rootfs / "lib" / "ld-linux-armhf.so.3").write_bytes(b"loader")
+        rootfs_image.write_bytes(b"canonical-rootfs-image-fixture\n")
 
         for name in ("kap-app", "kap-audio", "kap-sync", "libanki-kindle.so"):
             (armhf / name).write_bytes((name + "\n").encode())
@@ -103,6 +115,7 @@ esac
                 "PROJECT": str(project),
                 "ARMHF": str(armhf),
                 "ROOTFS": str(rootfs),
+                "ROOTFS_IMAGE": str(rootfs_image),
                 "TOOLCHAIN_BIN": str(tools),
                 "QEMU_ARM": str(qemu),
                 "OUT": str(out),
@@ -120,17 +133,38 @@ esac
         result = self.run_gate(env)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual((out / "QEMU-SMOKE.txt").read_text(), "QEMU smoke: PASS\n")
-        self.assertIn("PW6 rootfs verification: PASS", (out / "rootfs-verification.txt").read_text())
+        verification = (out / "rootfs-verification.txt").read_text()
+        self.assertIn("PW6 rootfs verification: PASS", verification)
+        image_hash = hashlib.sha256(Path(env["ROOTFS_IMAGE"]).read_bytes()).hexdigest()
+        self.assertIn(f"rootfs image sha256: PASS {image_hash}", verification)
         provenance = (out / "QEMU-PROVENANCE.txt").read_text()
         self.assertIn(f"source_commit={env['BUILD_COMMIT']}\n", provenance)
         self.assertIn(f"anki_commit={ANKI_COMMIT}\n", provenance)
         self.assertIn("rootfs_manifest_id=pw6-5.19.6-rootfs-manifest.json\n", provenance)
         self.assertIn("rootfs_manifest_sha256=", provenance)
         self.assertIn("rootfs_verified=true\n", provenance)
+        self.assertIn(f"rootfs_image_sha256={image_hash}\n", provenance)
         self.assertNotIn(f"rootfs={rootfs}\n", provenance)
         self.assertNotIn(str(rootfs), provenance)
+        self.assertNotIn(env["ROOTFS_IMAGE"], provenance)
         for name in ("libanki-kindle.so", "kap-app", "kap-audio", "kap-sync"):
             self.assertIn(f"{name}_sha256=", provenance)
+
+    def test_missing_rootfs_image_is_rejected(self) -> None:
+        td, project, armhf, rootfs, out, env = self.make_fixture()
+        self.addCleanup(td.cleanup)
+        env.pop("ROOTFS_IMAGE")
+        result = self.run_gate(env)
+        self.assertEqual(result.returncode, 66, result.stderr + result.stdout)
+        self.assertIn("ROOTFS_IMAGE=<checksum-verified PW6 rootfs image> is required", result.stderr)
+
+    def test_nonfile_rootfs_image_is_rejected(self) -> None:
+        td, project, armhf, rootfs, out, env = self.make_fixture()
+        self.addCleanup(td.cleanup)
+        env["ROOTFS_IMAGE"] = str(Path(td.name) / "missing.img")
+        result = self.run_gate(env)
+        self.assertEqual(result.returncode, 66, result.stderr + result.stdout)
+        self.assertIn("PW6 rootfs image is missing or not a regular file", result.stderr)
 
     def test_stale_armhf_source_commit_is_rejected(self) -> None:
         td, project, armhf, rootfs, out, env = self.make_fixture()
