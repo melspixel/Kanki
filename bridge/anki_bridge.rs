@@ -325,7 +325,8 @@ pub extern "C" fn kanki_set_current_deck_json(
 ) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        core.backend
+        let _changes = core
+            .backend
             .with_col(|col| DecksService::set_current_deck(col, DeckId { did: deck_id }))
             .map_err(|err| err.to_string())?;
         core.current = None;
@@ -341,7 +342,8 @@ pub extern "C" fn kanki_set_deck_collapsed_json(
 ) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        core.backend
+        let _changes = core
+            .backend
             .with_col(|col| {
                 DecksService::set_deck_collapsed(
                     col,
@@ -469,7 +471,8 @@ pub extern "C" fn kanki_answer_json(
             .elapsed()
             .as_millis()
             .min(u32::MAX as u128) as u32;
-        core.backend
+        let _changes = core
+            .backend
             .with_col(|col| {
                 SchedulerService::answer_card(
                     col,
@@ -501,7 +504,8 @@ pub extern "C" fn kanki_bury_current_json(core: *mut KankiCore) -> *mut c_char {
             .current
             .clone()
             .ok_or("no current card is available to bury")?;
-        core.backend
+        let _changes = core
+            .backend
             .with_col(|col| {
                 SchedulerService::bury_or_suspend_cards(
                     col,
@@ -522,7 +526,8 @@ pub extern "C" fn kanki_bury_current_json(core: *mut KankiCore) -> *mut c_char {
 pub extern "C" fn kanki_health_json(core: *mut KankiCore) -> *mut c_char {
     response((|| {
         let core = core_mut(core)?;
-        core.backend
+        let _progress = core
+            .backend
             .latest_progress()
             .map_err(|err| err.to_string())?;
         Ok(serde_json::json!({"backend": "responsive"}))
