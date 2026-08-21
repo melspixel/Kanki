@@ -13,7 +13,7 @@ mkdir -p "$DIR"
 if ! mkdir "$LOCK" 2>/dev/null; then
     PID=$(cat "$LOCK/pid" 2>/dev/null || true)
     if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-        if [ -x "$DIR/kanki-raise" ] && "$DIR/kanki-raise" >>"$LOG" 2>&1; then
+        if [ -x "$DIR/kanki-raise" ] && DISPLAY="${DISPLAY:-:0}" "$DIR/kanki-raise" >>"$LOG" 2>&1; then
             printf '%s existing Kanki window reactivated pid=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$PID" >>"$LOG"
         else
             printf '%s duplicate launch found live pid=%s but window reactivation failed\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$PID" >>"$LOG"
