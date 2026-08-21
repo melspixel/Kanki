@@ -100,6 +100,8 @@ jobs:
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             device/kanki_sync_cli.c -ldl -o kanki-sync
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror \
+            -ffreestanding -fno-builtin -fno-stack-protector -nostdlib \
+            -Wl,-e,_start -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3 \
             device/kanki_raise.c -ldl -o kanki-raise
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -D_XOPEN_SOURCE=700 -O2 -Wall -Wextra -Werror \
             -Idevice/audio device/audio/kanki_audio_server.c -o kanki-audio -lm -latomic
@@ -107,6 +109,7 @@ jobs:
             -O2 -Wall -Wextra -Werror -DKGP_NATIVE_GLIBC \
             third_party/audiobook-koplugin/kindle/gst-play.c -o kanki-gst-play -ldl
           file kanki-device kanki-sync kanki-raise kanki-audio kanki-gst-play
+          ! arm-kindlehf-linux-gnueabihf-nm -D kanki-raise | grep -E ' U (malloc|free|memcpy|memset|fprintf|getenv|setenv|write)$'
       - name: Assemble self-identifying installation
         run: |
           ROOT=package
@@ -151,7 +154,7 @@ jobs:
           grep -q 'kanki://sync/run?mode=normal' "$EXT/assets/device/sync.html"
           grep -q 'kanki://sync/run?mode=upload' "$EXT/assets/device/sync.html"
           grep -q 'kanki://sync/run?mode=download' "$EXT/assets/device/sync.html"
-          grep -q 'kanki-raise' "$EXT/kanki-launch.sh"
+          grep -q 'DISPLAY="${DISPLAY:-:0}"' "$EXT/kanki-launch.sh"
           (cd "$EXT" && sha256sum -c MANIFEST.sha256)
           unzip -l Kanki-rewrite-hw3.zip | tee package-contents.txt
           ! unzip -l Kanki-rewrite-hw3.zip | grep -E 'extensions/ranki|LD_PRELOAD|collection\.anki2|config\.ini$'
