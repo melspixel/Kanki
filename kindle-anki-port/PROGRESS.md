@@ -17,15 +17,15 @@ Updated: 2026-08-22 UTC
 | Audio | implementation integrated; hardware pending | GStreamer/`mixersink` worker self-test passes; real Bluetooth/audible routing requires PW6 |
 | Sync | deterministic worker fixture green; lifecycle hardened; live account pending | real worker owns the collection lock; wrapper-death and zombie-owner stale-lock windows have deterministic regressions |
 | Launcher / collection ownership | deterministic fixture green; lifecycle hardened | double launch, reviewer/sync exclusion, signal cleanup, owner-checked release and zombie-owner reclamation covered |
-| Build provenance | **hardened; targeted green** | host and ARMHF gates now require clean canonical project HEAD + exact pinned Anki HEAD before injection/Cargo; 11 targeted cases pass |
+| Build provenance | **hardened; targeted green** | host and ARMHF gates require clean canonical project HEAD + exact pinned Anki HEAD before injection/Cargo; 11 targeted cases pass |
 | Host release build | **green checkpoint** | release `libanki.so` exports the named `kap_*` ABI; must be rerun after provenance hardening |
 | ARMHF cross-build | **green checkpoint** | `kap-app`, `kap-audio`, `kap-sync`, `libanki-kindle.so` produced for ARMv7 hard-float; must be rerun after provenance hardening |
 | ABI/GLIBC audit | **green against KindleHF sysroot** | workers require GLIBC_2.4; backend max GLIBC_2.18; target PW6 oracle ceiling GLIBC_2.35 |
 | Package audit | **green checkpoint; privacy/provenance gates hardened** | stale ZIP checkpoint exists; current auditor rejects user/transient state and stale ARMHF provenance |
-| QEMU user mode | static ARM sanity green | QEMU 8.2.2 runs a static ARMHF sanity executable |
+| QEMU user mode | static ARM sanity green; release provenance hardened | static ARM sanity passes; exact-rootfs gate now rejects stale ARMHF provenance and noncanonical manifest bytes |
 | Exact PW6 runtime provenance | pinned | firmware/rootfs/loader/libc/WebKit hashes committed |
 | Rootfs preparation pipeline | **implemented and fixture-green** | canonical Python verifier plus shell acquisition helper validate pinned SHA-256/MD5 and official Amazon sources before extraction |
-| Exact-rootfs QEMU smoke | pending external runtime bytes | preparation/verifier/smoke harnesses exist; exact firmware/rootfs bytes are not currently mounted |
+| Exact-rootfs QEMU smoke | pending external runtime bytes | provenance policy is 6/6 fixture-green; exact firmware/rootfs bytes are not currently mounted |
 | Reproducible workflow | updated | canonical workflow consumes ordinary source; Actions quota is not used for iterative development |
 | Final GitHub binary persistence | incomplete | final canonical-head package/reports must be rebuilt and stored durably |
 | PW6 hardware acceptance | not started | real e-ink, touch, framework, Bluetooth, suspend and repeated relaunch evidence required |
@@ -42,6 +42,7 @@ Updated: 2026-08-22 UTC
 8. Package privacy checks now reject pre-sync/pre-upgrade `*.anki2` backups, `collection.media`, `.sync-request`, `.opened-build`, operation-lock state and transfer PID files in addition to the previous credential/log/PID checks.
 9. Package provenance regressions now require current ARMHF `source_commit`, pinned `anki_commit` and `ARMHF gates: PASS` before a ZIP can be assembled.
 10. Host-backend and ARMHF build entry points now prove the project is a clean Git checkout at the declared `BUILD_COMMIT` and the Anki base checkout `HEAD` exactly matches `upstream.lock.json` before injection/Cargo. This closes the remaining path where dirty or wrong-base source bytes could generate deceptively green/stamped checkpoint artifacts.
+11. The exact-rootfs QEMU release gate now proves that the tested ARMHF outputs belong to the same `BUILD_COMMIT`/pinned Anki identity and that the runtime manifest bytes equal the committed PW6 5.19.6 manifest; its provenance fixture is part of static gates.
 
 ## Verified evidence
 
@@ -130,6 +131,30 @@ testenv/scripts/run-host-backend-gates.sh e58c1271f87815221faa5eb165c3fa96acb97d
 
 Both regressions are wired into `run-static-gates.sh`. Full official Anki and KindleHF compilation was not claimed in this continuation because the direct VM could not resolve `github.com`; see `docs/VM_BUILD_PROVENANCE_HARDENING_20260822.md`.
 
+### Exact-rootfs QEMU provenance regression
+
+Before the latest hardening, `run-qemu-smoke.sh` could accept stale ARMHF outputs from a different source commit and an arbitrary `ROOTFS_MANIFEST` override. The gate now requires a clean project at the declared build commit, `ARMHF gates: PASS`, matching ARMHF `source_commit`/pinned `anki_commit`, and rootfs-manifest bytes identical to the canonical committed PW6 5.19.6 manifest.
+
+It also persists rootfs-verifier output and hashes the manifest and four ARMHF binaries into `QEMU-PROVENANCE.txt`.
+
+Targeted results:
+
+```text
+test_qemu_provenance.py             6/6 PASS
+KAP_QEMU_PROVENANCE_20260822.log SHA-256
+1d217650cb8130e61a114c85fb808de0251ae308f257b35100065e57f7f1e21e
+```
+
+Current blobs:
+
+```text
+testenv/scripts/run-qemu-smoke.sh   0cfd348700e9f28a372e91864a1670cd97587e83
+tests/test_qemu_provenance.py       160f3e08b55638857876aabfffc1b09a99e65fa6
+testenv/scripts/run-static-gates.sh df2b9f4c476f1478c15555ed619230ea2d79433c
+```
+
+Detailed report: `docs/VM_QEMU_PROVENANCE_HARDENING_20260822.md`.
+
 ### Package privacy regression
 
 The canonical package auditor and policy now reject transient/user state including `*.anki2`, `collection.media/**`, `.kap-operation.lock/**`, `.kap-operation.lock.pid.*`, `.sync-request`, `.opened-build`, `*.pid` and `*.log`.
@@ -167,7 +192,7 @@ Kindle-Anki-Port-PW6-armhf.zip
 SHA-256 9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225
 ```
 
-It passed the then-current internal manifest, required-file, privacy/state and ZIP-integrity checks. It is explicitly stale for release provenance because it predates the lifecycle/rootfs-helper/package/build-provenance hardening. A new final package must be regenerated from the eventual release head.
+It passed the then-current internal manifest, required-file, privacy/state and ZIP-integrity checks. It is explicitly stale for release provenance because it predates the lifecycle/rootfs-helper/package/build/QEMU-provenance hardening. A new final package must be regenerated from the eventual release head.
 
 ### Rootfs preparation checkpoint
 
@@ -207,11 +232,11 @@ Detailed reports: `docs/VM_ROOTFS_PIPELINE_20260822.md` and `docs/VM_ROOTFS_HELP
 
 ### 1. Final canonical-head provenance
 
-The complete static/backend/APKG/ARMHF/package sequence must be rerun from a clean VM checkout matching the latest canonical branch head. Existing green results are valid checkpoints but are not the immutable final release provenance. The newest host/ARMHF gates will now fail closed if the project tree is dirty or the Anki base checkout is not exactly the pinned commit.
+The complete static/backend/APKG/ARMHF/QEMU/package sequence must be rerun from a clean VM checkout matching the latest canonical branch head. Existing green results are valid checkpoints but are not the immutable final release provenance. The host/ARMHF/QEMU release gates now fail closed when source or pinned-input identity does not match the release head.
 
 ### 2. Exact PW6 runtime bytes
 
-The firmware/rootfs identity and extraction pipeline are pinned, but the VM does not currently contain the exact checksum-matching PW6 5.19.6 firmware/rootfs bytes. Oracle reports alone are not accepted as runtime input. Once supplied privately, the pipeline can prepare the rootfs and run backend/audio/sync QEMU smoke.
+The firmware/rootfs identity and extraction pipeline are pinned, but the VM does not currently contain the exact checksum-matching PW6 5.19.6 firmware/rootfs bytes. Oracle reports alone are not accepted as runtime input. Once supplied privately, the pipeline can prepare the rootfs and run the newly provenance-bound backend/audio/sync QEMU smoke against fresh ARMHF outputs.
 
 ### 3. Hardware-only acceptance
 
@@ -219,19 +244,21 @@ No VM can validate physical e-ink artifacts, real touch/IME focus, Amazon framew
 
 ## Ordered next actions
 
-1. Materialize the then-current canonical GitHub head in a network-capable build VM and run the complete static gate, including zombie-lock, rootfs-helper, package-provenance, ARMHF-provenance and host-backend-provenance regressions.
-2. From that same clean commit and exact Anki 26.08.1 checkout, rerun full official `rslib`, five-real-APKG integration, ARMHF cross-build, ABI/GLIBC audit and package audit.
+1. Materialize the then-current canonical GitHub head in a network-capable build VM and run the complete static gate, including zombie-lock, rootfs-helper, package-provenance, ARMHF-provenance, host-backend-provenance and QEMU-provenance regressions.
+2. From that same clean commit and exact Anki 26.08.1 checkout, rerun full official `rslib`, five-real-APKG integration, ARMHF cross-build and ABI/GLIBC audit.
 3. Obtain the checksum-matching PW6 5.19.6 firmware as a private input and run:
 
    ```text
    prepare-pw6-rootfs.py -> verify-pw6-rootfs.py -> run-qemu-smoke.sh
    ```
 
-4. Persist the final canonical-head installer, SHA-256, manifest, package listing, ABI/GLIBC report, build provenance and complete test report durably on GitHub.
-5. Open the hardware-in-the-loop task only after every non-hardware gate is green and persisted.
+   `run-qemu-smoke.sh` must consume the fresh ARMHF outputs from step 2 and will reject stale source/Anki provenance or a noncanonical rootfs manifest.
+4. Run `package-and-audit.sh` from that same canonical source/ARMHF identity.
+5. Persist the final installer, SHA-256, internal manifest, package listing, ABI/GLIBC report, ARMHF/QEMU provenance, rootfs-verification log and complete test report durably on GitHub.
+6. Open the hardware-in-the-loop task only after every non-hardware gate is green and persisted.
 
 ## Completion definition
 
-Software release completion requires complete maintainable ordinary source in GitHub; a green reproducible host and ARMHF build from the current clean canonical source; exact-rootfs QEMU smoke; ABI/GLIBC and package-policy audits; and `Kindle-Anki-Port-PW6-armhf.zip` plus SHA-256, manifest, contents and test report persisted durably on GitHub.
+Software release completion requires complete maintainable ordinary source in GitHub; a green reproducible host and ARMHF build from the current clean canonical source; exact-rootfs QEMU smoke bound to that release provenance; ABI/GLIBC and package-policy audits; and `Kindle-Anki-Port-PW6-armhf.zip` plus SHA-256, manifest, contents and complete reports persisted durably on GitHub.
 
 PW6 hardware acceptance is a separate final gate and must be recorded from actual device evidence rather than inferred from VM, mocks or CI.
