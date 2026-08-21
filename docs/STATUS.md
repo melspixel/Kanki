@@ -27,10 +27,11 @@ The rewrite is no longer only an architecture/bootstrap skeleton. The branch con
 - source-owned sync CLI/lifecycle separation;
 - source-owned loopback audio service and pinned native `mixersink` helper;
 - source-owned renderer diagnostics daemon on loopback `127.0.0.1:17393`;
-- always-created `render-debug/` directory with privacy-safe geometry/style metrics;
-- opt-in bounded raw HTML/CSS/AV capture controlled by `enable-render-capture`;
+- always-created/rotated `render-debug/` plus one previous-session directory;
+- privacy-safe bounded geometry/style metrics;
+- opt-in server- and client-bounded raw HTML/CSS/AV capture controlled by `enable-render-capture`;
 - duplicate-instance/reactivation helper;
-- build identity, manifest-oriented packaging and rollback boundaries;
+- mandatory build identity and manifest verification for launch and sync;
 - redacted diagnostic-bundle script and Kindle-home report shortcut;
 - handoff, architecture, install, test and ADR documentation;
 - host, Anki bridge, ARMHF, device, audio, CSS and package workflows.
@@ -41,13 +42,15 @@ Implementation presence is not the same as verification. Issue #11 remains the c
 
 - Added `docs/RESUME.md` as a zero-context maintainer entry point.
 - Expanded `docs/HANDOFF.md` into an operational handoff contract.
-- Updated README/INSTALL/issue #11/PR #10 to distinguish implemented from verified.
+- Updated README/INSTALL/TESTING/issue #11/PR #10 to distinguish implemented from verified.
+- Added `tools/run_host_gates.sh` as a one-command local host verification path.
 - Added a minimal GitHub Actions runner probe to separate CI infrastructure failures from product failures.
 - Replaced floating KindleHF `latest` downloads with checksum-pinned koxtoolchain `2026.08` (`kindlehf.tar.zst`, SHA-256 `8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0`).
 - Added `tools/install_kindlehf_toolchain.sh` and made CI/package workflows use it.
 - Added koxtoolchain identity to `BUILD.json` generation and third-party notices.
 - Corrected the package recipe so `kanki-report.sh`, `kanki-diag` and renderer diagnostic runtime assets are actually included.
-- Removed repeated idle gap-layout work from the old-WebKit CSS runtime; compatibility layout is now event/change driven rather than reapplied every 100 ms when nothing changed.
+- Added renderer diagnostics contract tests and server-side storage/rate bounds.
+- Removed repeated idle gap-layout work from the old-WebKit CSS runtime; compatibility layout is event/change driven rather than reapplied every 100 ms when nothing changed.
 
 None of the above is marked verified on the latest commit until runners execute real steps.
 
@@ -68,7 +71,7 @@ These results are engineering evidence, but they do **not** close the current ca
 
 ## Current blocker — isolated from product source
 
-The zero-step Actions failure remains reproducible after the latest source/documentation work. On PR head `85b1f62ab9e8e5630f9b1a9d64ea0639275c9ead`, minimal **Actions runner probe** run `32470385718`, job `96735736090`, completed `failure` with `steps = null`. All normal workflows failed in the same pre-step manner.
+The zero-step Actions failure remains reproducible on the current implementation line. On PR head `5c638b7a0cd39ce1ecd29e9daccc156fbbea6a9a`, minimal **Actions runner probe** run `32471193305`, job `96738122462`, completed `failure` with `steps = null`. The seven normal workflows triggered from that same head also failed before useful execution.
 
 The probe contains no Kanki build dependencies and only requests an `ubuntu-latest` runner with a trivial shell step. This isolates the immediate blocker to GitHub Actions job execution/runner/account/repository infrastructure, not to a Kanki compiler/test failure.
 
@@ -76,13 +79,19 @@ Until the probe enters its first real step, do not change product source merely 
 
 ## Renderer diagnostics behavior now designed into the rewrite
 
-Normal launches must create:
+Normal launches create a fresh:
 
 ```text
 /mnt/us/extensions/kanki/render-debug/
 ```
 
-Default metrics contain identifiers, side, body class, viewport/document geometry, DPR and bounded computed font/display/geometry information, but no element text. The standard report may include these metrics.
+and retain at most one previous session at:
+
+```text
+/mnt/us/extensions/kanki/render-debug.previous/
+```
+
+Default metrics contain identifiers, side, body class, viewport/document geometry, DPR and bounded computed font/display/geometry information, but no element text. Client and server both bound the amount of diagnostic data. The standard redacted report may include current and previous metrics.
 
 Raw HTML/CSS/AV capture is off by default because it can contain note content. It is enabled only by the sentinel:
 
@@ -90,7 +99,7 @@ Raw HTML/CSS/AV capture is off by default because it can contain note content. I
 /mnt/us/extensions/kanki/enable-render-capture
 ```
 
-Raw capture is bounded to the first 12 renders and is never included automatically in the redacted report. Diagnostic startup/directory failure is a launcher error rather than a silently ignored condition.
+Raw capture is bounded to the first 12 render sides and an 8 MiB server-side session cap. It is never included automatically in the redacted report. Diagnostic startup/directory failure is a launcher error rather than a silently ignored condition.
 
 ## What is not yet verified/closed
 
