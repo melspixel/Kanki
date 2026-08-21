@@ -3,8 +3,8 @@
 
 The driver deliberately delegates build semantics to the maintained gate scripts. It
 never substitutes a narrow cargo test for the official-backend gate, never packages
-before exact-rootfs QEMU has passed for the exact ARMHF bytes, and never marks
-physical PW6 acceptance.
+before all non-hardware semantic gates and exact-rootfs QEMU have passed for the
+exact ARMHF bytes, and never marks physical PW6 acceptance.
 """
 from __future__ import annotations
 
@@ -268,21 +268,22 @@ def main() -> int:
         if path.is_file():
             report["artifacts"][f"armhf/{name}"] = sha256(path)
 
-    missing: list[str] = []
+    semantic_missing: list[str] = []
     if len(unique_apkgs) < 5:
-        missing.append("five-real-APKG integration")
+        semantic_missing.append("five-real-APKG integration")
     if not typed_apkg:
-        missing.append("typed-APKG integration")
-    if not args.rootfs:
-        missing.append("exact-rootfs QEMU smoke")
-        missing.append("final package")
+        semantic_missing.append("typed-APKG integration")
 
     # Final packaging is intentionally impossible until exact-rootfs QEMU has
     # passed for the exact ARMHF bytes. If the private rootfs is absent, stop at
     # a durable ARMHF checkpoint rather than constructing a final-looking ZIP.
     if not args.rootfs:
         report["result"] = "armhf-checkpoint-passed"
-        report["release_gate_missing"] = missing
+        report["release_gate_missing"] = [
+            *semantic_missing,
+            "exact-rootfs QEMU smoke",
+            "final package",
+        ]
         report["completed_utc_epoch"] = time.time()
         write_report(report_path, report)
         return 0
@@ -311,9 +312,19 @@ def main() -> int:
         qemu_exact / "QEMU-PROVENANCE.txt"
     )
 
-    # A package can be produced only after the exact-rootfs gate above. The
-    # package script independently rechecks the QEMU source/Anki/manifest/binary
-    # hashes, so stale evidence cannot be relabelled by this orchestration layer.
+    # A final-looking installer is also withheld when the required real-APKG
+    # semantic coverage is incomplete. This makes the orchestration layer's
+    # artifact boundary match the documented release definition.
+    if semantic_missing:
+        report["result"] = "qemu-checkpoint-passed"
+        report["release_gate_missing"] = [*semantic_missing, "final package"]
+        report["completed_utc_epoch"] = time.time()
+        write_report(report_path, report)
+        return 0
+
+    # All non-package semantic/runtime gates are now green. The package script
+    # independently rechecks QEMU source/Anki/manifest/binary hashes so stale
+    # evidence cannot be relabelled by this orchestration layer.
     if not gate(
         "package-audit",
         ["bash", str(project / "testenv/scripts/package-and-audit.sh")],
@@ -336,17 +347,8 @@ def main() -> int:
             if path.is_file()
         }
 
-    if len(unique_apkgs) < 5:
-        missing.append("five-real-APKG integration") if "five-real-APKG integration" not in missing else None
-    if not typed_apkg:
-        missing.append("typed-APKG integration") if "typed-APKG integration" not in missing else None
-
-    if missing:
-        report["result"] = "qemu-package-checkpoint-passed"
-        report["release_gate_missing"] = missing
-    else:
-        report["result"] = "non-hardware-release-gates-passed"
-        report["release_gate_missing"] = []
+    report["result"] = "non-hardware-release-gates-passed"
+    report["release_gate_missing"] = []
     report["completed_utc_epoch"] = time.time()
     write_report(report_path, report)
     return 0
