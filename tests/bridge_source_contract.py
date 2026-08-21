@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -114,5 +115,27 @@ require(
     "!config.skip_question_when_replaying_answer",
     "answer-side question replay must come from the Anki deck config",
 )
+
+# Every public bridge function declared for native consumers must be required
+# by both native-host and ARMHF package export gates. A single successful grep
+# match is not proof that the complete runtime ABI is present.
+header_text = "\n".join(
+    (ROOT / path).read_text(encoding="utf-8")
+    for path in ("bridge/kanki_bridge.h", "bridge/kanki_sync_bridge.h")
+)
+declared_exports = set(re.findall(r"\b(kanki_[a-z0-9_]+)\s*\(", header_text))
+required_exports = {
+    line.strip()
+    for line in (ROOT / "bridge/required_exports.txt").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+}
+if declared_exports != required_exports:
+    missing = sorted(declared_exports - required_exports)
+    stale = sorted(required_exports - declared_exports)
+    raise SystemExit(f"required ABI export list drifted: missing={missing}, stale={stale}")
+for script_path in ("tools/run_anki_bridge_host.sh", "tools/build_kindle_package.sh"):
+    script = (ROOT / script_path).read_text(encoding="utf-8")
+    if "done < bridge/required_exports.txt" not in script:
+        raise SystemExit(f"{script_path} must fail closed over the canonical ABI export list")
 
 print("typed bridge source contract: pass")

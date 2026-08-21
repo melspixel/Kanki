@@ -38,6 +38,7 @@ docker run --rm \
     -e CARGO_HOME=/cache/cargo \
     -e HOME=/cache/home \
     -e KANKI_OUT_DIR=/work/out/local-kindle \
+    -e KANKI_ALLOW_DIRTY="${KANKI_ALLOW_DIRTY:-0}" \
     -v "$ROOT:/work" \
     -v kanki-local-cargo:/cache/cargo \
     -v kanki-local-home:/cache/home \

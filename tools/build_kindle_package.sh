@@ -236,7 +236,17 @@ if unzip -l "$OUT_DIR/$PACKAGE_NAME.zip" \
     echo "kanki-package: archive contains a forbidden legacy/runtime data path" >&2
     exit 1
 fi
-nm -D "$EXT/libanki-kanki.so" | grep -E ' kanki_(core_new|open_collection_json|next_card_json|prepare_answer_json|answer_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee "$OUT_DIR/package-exports.txt"
+nm -D --defined-only "$EXT/libanki-kanki.so" > "$SCRATCH/backend-all-exports.txt"
+: > "$OUT_DIR/package-exports.txt"
+while IFS= read -r symbol; do
+    [ -n "$symbol" ] || continue
+    if ! grep -E " [TW] ${symbol}$" "$SCRATCH/backend-all-exports.txt" \
+        >> "$OUT_DIR/package-exports.txt"; then
+        echo "kanki-package: required ABI export missing: $symbol" >&2
+        exit 1
+    fi
+done < bridge/required_exports.txt
+cat "$OUT_DIR/package-exports.txt"
 for file in "$EXT/libanki-kanki.so" "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-diag" "$EXT/kanki-raise" "$EXT/kanki-audio" "$EXT/kanki-gst-play"; do
     readelf --version-info "$file" | grep -oE 'GLIBC_[0-9.]+' || true
 done | sort -Vu | tee "$OUT_DIR/package-glibc.txt"

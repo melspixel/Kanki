@@ -52,7 +52,9 @@ sh -n scripts/kanki-report.sh
 sh -n tools/install_kindlehf_toolchain.sh
 bash -n tools/run_anki_bridge_host.sh
 sh -n tools/local_anki_bridge_docker.sh
+sh -n tools/local_package_docker.sh
 python3 -c 'compile(open("tests/anki_bridge_integration.py", encoding="utf-8").read(), "tests/anki_bridge_integration.py", "exec")'
+python3 -c 'compile(open("tests/sync_bridge_integration.py", encoding="utf-8").read(), "tests/sync_bridge_integration.py", "exec")'
 
 printf '%s\n' '== host unit/integration =='
 cargo test --workspace

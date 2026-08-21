@@ -44,6 +44,7 @@ if [ "$(git -C third_party/anki rev-parse HEAD)" != "$ANKI_COMMIT" ]; then
 fi
 
 SCRATCH=$(mktemp -d /tmp/kanki-host-anki.XXXXXX)
+SYNC_SERVER_PID=
 ANKI_LIB_RS=third_party/anki/rslib/src/lib.rs
 ANKI_CARGO=third_party/anki/rslib/Cargo.toml
 ANKI_BRIDGE_RS=third_party/anki/rslib/src/kanki_bridge.rs
@@ -53,6 +54,10 @@ cp "$ANKI_LIB_RS" "$SCRATCH/lib.rs.original"
 cp "$ANKI_CARGO" "$SCRATCH/Cargo.toml.original"
 
 cleanup() {
+    if [ -n "$SYNC_SERVER_PID" ]; then
+        kill "$SYNC_SERVER_PID" 2>/dev/null || true
+        wait "$SYNC_SERVER_PID" 2>/dev/null || true
+    fi
     cp "$SCRATCH/lib.rs.original" "$ANKI_LIB_RS" 2>/dev/null || true
     cp "$SCRATCH/Cargo.toml.original" "$ANKI_CARGO" 2>/dev/null || true
     rm -f "$ANKI_BRIDGE_RS" "$ANKI_SYNC_RS" "$ANKI_FIXTURE_RS"
@@ -63,6 +68,7 @@ trap cleanup EXIT INT TERM
 
 mkdir -p "$OUT_DIR"
 rm -f "$OUT_DIR/bridge-smoke.txt" "$OUT_DIR/bridge-integration.txt" \
+      "$OUT_DIR/sync-integration.txt" \
       "$OUT_DIR/bridge-exports.txt" \
       "$OUT_DIR/bridge-dynamic.txt" "$OUT_DIR/bridge-library.sha256"
 
@@ -104,6 +110,7 @@ printf '%s\n' '== compile typed Anki host library =='
 (
     cd third_party/anki
     cargo build -p anki --release --features rustls --lib --bin kanki_fixture
+    cargo build -p anki-sync-server --release
 )
 
 LIB=third_party/anki/target/release/libanki.so
@@ -132,13 +139,70 @@ python3 tests/anki_bridge_integration.py \
     | tee "$OUT_DIR/bridge-integration.txt"
 grep -q '^anki bridge integration: pass$' "$OUT_DIR/bridge-integration.txt"
 
-printf '%s\n' '== audit host ABI exports =='
-nm -D "$LIB" \
-    | grep -E ' kanki_(build_info_json|string_free|core_new|open_collection_json|deck_tree_json|health_json|next_card_json|prepare_answer_json|answer_json|bury_current_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' \
-    | tee "$OUT_DIR/bridge-exports.txt"
-for symbol in kanki_string_free kanki_health_json kanki_prepare_answer_json; do
-    grep -q " ${symbol}$" "$OUT_DIR/bridge-exports.txt"
+printf '%s\n' '== run controlled normal/full/media sync integration =='
+SYNC_FIXTURE_USER=kanki-sync-fixture
+SYNC_FIXTURE_PASSWORD=kanki-sync-fixture-password
+SYNC_SERVER_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+SYNC_ENDPOINT="http://127.0.0.1:${SYNC_SERVER_PORT}/"
+SYNC_SERVER=third_party/anki/target/release/anki-sync-server
+mkdir -p "$SCRATCH/sync-server" "$SCRATCH/client-b-media"
+SYNC_BASE="$SCRATCH/sync-server" \
+SYNC_HOST=127.0.0.1 \
+SYNC_PORT="$SYNC_SERVER_PORT" \
+SYNC_USER1="$SYNC_FIXTURE_USER:$SYNC_FIXTURE_PASSWORD" \
+RUST_LOG=anki=error \
+    "$SYNC_SERVER" >"$SCRATCH/sync-server.log" 2>&1 &
+SYNC_SERVER_PID=$!
+SYNC_SERVER_READY=0
+SYNC_SERVER_ATTEMPT=0
+while [ "$SYNC_SERVER_ATTEMPT" -lt 100 ]; do
+    if SYNC_HOST=127.0.0.1 SYNC_PORT="$SYNC_SERVER_PORT" \
+        "$SYNC_SERVER" --healthcheck >/dev/null 2>&1; then
+        SYNC_SERVER_READY=1
+        break
+    fi
+    if ! kill -0 "$SYNC_SERVER_PID" 2>/dev/null; then
+        break
+    fi
+    SYNC_SERVER_ATTEMPT=$((SYNC_SERVER_ATTEMPT + 1))
+    sleep 0.1
 done
+if [ "$SYNC_SERVER_READY" != 1 ]; then
+    echo 'kanki-host-anki: controlled sync server did not become ready' >&2
+    exit 73
+fi
+KANKI_SYNC_FIXTURE_USER="$SYNC_FIXTURE_USER" \
+KANKI_SYNC_FIXTURE_PASSWORD="$SYNC_FIXTURE_PASSWORD" \
+python3 tests/sync_bridge_integration.py \
+    "$LIB" \
+    "$SCRATCH/collection.anki2" "$SCRATCH/media" "$SCRATCH/media.db2" \
+    "$SCRATCH/client-b.anki2" "$SCRATCH/client-b-media" "$SCRATCH/client-b-media.db2" \
+    "$SYNC_ENDPOINT" \
+    | tee "$OUT_DIR/sync-integration.txt"
+grep -q '^sync bridge integration: pass$' "$OUT_DIR/sync-integration.txt"
+SYNC_FIXTURE_HKEY=$(python3 -c 'import hashlib,sys; print(hashlib.sha1((sys.argv[1] + ":" + sys.argv[2]).encode()).hexdigest())' "$SYNC_FIXTURE_USER" "$SYNC_FIXTURE_PASSWORD")
+for SYNC_SECRET in "$SYNC_FIXTURE_USER" "$SYNC_FIXTURE_PASSWORD" "$SYNC_FIXTURE_HKEY"; do
+    if grep -Fq -- "$SYNC_SECRET" "$OUT_DIR/sync-integration.txt" "$SCRATCH/sync-server.log"; then
+        echo 'kanki-host-anki: sync evidence contains credential material' >&2
+        exit 74
+    fi
+done
+kill "$SYNC_SERVER_PID" 2>/dev/null || true
+wait "$SYNC_SERVER_PID" 2>/dev/null || true
+SYNC_SERVER_PID=
+
+printf '%s\n' '== audit host ABI exports =='
+nm -D --defined-only "$LIB" > "$SCRATCH/bridge-all-exports.txt"
+: > "$OUT_DIR/bridge-exports.txt"
+while IFS= read -r symbol; do
+    [ -n "$symbol" ] || continue
+    if ! grep -E " [TW] ${symbol}$" "$SCRATCH/bridge-all-exports.txt" \
+        >> "$OUT_DIR/bridge-exports.txt"; then
+        echo "kanki-host-anki: required ABI export missing: $symbol" >&2
+        exit 75
+    fi
+done < bridge/required_exports.txt
+cat "$OUT_DIR/bridge-exports.txt"
 readelf -d "$LIB" > "$OUT_DIR/bridge-dynamic.txt"
 sha256sum "$LIB" > "$OUT_DIR/bridge-library.sha256"
 
