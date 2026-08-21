@@ -7,6 +7,7 @@ Use this page to avoid treating overlapping project documents as separate projec
 - `CODEX_HANDOFF.md` — zero-context operational handoff for a local coding agent/maintainer; includes repository cleanup plan and local-build sequence.
 - `STATUS.md` — current implemented/verified/blocked state. This is the answer to “what is happening now?”.
 - `RESUME.md` — legacy zero-context resume guide retained while the rewrite is in progress; keep consistent with `CODEX_HANDOFF.md` until they are consolidated.
+- `REPOSITORY_CLEANUP.md` — isolated repository-organization plan, branch containment audit and retirement rules. Cleanup work targets `rewrite-v1`, never `main` directly.
 
 ## Design and parity
 
@@ -32,6 +33,7 @@ Avoid repeating the same state in every document:
 
 - current state belongs in `STATUS.md`;
 - first-run/takeover procedure belongs in `CODEX_HANDOFF.md`;
+- repository cleanup/branch retirement belongs in `REPOSITORY_CLEANUP.md`;
 - architecture belongs in `ARCHITECTURE.md`/ADRs;
 - local build belongs in `LOCAL_BUILD.md`;
 - verification belongs in `TESTING.md` + issue #11;
