@@ -9,6 +9,12 @@ PID_FILE=${KAP_PID_FILE:-$APP/.kap.pid}
 APP_BIN=${KAP_APP_BIN:-$APP/kap-app}
 SYNC_BIN=${KAP_SYNC_BIN:-$APP/kap-sync}
 OP_LOCK=${KAP_OPERATION_LOCK_DIR:-$APP/.kap-operation.lock}
+LOCK_INIT_GRACE_ATTEMPTS=${KAP_LOCK_INIT_GRACE_ATTEMPTS:-100}
+
+case "$LOCK_INIT_GRACE_ATTEMPTS" in
+    ''|*[!0-9]*) LOCK_INIT_GRACE_ATTEMPTS=100 ;;
+    0) LOCK_INIT_GRACE_ATTEMPTS=1 ;;
+esac
 
 mkdir -p "$APP" "$DATA" "$DATA/backups"
 umask 077
@@ -38,7 +44,6 @@ verified_app_pid() {
 op_lock_owned=0
 lock_owner_pid=
 release_operation_lock() {
-    rm -f "${OP_LOCK}.pid.$$" 2>/dev/null || true
     if [ "$op_lock_owned" = 1 ]; then
         current_owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
         if [ -n "$lock_owner_pid" ] && [ "$current_owner" = "$lock_owner_pid" ]; then
@@ -53,7 +58,7 @@ write_lock_owner() {
     new_owner=$1
     current_owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
     [ "$current_owner" = "$lock_owner_pid" ] || return 1
-    tmp="${OP_LOCK}.pid.$$"
+    tmp="$OP_LOCK/pid.next.$$"
     printf '%s\n' "$new_owner" >"$tmp"
     if ! mv -f "$tmp" "$OP_LOCK/pid"; then
         rm -f "$tmp" 2>/dev/null || true
@@ -62,33 +67,54 @@ write_lock_owner() {
     lock_owner_pid=$new_owner
 }
 
+publish_sync_lock() {
+    printf '%s\n' "$$" >"$OP_LOCK/pid"
+    printf '%s\n' sync >"$OP_LOCK/mode"
+    op_lock_owned=1
+    lock_owner_pid=$$
+}
+
 acquire_sync_lock() {
-    if mkdir "$OP_LOCK" 2>/dev/null; then
-        printf '%s\n' "$$" >"$OP_LOCK/pid"
-        printf '%s\n' sync >"$OP_LOCK/mode"
-        op_lock_owned=1
-        lock_owner_pid=$$
-        return 0
-    fi
-    owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
-    mode=$(cat "$OP_LOCK/mode" 2>/dev/null || true)
-    case "$owner" in
-        ''|*[!0-9]*) owner_alive=0 ;;
-        *) if kill -0 "$owner" 2>/dev/null; then owner_alive=1; else owner_alive=0; fi ;;
-    esac
-    if [ "$owner_alive" = 0 ]; then
-        rm -f "$OP_LOCK/pid" "$OP_LOCK/mode" 2>/dev/null || true
-        rmdir "$OP_LOCK" 2>/dev/null || true
-        if mkdir "$OP_LOCK" 2>/dev/null; then
-            printf '%s\n' "$$" >"$OP_LOCK/pid"
-            printf '%s\n' sync >"$OP_LOCK/mode"
-            op_lock_owned=1
-            lock_owner_pid=$$
-            return 0
-        fi
-    fi
-    log "sync refused while operation lock is busy mode=${mode:-unknown} owner=${owner:-unknown}"
-    return 74
+    unknown_attempts=0
+    while ! mkdir "$OP_LOCK" 2>/dev/null; do
+        owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
+        mode=$(cat "$OP_LOCK/mode" 2>/dev/null || true)
+        case "$owner" in
+            ''|*[!0-9]*)
+                unknown_attempts=$((unknown_attempts + 1))
+                if [ "$unknown_attempts" -lt "$LOCK_INIT_GRACE_ATTEMPTS" ]; then
+                    sleep 0.02
+                    continue
+                fi
+                latest_owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
+                case "$latest_owner" in
+                    ''|*[!0-9]*)
+                        rm -rf "$OP_LOCK" 2>/dev/null || true
+                        unknown_attempts=0
+                        continue
+                        ;;
+                    *)
+                        unknown_attempts=0
+                        continue
+                        ;;
+                esac
+                ;;
+            *)
+                unknown_attempts=0
+                if kill -0 "$owner" 2>/dev/null; then
+                    log "sync refused while operation lock is busy mode=${mode:-unknown} owner=$owner"
+                    return 74
+                fi
+                latest_owner=$(cat "$OP_LOCK/pid" 2>/dev/null || true)
+                if [ "$latest_owner" = "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+                    rm -rf "$OP_LOCK" 2>/dev/null || true
+                    continue
+                fi
+                ;;
+        esac
+        sleep 0.02
+    done
+    publish_sync_lock
 }
 
 acquire_sync_lock
@@ -138,13 +164,35 @@ trap 'forward_signal TERM 15' TERM
 trap 'forward_signal INT 2' INT
 trap 'forward_signal HUP 1' HUP
 
-KAP_SYNC_HKEY="$hkey" KAP_SYNC_ENDPOINT="$endpoint" \
-    "$SYNC_BIN" --backend "$APP/libanki-kindle.so" \
-    --collection "$DATA/collection.anki2" \
-    --media "$DATA/collection.media" --media-db "$DATA/media.db2" "$@" &
+# Do not let the real sync worker touch the collection until the operation-lock
+# owner record has been transferred to its eventual PID. If this wrapper is
+# SIGKILLed in the fork/publication window, the gated child observes the dead
+# parent and exits without ever execing kap-sync.
+wrapper_pid=$$
+start_gate="$OP_LOCK/start.$wrapper_pid"
+(
+    while :; do
+        kill -0 "$wrapper_pid" 2>/dev/null || exit 75
+        if [ -f "$start_gate" ]; then
+            kill -0 "$wrapper_pid" 2>/dev/null || exit 75
+            break
+        fi
+        sleep 0.02
+    done
+    export KAP_SYNC_HKEY="$hkey" KAP_SYNC_ENDPOINT="$endpoint"
+    exec "$SYNC_BIN" --backend "$APP/libanki-kindle.so" \
+        --collection "$DATA/collection.anki2" \
+        --media "$DATA/collection.media" --media-db "$DATA/media.db2" "$@"
+) &
 child=$!
 if ! write_lock_owner "$child"; then
     log "sync operation lock ownership changed before worker publication"
+    kill -TERM "$child" 2>/dev/null || true
+    wait "$child" 2>/dev/null || true
+    exit 75
+fi
+if ! : >"$start_gate"; then
+    log "unable to release sync worker start gate"
     kill -TERM "$child" 2>/dev/null || true
     wait "$child" 2>/dev/null || true
     exit 75
