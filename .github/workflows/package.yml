@@ -10,6 +10,7 @@ on:
       - 'assets/**'
       - 'scripts/**'
       - 'packaging/**'
+      - 'tools/install_kindlehf_toolchain.sh'
       - 'third_party/anki'
       - 'third_party/audiobook-koplugin'
       - '.github/workflows/package.yml'
@@ -21,6 +22,7 @@ on:
       - 'assets/**'
       - 'scripts/**'
       - 'packaging/**'
+      - 'tools/install_kindlehf_toolchain.sh'
       - 'third_party/anki'
       - 'third_party/audiobook-koplugin'
       - '.github/workflows/package.yml'
@@ -39,6 +41,8 @@ jobs:
       KINDLE_SDK_COMMIT: b4a6c99d718a7cf74935f36105c62491b4336a61
       AUDIOBOOK_COMMIT: 62edf76feb1b7f4af2f01754957e8d57eb3e7d67
       MINIAUDIO_COMMIT: 4a5b74bef029b3592c54b6048650ee5f972c1a48
+      KOX_VERSION: '2026.08'
+      KOX_SHA256: 8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0
       PROTOC: /usr/bin/protoc
     steps:
       - uses: actions/checkout@v4
@@ -48,17 +52,18 @@ jobs:
         with:
           toolchain: 1.92.0
           target: armv7-unknown-linux-gnueabihf
-      - name: Install dependencies and KindleHF toolchain
+      - name: Install dependencies and pinned KindleHF toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config protobuf-compiler python3 perl make git wget curl file binutils zip
+          sudo apt-get install -y clang cmake ninja-build pkg-config protobuf-compiler python3 perl make git curl file binutils zip zstd
           test "$(git -C third_party/anki rev-parse HEAD)" = "$ANKI_COMMIT"
           test "$(git -C third_party/audiobook-koplugin rev-parse HEAD)" = "$AUDIOBOOK_COMMIT"
           git -C third_party/anki submodule update --init --depth 1 ftl/core-repo ftl/qt-repo
           mkdir -p third_party/anki/out/rslib/proto third_party/anki/out/extracted/protoc/bin
           ln -sf /usr/bin/protoc third_party/anki/out/extracted/protoc/bin/protoc
-          wget -q https://github.com/KindleModding/koxtoolchain/releases/latest/download/kindlehf.tar.gz -O /tmp/kindlehf.tar.gz
-          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
+          bash tools/install_kindlehf_toolchain.sh | tee toolchain-info.txt
+          grep -q "KANKI_KOX_VERSION=$KOX_VERSION" toolchain-info.txt
+          grep -q "KANKI_KOX_SHA256=$KOX_SHA256" toolchain-info.txt
           TC="$HOME/x-tools/$TRIPLE"
           echo "$TC/bin" >> "$GITHUB_PATH"
           echo "KHF_SYSROOT=$TC/$TRIPLE/sysroot" >> "$GITHUB_ENV"
@@ -121,7 +126,7 @@ jobs:
           cp assets/reviewer/reviewer.css assets/reviewer/reviewer.js \
              assets/reviewer/css_compat.js assets/reviewer/css_runtime.js \
              "$EXT/assets/reviewer/"
-          cp scripts/kanki-launch.sh scripts/kanki-sync.sh "$EXT/"
+          cp scripts/kanki-launch.sh scripts/kanki-sync.sh scripts/kanki-report.sh "$EXT/"
           cp packaging/config.example.ini "$EXT/"
           cp THIRD_PARTY_NOTICES.md docs/INSTALL.md "$EXT/"
           cp packaging/documents/* "$ROOT/documents/"
@@ -133,12 +138,14 @@ jobs:
             "kindle_sdk_commit": "$KINDLE_SDK_COMMIT",
             "audiobook_commit": "$AUDIOBOOK_COMMIT",
             "miniaudio_commit": "$MINIAUDIO_COMMIT",
+            "koxtoolchain_version": "$KOX_VERSION",
+            "koxtoolchain_sha256": "$KOX_SHA256",
             "target": "$TARGET",
             "reviewer_protocol": 1,
             "release_gate": "PW6 hardware acceptance required"
           }
           EOF
-          chmod 755 "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-raise" "$EXT/kanki-audio" "$EXT/kanki-gst-play" "$EXT/kanki-launch.sh" "$EXT/kanki-sync.sh" "$ROOT/documents/"*.sh
+          chmod 755 "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-raise" "$EXT/kanki-audio" "$EXT/kanki-gst-play" "$EXT/kanki-launch.sh" "$EXT/kanki-sync.sh" "$EXT/kanki-report.sh" "$ROOT/documents/"*.sh
           (cd "$EXT" && find . -type f ! -name MANIFEST.sha256 ! -name config.ini ! -name kanki.log -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256)
           (cd "$ROOT" && zip -qr ../Kanki-rewrite-hw3.zip extensions documents)
           sha256sum Kanki-rewrite-hw3.zip > Kanki-rewrite-hw3.zip.sha256
@@ -146,6 +153,7 @@ jobs:
         run: |
           EXT=package/extensions/kanki
           test -x "$EXT/kanki-raise"
+          test -x "$EXT/kanki-report.sh"
           test -f "$EXT/assets/reviewer/css_compat.js"
           test -f "$EXT/assets/reviewer/css_runtime.js"
           test -f "$EXT/assets/device/sync.html"
@@ -155,6 +163,9 @@ jobs:
           grep -q 'kanki://sync/run?mode=upload' "$EXT/assets/device/sync.html"
           grep -q 'kanki://sync/run?mode=download' "$EXT/assets/device/sync.html"
           grep -q 'DISPLAY="${DISPLAY:-:0}"' "$EXT/kanki-launch.sh"
+          grep -q "\"koxtoolchain_version\": \"$KOX_VERSION\"" "$EXT/BUILD.json"
+          grep -q "\"koxtoolchain_sha256\": \"$KOX_SHA256\"" "$EXT/BUILD.json"
+          ! grep -R -F 'releases/latest/download/kindlehf' .github/workflows tools
           (cd "$EXT" && sha256sum -c MANIFEST.sha256)
           unzip -l Kanki-rewrite-hw3.zip | tee package-contents.txt
           ! unzip -l Kanki-rewrite-hw3.zip | grep -E 'extensions/ranki|LD_PRELOAD|collection\.anki2|config\.ini$'
@@ -182,3 +193,4 @@ jobs:
             package-exports.txt
             package-glibc.txt
             sysroot-glibc.txt
+            toolchain-info.txt
