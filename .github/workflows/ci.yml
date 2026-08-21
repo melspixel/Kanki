@@ -43,8 +43,12 @@ jobs:
           node --check assets/reviewer/diagnostics.js
           node --check assets/device/decks.js
           node --check tests/renderer_contract.test.cjs
+          node --check tests/css_compat.test.cjs
+          node --check tests/diagnostics_contract.test.cjs
           sh -n tools/install_kindlehf_toolchain.sh
-      - name: Host tests, renderer contract and self-test
+          sh -n scripts/kanki-launch.sh
+          sh -n scripts/kanki-report.sh
+      - name: Host tests, reviewer contracts and self-test
         run: |
           set +e
           cargo test --workspace >cargo-test.log 2>&1
@@ -53,18 +57,28 @@ jobs:
           NPM_STATUS=$?
           node tests/renderer_contract.test.cjs >renderer-contract.txt 2>&1
           RENDER_STATUS=$?
+          node tests/css_compat.test.cjs >css-contract.txt 2>&1
+          CSS_STATUS=$?
+          node tests/diagnostics_contract.test.cjs >diagnostics-contract.txt 2>&1
+          DIAG_STATUS=$?
           cargo run -p kanki-app -- --self-test >self-test.json 2>self-test.stderr
           SELF_STATUS=$?
           set -e
           cat cargo-test.log
           cat npm-install.log
           cat renderer-contract.txt
+          cat css-contract.txt
+          cat diagnostics-contract.txt
           cat self-test.stderr
           cat self-test.json
           test "$CARGO_STATUS" -eq 0
           test "$NPM_STATUS" -eq 0
           test "$RENDER_STATUS" -eq 0
           grep -q 'renderer contract: pass' renderer-contract.txt
+          test "$CSS_STATUS" -eq 0
+          grep -q 'css compatibility contract: pass' css-contract.txt
+          test "$DIAG_STATUS" -eq 0
+          grep -q 'renderer diagnostics contract: pass' diagnostics-contract.txt
           test "$SELF_STATUS" -eq 0
           grep -q '"result": "pass"' self-test.json
       - name: Source handoff artifact
@@ -82,6 +96,8 @@ jobs:
             self-test.json
             self-test.stderr
             renderer-contract.txt
+            css-contract.txt
+            diagnostics-contract.txt
             out/
           if-no-files-found: warn
 
