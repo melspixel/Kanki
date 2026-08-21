@@ -10,7 +10,46 @@ RUST_TARGET=${KAP_RUST_TARGET:-armv7-unknown-linux-gnueabihf}
 OUT=${OUT:-$PROJECT/build/armhf}
 TRIPLE=${KAP_TOOLCHAIN_TRIPLE:-arm-kindlehf-linux-gnueabihf}
 BUILD_COMMIT=${BUILD_COMMIT:-$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null || printf unknown)}
-ANKI_COMMIT=${ANKI_COMMIT:-$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$PROJECT/upstream.lock.json")}
+PINNED_ANKI_COMMIT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$PROJECT/upstream.lock.json")
+ANKI_COMMIT=${ANKI_COMMIT:-$PINNED_ANKI_COMMIT}
+
+# Bind ARMHF outputs to the exact canonical source identities before any build
+# command runs.  Otherwise a dirty project tree can be compiled, later cleaned,
+# and then packaged under the unchanged HEAD; likewise a checkout of a different
+# Anki revision could previously be stamped with the pinned lock-file commit.
+if ! printf '%s\n' "$BUILD_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
+  echo "BUILD_COMMIT must be a full lowercase 40-hex Git commit" >&2
+  exit 65
+fi
+if ! PROJECT_HEAD=$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null); then
+  echo "PROJECT must be a Git checkout for an ARMHF release build" >&2
+  exit 66
+fi
+if [ "$PROJECT_HEAD" != "$BUILD_COMMIT" ]; then
+  echo "BUILD_COMMIT does not match project HEAD: $BUILD_COMMIT != $PROJECT_HEAD" >&2
+  exit 66
+fi
+if [ -n "$(git -C "$PROJECT" status --porcelain --untracked-files=all -- .)" ]; then
+  echo "project source tree is dirty; refusing ARMHF release build" >&2
+  git -C "$PROJECT" status --short --untracked-files=all -- . >&2 || true
+  exit 66
+fi
+if ! printf '%s\n' "$PINNED_ANKI_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
+  echo "upstream.lock.json commit must be a full lowercase 40-hex Git commit" >&2
+  exit 65
+fi
+if [ "$ANKI_COMMIT" != "$PINNED_ANKI_COMMIT" ]; then
+  echo "ANKI_COMMIT does not match upstream.lock.json: $ANKI_COMMIT != $PINNED_ANKI_COMMIT" >&2
+  exit 67
+fi
+if ! ANKI_HEAD=$(git -C "$ANKI" rev-parse HEAD 2>/dev/null); then
+  echo "ANKI must be a Git checkout for an ARMHF release build" >&2
+  exit 67
+fi
+if [ "$ANKI_HEAD" != "$PINNED_ANKI_COMMIT" ]; then
+  echo "Anki checkout HEAD does not match upstream.lock.json: $ANKI_HEAD != $PINNED_ANKI_COMMIT" >&2
+  exit 67
+fi
 
 export PATH="$TOOLCHAIN_BIN:$PATH"
 export CARGO_HOME PROTOC CARGO_NET_OFFLINE=true
