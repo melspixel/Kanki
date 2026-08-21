@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-22
-**Current fully recorded non-hardware candidate:** `a04b2af9ef29cb8c3f06a305dcd596ef06319521`
+**Current fully recorded non-hardware candidate:** `47946f7b64b52124cfe3db8c1e32dcd85310d6d4`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -86,7 +86,7 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware candidate is recorded for exact SHA
-`a04b2af9ef29cb8c3f06a305dcd596ef06319521`:
+`47946f7b64b52124cfe3db8c1e32dcd85310d6d4`:
 
 - host: macOS 26.4.1 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -115,7 +115,11 @@ The current clean local non-hardware candidate is recorded for exact SHA
   rejects drift on either side. The collection-operation contract proves
   atomic contention status 74, exact launcher-to-sync descriptor handoff,
   worker-held lifetime after the wrapper descriptor closes, kernel release
-  after the last worker exits and owner-scoped diagnostic metadata cleanup;
+  after the last worker exits and owner-scoped diagnostic metadata cleanup.
+  The native device lifecycle contract drives production `build_window()`
+  through a fake GTK/WebKit ABI and proves the Lab126 CSS-pixel/density/zoom
+  policy runs once after the persistent WebView exists, before any page load,
+  and is not repeated across deck/reviewer/sync transitions;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
   native x86-64 typed library; a backend-created disposable nine-card
   collection passed queue counts, question/answer rendering, semantic
@@ -155,17 +159,19 @@ The current clean local non-hardware candidate is recorded for exact SHA
   Their complete package trees and ZIPs were byte-identical, as were
   `libanki-kanki.so`, `BUILD.json`, manifests, archive evidence and authenticated
   Anki-i18n normalization evidence. Both archives contain 1,299 sorted regular
-  files and use source date epoch `1787337609`;
+  files and use source date epoch `1787338692`;
 - package SHA-256:
-  `7bfb11935d68e4846f557c5f1fe1cb0b372ab5f5d73aa7f1d3cef5f03de1fb4d`;
+  `8ab0ac39cd9296729a0f2f07bc74ec93655ce932fd216bde295a3e8e278c2e89`;
 - byte-identical companion hashes are
   `f9eb906595dbd3edb7c63a3bda3a556b83f71c9c74d7c0558571a3257ba69e69`
   for the ARMHF backend,
-  `ef46bda08073d8dcc49b6b58334471975200785c1651d779fcd626e6cca27cc6`
+  `16c6db9c43ad8625806c7cc6a00d5e5526257000041f0192fa07674465159a08`
+  for the native device executable,
+  `71f352dc4c550eda09b803a6fdb770b479877d57709d7a81ec1d9d9cd22aeb1e`
   for `BUILD.json`,
-  `79827745976007a21f4116c434b7baf7b5ee58fd3f6892051b35a81f16941fbb`
+  `09e8c912da7c451839f45a1cbd5742aab6a571d1505d046679c1b1d196b82b1c`
   for the 1,293-entry manifest,
-  `2d33a64f9c421a292cbe9cc3ae1f30267147624a97219bbabd4469bc297020f3`
+  `a21a1774e38c3a0282b430062da3e250e4cdfa1f06f85ff3ba518d0148a55690`
   for `archive-info.txt`, and
   `624e4be4d450a5d5d0bb7d4dc23c358a82f3286eff474d3ca809dedab0b6e92a`
   for `anki-i18n-info.txt`;
@@ -191,16 +197,18 @@ The current clean local non-hardware candidate is recorded for exact SHA
   GObject, WebKitGTK, X11 and the typed Anki backend, resolved all required UI
   symbols plus all four Lab126 CSS-pixel/zoom symbols, and instantiated
   `mixersink` and `ttssrc` after modeling the firmware's `/usr/lib/tts` mount.
+  The UI/backend loader probe SHA-256 is
+  `bbb06a68c39f92825a1a66492b9ed5f19381a8193069b9d37ef1b509cd87a1fb`.
   The packaged report script also ran under that target BusyBox against
   synthetic safe log/metric controls and secret/config/raw-capture sentinels.
   It published a 0700 report tree and 0600 archive atomically, retained the
   safe controls, excluded private inputs, leaked no sentinel and left no work
   or partial file. `redacted-report-privacy.txt` SHA-256 is
-  `1183345005329dd02eaf436c74b0b4b97384020e0bc8142d2c5ed3e962079a63`.
+  `d93aa5c1da0202b89bd100e40ffbce0ee37a9075595b2c3f8cea8aa557a0f9f1`.
   Evidence is under ignored
-  `out/firmware/pw6-5.19.6/evidence/a04b2af9ef29cb8c3f06a305dcd596ef06319521/`;
+  `out/firmware/pw6-5.19.6/evidence/47946f7b64b52124cfe3db8c1e32dcd85310d6d4/`;
   its self-verifying `EVIDENCE.sha256` SHA-256 is
-  `548c550afdc845ab5e5bdacb879c77a558f48888cd372b48b2ca7072714dc536`;
+  `e03d0d34bac99b379f4d03c1c3dc4b3476074e17f137ae2fd9d6965f29d3307c`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -449,12 +457,26 @@ runtime fix. It serializes launch/sync on one manifest-owned inode with the
 fixed PW6 util-linux `flock`, hands the open descriptor to the intended worker,
 and leaves `.kanki.lock` as owner-scoped diagnostics only. ADR 0005 records the
 boundary. Documentation commit
-`a04b2af9ef29cb8c3f06a305dcd596ef06319521` is the formal candidate audited
-above. On that one SHA, host gates, typed-Anki disposable review/APKG/sync, two
-distinct empty-target ARMHF builds, byte-identical package trees/ZIPs and the
-official PW6 rootfs/BusyBox verifier, lock and report audits all pass. The first
-open failure is physical PW6 launch (`hardware_execution=not_run`); no compiler,
-test, package, ABI or rootfs error remains in this category.
+`a04b2af9ef29cb8c3f06a305dcd596ef06319521` was the preceding formal
+candidate. On that one SHA, host gates, typed-Anki disposable review/APKG/sync,
+two distinct empty-target ARMHF builds, byte-identical package trees/ZIPs and
+the official PW6 rootfs/BusyBox verifier, lock and report audits all passed.
+
+The next platform-lifecycle audit made the production native controller fail an
+executable fake-UI-ABI contract with `CSS pixel policy was not configured once
+at WebView creation`. The persistent WebView initially loaded deck/sync pages
+without the Lab126 CSS-pixel/density/full-content-zoom policy, then configured
+that policy repeatedly on reviewer entry. Commit
+`47946f7b64b52124cfe3db8c1e32dcd85310d6d4` is the minimum fix and current
+formal candidate: configuration moved from reviewer-page loading to immediately
+after successful WebView creation. The contract executes production
+`build_window()` and multiple deck/reviewer/sync transitions, proving one
+configuration before the first document without inventing a viewport or global
+font rule. On this exact SHA, host, typed-Anki, two distinct empty-target ARMHF
+builds, byte-identical package trees/ZIPs and official PW6 rootfs loader/ABI,
+lock and report audits all pass. The first open failure remains physical PW6
+launch and computed geometry (`hardware_execution=not_run`); no compiler, test,
+package, ABI or rootfs error remains in this category.
 
 ### Baseline failure ledger
 
@@ -656,7 +678,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 1. Preserve candidate identity before device transfer with
    `shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip`; the expected value
-   is `7bfb11935d68e4846f557c5f1fe1cb0b372ab5f5d73aa7f1d3cef5f03de1fb4d`.
+   is `8ab0ac39cd9296729a0f2f07bc74ec93655ce932fd216bde295a3e8e278c2e89`.
 2. Obtain explicit local test access to original COCA and at least one
    unrelated representative APKG, then run the same privacy-reviewed path
    without modifying or committing the decks and without adding deck CSS.

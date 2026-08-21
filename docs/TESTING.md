@@ -14,6 +14,9 @@ A GitHub job that terminates with no step list is an infrastructure/account/repo
 - deck collapse model;
 - reviewer packet/body classes;
 - persistent `#qa` lifecycle;
+- native persistent-WebView lifecycle: configure feature-detected Lab126 CSS
+  pixels/density/full-content zoom once after creation and before deck,
+  reviewer or sync loads;
 - real checksum-pinned MathJax inline/display SVG across successive dynamic
   renders of the same `#qa`, with stale completion isolation;
 - checksum-pinned host Node plus lockfile-pinned jsdom test runtime; no global

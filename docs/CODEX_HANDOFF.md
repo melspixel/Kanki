@@ -271,21 +271,23 @@ inside the canonical rootfs audit. Host, typed-Anki, two byte-identical package
 builds and the enhanced rootfs audit pass on that SHA.
 
 Those checkpoints are superseded by current formal candidate
-`a04b2af9ef29cb8c3f06a305dcd596ef06319521`. It retains private atomic
-diagnostic publication and the authenticated build-only `BTreeMap`
-normalization, and closes a real collection-ownership TOCTOU: launch and sync
-previously only observed PID/path metadata. They now serialize on one
-manifest-owned inode with the fixed PW6 util-linux `flock`; only the intended
-worker inherits the descriptor, while `.kanki.lock` is diagnostics only. Two
-canonical builds using distinct, previously unused Cargo target volumes
-produced byte-identical 1,299-file package trees and ZIP SHA-256
-`7bfb11935d68e4846f557c5f1fe1cb0b372ab5f5d73aa7f1d3cef5f03de1fb4d`.
+`47946f7b64b52124cfe3db8c1e32dcd85310d6d4`. It retains private atomic
+diagnostic publication, authenticated build-only `BTreeMap` normalization and
+kernel collection ownership. It also closes the next real native lifecycle
+failure: the persistent WebView previously loaded deck/sync pages before the
+Lab126 CSS-pixel/density/full-content-zoom policy and reconfigured the policy on
+each reviewer entry. Production `build_window()` now configures it once after
+successful WebView creation and before any document load. An executable fake
+UI-ABI contract proves deck/reviewer/sync transitions keep the same configured
+WebView. Two canonical builds using distinct, previously unused Cargo target
+volumes produced byte-identical 1,299-file package trees and ZIP SHA-256
+`8ab0ac39cd9296729a0f2f07bc74ec93655ce932fd216bde295a3e8e278c2e89`.
 Host, typed-Anki review/APKG/sync, ARMHF package, report privacy and official
 PW6 5.19.6 rootfs/loader gates all pass on this same SHA. The target rootfs's
 actual `flock` 2.37.4 and BusyBox passed contention, launcher handoff,
 worker-lifetime and release probes. The first open evidence failure remains
-physical PW6 launch (`hardware_execution=not_run`); do not promote rootfs/QEMU
-evidence to hardware acceptance.
+physical PW6 launch and computed geometry (`hardware_execution=not_run`); do
+not promote rootfs/QEMU evidence to hardware acceptance.
 
 ## 5. Recommended target layout
 

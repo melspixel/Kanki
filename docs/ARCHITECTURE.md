@@ -44,7 +44,10 @@ The platform layer owns:
 - native audio through GStreamer `mixersink`;
 - safe filesystem paths and single-instance/collection-owner lifecycle.
 
-The platform layer is loaded against the audited firmware ABI. It must feature-detect private Lab126 symbols and log the selected path.
+The platform layer is loaded against the audited firmware ABI. It must
+feature-detect private Lab126 symbols, configure/log the selected CSS-pixel path
+once after the persistent WebView exists and before any deck/reviewer/sync
+document loads, and never emulate that path with a synthetic viewport.
 
 Reviewer and sync processes share one manifest-owned operation-lock inode.
 The fixed PW6 `/usr/bin/flock` holds an exclusive descriptor lock before any

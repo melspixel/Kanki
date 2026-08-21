@@ -40,7 +40,7 @@ Kanki equivalents:
 | Card body CSS | Note type CSS is authoritative | Note type CSS is authoritative; generic syntax compatibility only | Architectural invariant |
 | Flex item order | `order` accepts integers with initial value 0 | Non-negative integers map to old WebKit ordinal groups starting at 1; the original declaration is retained and negative values do not emit invalid legacy groups | Host contract passes; full negative-order emulation and PW6 geometry remain open |
 | MathJax | Lazily load MathJax, clear prior typeset state and await typesetting scoped to `#qa` before the shown hook | Load pinned MathJax 2.7.9 once, clear prior jax and await SVG typesetting scoped to persistent `#qa` before UI state/diagnostics | Real vendor host contract passes; PW6 geometry/performance pending |
-| Platform scaling | Desktop Qt/WebEngine uses CSS pixels/device scale | Lab126 WebKit native CSS-pixel/pixel-density/full-content-zoom path | Implemented feature path; initial-view lifecycle audit below |
+| Platform scaling | Desktop Qt/WebEngine uses CSS pixels/device scale | Lab126 WebKit native CSS-pixel/pixel-density/full-content-zoom path configured once per persistent WebView | Executable native lifecycle contract and fixed-rootfs symbol/loader audit pass; PW6 computed geometry pending |
 | AV extraction | Card question/answer AV tags | Typed `extract_av_tags()` after partial render and semantic `FrontSide` expansion | Synthetic sound/TTS plus fixed upstream `media.apkg` sound pass; COCA/user/PW6 evidence pending |
 | Replay button | Reviewer-owned semantic control | Reviewer-owned 40px semantic control | Implemented; unrelated SVG must stay untouched |
 | Typed answer question | Replace `[[type:...]]` with input using note-field font/size | Bridge implements field/cloze lookup and input replacement | Basic/cloze plus known-empty/unknown-field disposable fixtures pass; PW6 pending |
@@ -157,13 +157,22 @@ If a future Anki backend changes v3 button cardinality, treat that as an upstrea
 
 ### 7. Kindle native CSS pixels should be configured at WebView lifecycle level
 
-The current native code calls the Lab126 W3C CSS-pixel/full-content-zoom configuration when entering reviewer mode. Because the WebView is created once and also renders deck/sync pages, the scaling policy should be considered a property of that WebView, not a property of a particular card load.
+Because one WebView renders deck, reviewer and sync pages, its scaling policy is
+a property of that WebView, not of a particular card load. The earlier native
+path loaded deck/sync before configuration and repeated configuration on every
+reviewer entry. At `47946f7b64b52124cfe3db8c1e32dcd85310d6d4`, production
+`build_window()` configures the feature-detected Lab126 W3C CSS-pixel,
+pixel-density, full-content-zoom and zoom-level path once after the persistent
+WebView exists and before any document loads.
 
-Before release:
+The executable native lifecycle contract drives multiple deck/reviewer/sync
+transitions through a fake UI ABI and proves the configuration is neither early
+nor repeated. The fixed PW6 rootfs loader audit resolves the four actual
+firmware symbols. Still required before release:
 
-- configure the policy once after WebView creation (or prove that Kindle requires a later lifecycle point);
-- record capability/density once per process;
-- verify deck, sync and reviewer pages share a coherent coordinate system;
+- verify deck, sync and reviewer pages share a coherent computed coordinate
+  system on physical PW6;
+- retain one capability/density record per process;
 - do not compensate with a synthetic viewport rewrite.
 
 ### 8. External links need explicit policy
