@@ -102,6 +102,7 @@ def main() -> int:
     work = args.work.resolve()
     cargo_home = args.cargo_home.resolve()
     protoc = args.protoc.resolve()
+    rootfs_image = args.rootfs_image.resolve() if args.rootfs_image else None
     checkout = work / "anki"
     logs = work / "logs"
     report_path = work / "report.json"
@@ -118,8 +119,12 @@ def main() -> int:
         raise SystemExit("--protoc must name the pinned protoc executable")
     if args.rootfs and not args.kindle_toolchain_bin:
         raise SystemExit("--rootfs requires --kindle-toolchain-bin")
-    if args.rootfs_image and not args.rootfs:
+    if args.rootfs and not rootfs_image:
+        raise SystemExit("--rootfs requires --rootfs-image so exact-rootfs QEMU can verify the full image SHA-256")
+    if rootfs_image and not args.rootfs:
         raise SystemExit("--rootfs-image requires --rootfs")
+    if rootfs_image and not rootfs_image.is_file():
+        raise SystemExit("--rootfs-image must name the retained checksum-verified PW6 rootfs image")
 
     lock = json.loads((project / "upstream.lock.json").read_text(encoding="utf-8"))
     expected_anki = str(lock["commit"])
@@ -140,6 +145,9 @@ def main() -> int:
         "hardware_acceptance": "not-run",
         "result": "running",
     }
+    if rootfs_image:
+        # Persist cryptographic identity, not a private host path.
+        report["inputs"]["rootfs_image_sha256"] = sha256(rootfs_image)
     write_report(report_path, report)
     if source_head != expected_anki:
         report["result"] = "failed-upstream-pin"
@@ -293,13 +301,12 @@ def main() -> int:
         "PROJECT": str(project),
         "ARMHF": str(armhf),
         "ROOTFS": str(rootfs),
+        "ROOTFS_IMAGE": str(rootfs_image),
         "TOOLCHAIN_BIN": str(bindir),
         "QEMU_ARM": args.qemu_arm,
         "OUT": str(qemu_exact),
         "BUILD_COMMIT": build_commit,
     }
-    if args.rootfs_image:
-        qemu_env["ROOTFS_IMAGE"] = str(args.rootfs_image.resolve())
     if not gate(
         "qemu-exact-rootfs",
         ["bash", str(project / "testenv/scripts/run-qemu-smoke.sh")],
@@ -323,7 +330,7 @@ def main() -> int:
         return 0
 
     # All non-package semantic/runtime gates are now green. The package script
-    # independently rechecks QEMU source/Anki/manifest/binary hashes so stale
+    # independently rechecks QEMU source/Anki/manifest/image/binary hashes so stale
     # evidence cannot be relabelled by this orchestration layer.
     if not gate(
         "package-audit",
