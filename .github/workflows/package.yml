@@ -97,13 +97,15 @@ jobs:
         env:
           PROTOC: /usr/bin/protoc
         run: cargo build -p anki --release --target "$TARGET" --features rustls
-      - name: Build device, sync, reactivation and audio executables
+      - name: Build device, sync, diagnostics, reactivation and audio executables
         run: |
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             -DKANKI_BUILD_COMMIT=\"$GITHUB_SHA\" -DKANKI_ANKI_COMMIT=\"$ANKI_COMMIT\" \
             device/kanki_device.c -ldl -o kanki-device
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror -Ibridge \
             device/kanki_sync_cli.c -ldl -o kanki-sync
+          arm-kindlehf-linux-gnueabihf-gcc -std=c11 -D_POSIX_C_SOURCE=200809L -Os -fsigned-char -Wall -Wextra -Werror \
+            device/kanki_diag_server.c -o kanki-diag
           arm-kindlehf-linux-gnueabihf-gcc -std=c11 -Os -fsigned-char -Wall -Wextra -Werror \
             -ffreestanding -fno-builtin -fno-stack-protector -nostdlib \
             -Wl,-e,_start -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3 \
@@ -113,7 +115,7 @@ jobs:
           arm-kindlehf-linux-gnueabihf-gcc -std=gnu11 -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L \
             -O2 -Wall -Wextra -Werror -DKGP_NATIVE_GLIBC \
             third_party/audiobook-koplugin/kindle/gst-play.c -o kanki-gst-play -ldl
-          file kanki-device kanki-sync kanki-raise kanki-audio kanki-gst-play
+          file kanki-device kanki-sync kanki-diag kanki-raise kanki-audio kanki-gst-play
           ! arm-kindlehf-linux-gnueabihf-nm -D kanki-raise | grep -E ' U (malloc|free|memcpy|memset|fprintf|getenv|setenv|write)$'
       - name: Assemble self-identifying installation
         run: |
@@ -121,7 +123,7 @@ jobs:
           EXT="$ROOT/extensions/kanki"
           mkdir -p "$EXT/assets/device" "$EXT/assets/reviewer" "$ROOT/documents"
           cp third_party/anki/target/$TARGET/release/libanki.so "$EXT/libanki-kanki.so"
-          cp kanki-device kanki-sync kanki-raise kanki-audio kanki-gst-play "$EXT/"
+          cp kanki-device kanki-sync kanki-diag kanki-raise kanki-audio kanki-gst-play "$EXT/"
           cp assets/device/* "$EXT/assets/device/"
           cp assets/reviewer/reviewer.css assets/reviewer/reviewer.js \
              assets/reviewer/css_compat.js assets/reviewer/css_runtime.js \
@@ -142,10 +144,11 @@ jobs:
             "koxtoolchain_sha256": "$KOX_SHA256",
             "target": "$TARGET",
             "reviewer_protocol": 1,
+            "diagnostics_protocol": 1,
             "release_gate": "PW6 hardware acceptance required"
           }
           EOF
-          chmod 755 "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-raise" "$EXT/kanki-audio" "$EXT/kanki-gst-play" "$EXT/kanki-launch.sh" "$EXT/kanki-sync.sh" "$EXT/kanki-report.sh" "$ROOT/documents/"*.sh
+          chmod 755 "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-diag" "$EXT/kanki-raise" "$EXT/kanki-audio" "$EXT/kanki-gst-play" "$EXT/kanki-launch.sh" "$EXT/kanki-sync.sh" "$EXT/kanki-report.sh" "$ROOT/documents/"*.sh
           (cd "$EXT" && find . -type f ! -name MANIFEST.sha256 ! -name config.ini ! -name kanki.log -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256)
           (cd "$ROOT" && zip -qr ../Kanki-rewrite-hw3.zip extensions documents)
           sha256sum Kanki-rewrite-hw3.zip > Kanki-rewrite-hw3.zip.sha256
@@ -153,6 +156,7 @@ jobs:
         run: |
           EXT=package/extensions/kanki
           test -x "$EXT/kanki-raise"
+          test -x "$EXT/kanki-diag"
           test -x "$EXT/kanki-report.sh"
           test -f "$EXT/assets/reviewer/css_compat.js"
           test -f "$EXT/assets/reviewer/css_runtime.js"
@@ -163,6 +167,8 @@ jobs:
           grep -q 'kanki://sync/run?mode=upload' "$EXT/assets/device/sync.html"
           grep -q 'kanki://sync/run?mode=download' "$EXT/assets/device/sync.html"
           grep -q 'DISPLAY="${DISPLAY:-:0}"' "$EXT/kanki-launch.sh"
+          grep -q 'render-debug' "$EXT/kanki-launch.sh"
+          grep -q 'enable-render-capture' "$EXT/kanki-diag"
           grep -q "\"koxtoolchain_version\": \"$KOX_VERSION\"" "$EXT/BUILD.json"
           grep -q "\"koxtoolchain_sha256\": \"$KOX_SHA256\"" "$EXT/BUILD.json"
           ! grep -R -F 'releases/latest/download/kindlehf' .github/workflows tools
@@ -170,7 +176,7 @@ jobs:
           unzip -l Kanki-rewrite-hw3.zip | tee package-contents.txt
           ! unzip -l Kanki-rewrite-hw3.zip | grep -E 'extensions/ranki|LD_PRELOAD|collection\.anki2|config\.ini$'
           nm -D "$EXT/libanki-kanki.so" | grep -E ' kanki_(core_new|open_collection_json|next_card_json|prepare_answer_json|answer_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee package-exports.txt
-          for file in "$EXT/libanki-kanki.so" "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-raise" "$EXT/kanki-audio" "$EXT/kanki-gst-play"; do
+          for file in "$EXT/libanki-kanki.so" "$EXT/kanki-device" "$EXT/kanki-sync" "$EXT/kanki-diag" "$EXT/kanki-raise" "$EXT/kanki-audio" "$EXT/kanki-gst-play"; do
             readelf --version-info "$file" | grep -oE 'GLIBC_[0-9.]+' || true
           done | sort -Vu | tee package-glibc.txt
           LIBC=$(find "$KHF_SYSROOT" -name libc.so.6 | head -1)
