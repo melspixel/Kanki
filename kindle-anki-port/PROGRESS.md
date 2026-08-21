@@ -14,27 +14,22 @@ Updated: 2026-08-22 UTC
 | Sync/collection ownership | hardened | wrapper-death/zombie-owner races reproduced and fixed |
 | Host/ARMHF source provenance | hardened | clean project HEAD + exact pinned Anki HEAD enforced before build |
 | ARMHF/ABI/GLIBC | green historical checkpoint | ARM hard-float outputs under target GLIBC ceiling; final clean-head rerun required |
-| PW6 rootfs identity/preparation | pinned + fixture-green | exact firmware/rootfs/runtime hashes committed; private bytes not currently mounted |
-| Exact-rootfs QEMU provenance | hardened | source/Anki/manifest/ARMHF identity bound; private paths removed from provenance |
-| Package privacy/provenance | hardened | packaging requires matching exact-rootfs QEMU evidence and exact tested ARMHF hashes |
-| Release entrypoints | hardened | Makefile/VM driver/public CI now prevent package-before-exact-QEMU |
-| Test-policy docs | hardened | `TEST_ENVIRONMENT.md`, `testenv/README.md`, and `RELEASE_GATES.md` encode L1 -> L2 QEMU -> L2.5 package -> durable software artifacts -> separate HIL; static contract locks order |
-| Public GitHub Actions | checkpoint-only | intentionally no final ZIP without private rootfs; current runs still fail before recorded steps |
-| Final ZIP persistence | incomplete | old ZIP stale; fresh current-head QEMU-bound installer absent |
-| PW6 hardware acceptance | not started | separate physical final gate after software-delivery hashes exist |
+| PW6 rootfs identity/preparation | hardened + private input pending | firmware/runtime hashes pinned; L2 now requires both extracted tree and retained full image |
+| Exact-rootfs QEMU provenance | hardened | source/Anki/manifest/full-rootfs-image/ARMHF identity bound; private paths excluded |
+| Package privacy/provenance | hardened | packaging requires matching exact-rootfs QEMU evidence, canonical image hash and exact tested ARMHF hashes |
+| Release entrypoints/orchestrator | hardened | Makefiles/VM driver/public CI prevent package-before-exact-QEMU; `--rootfs` requires `--rootfs-image` |
+| Test-policy docs | hardened | L1 -> retained-image-bound L2 QEMU -> L2.5 package -> durable software artifacts -> separate HIL |
+| Public GitHub Actions | checkpoint-only / infrastructure unavailable | no final ZIP without private rootfs; current jobs fail before recorded steps |
+| Final ZIP persistence | incomplete | old ZIP stale; fresh current-head image-bound installer absent |
+| PW6 hardware acceptance | not started | separate physical final result after software-delivery hashes exist |
 
-## Important historical checkpoints
+## Historical checkpoints — not final provenance
 
 ```text
 official Anki rslib: 539 passed; 0 failed
 five real APKG C-ABI reviewer integrations: PASS
 reviewer runtime fixture groups: 10 PASS
 test_sync_worker: PASS
-```
-
-Historical ARMHF/ABI:
-
-```text
 kap-app           ARM EABI5 hard-float, GLIBC_2.4
 kap-audio         ARM EABI5 hard-float, GLIBC_2.4
 kap-sync          ARM EABI5 hard-float, GLIBC_2.4
@@ -42,27 +37,7 @@ libanki-kindle.so ARM EABI5 hard-float, max GLIBC_2.18
 PW6 target libc ceiling: GLIBC_2.35
 ```
 
-These are regression checkpoints, not final release provenance.
-
-## Lifecycle/source provenance
-
-Targeted persisted lifecycle evidence:
-
-```text
-test_zombie_operation_lock.sh   5/5 PASS
-test_sync_wrapper_signal.sh     3/3 PASS
-KAP_ZOMBIE_LOCK_20260822.log SHA-256
-2a97d443b30b172d7e636464f8bfda759e10ce1d120257ab7c8ef97c0e007250
-```
-
-Targeted build-source provenance suites:
-
-```text
-test_armhf_provenance.py         6/6 PASS
-test_host_backend_provenance.py  5/5 PASS
-```
-
-The build entrypoints now require the project `HEAD` to equal `BUILD_COMMIT`, the project subtree to be clean including untracked source, and the Anki checkout `HEAD` to equal `upstream.lock.json`.
+These must be rerun from the eventual final clean source/Anki identity.
 
 ## Exact PW6 runtime identity
 
@@ -78,157 +53,128 @@ GLIBC ceiling             2.35
 
 Canonical manifest: `testenv/qemu/pw6-5.19.6-rootfs-manifest.json`.
 
-The actual checksum-matching private PW6 rootfs is still absent from the current VM.
+The actual checksum-matching private extracted rootfs and retained rootfs image are still absent from the current VM.
 
-## QEMU-bound package gate
+## Full rootfs-image release binding
 
-`run-qemu-smoke.sh` now proves the exact-rootfs run belongs to the same source commit, pinned Anki base, canonical manifest and ARMHF binary bytes. `QEMU-PROVENANCE.txt` contains stable hashes/identities rather than private absolute paths.
+A release audit found a concrete identity gap: `verify-pw6-rootfs.py` could verify the full image, but `run-qemu-smoke.sh` made `ROOTFS_IMAGE` optional. That allowed L2 to prove only selected pinned runtime files/version markers in an extracted directory rather than the full canonical filesystem image.
 
-`package-and-audit.sh` now requires fresh QEMU evidence and rechecks:
-
-```text
-QEMU smoke PASS
-PW6 rootfs verification PASS
-backend/audio/sync smoke PASS
-source commit identity
-Anki commit identity
-canonical rootfs-manifest SHA-256
-SHA-256 of libanki-kindle.so, kap-app, kap-audio, kap-sync
-```
-
-Current blobs:
+The chain is now fail-closed:
 
 ```text
-testenv/scripts/run-qemu-smoke.sh       ac595dbeb6c411b51751953eef9b9400afe5a166
-testenv/scripts/package-and-audit.sh    930a4128adf6e754f58a7f55da8014e59b90b122
-tests/test_qemu_provenance.py           c3ccf143be655f2638770b5c5ea7f012d384c037
-tests/test_package_reproducibility.py   9b85781c6a4738b117da5ff218276c373089aa55
+run-qemu-smoke.sh
+  requires ROOTFS_IMAGE regular file
+  always invokes verify-pw6-rootfs.py --rootfs-image
+  records rootfs_image_sha256, not the private path
+
+package-and-audit.sh
+  requires rootfs_verified=true
+  requires QEMU rootfs_image_sha256 == manifest rootfs_image.sha256
+  requires exact rootfs image PASS marker in rootfs-verification.txt
+  records canonical rootfs_image_sha256 in PACKAGE-PROVENANCE.txt
+
+Makefile / testenv Makefile
+  require and propagate ROOTFS_IMAGE
+
+vm-advance.py
+  --rootfs requires --rootfs-image
+  records only rootfs image SHA-256 in report inputs
+  always propagates the image to L2
 ```
 
-Targeted isolated fixture evidence:
+Current implementation/test blobs:
 
 ```text
-matching ARMHF + QEMU provenance  rc=0
-stale QEMU source_commit           rc=66
-stale QEMU kap-app hash            rc=66
-QEMU-SMOKE.txt = FAIL              rc=66
-synthetic ZIP SHA-256
-1d518583b1bae606885be4873bc3fa1528f826ac0ab77fd9453d8b676e5fa067
-KAP_PACKAGE_QEMU_BINDING_20260822.log SHA-256
-97fa62623ae4e940f8963b2bc3e15649306f413bbf441411dc950ca61af2e9be
+testenv/scripts/run-qemu-smoke.sh       21daca49e9908f2855754f133a9d221d29916d7f
+testenv/scripts/package-and-audit.sh    0bd1f398e2165ee7da73318816466c4de2a1f282
+testenv/scripts/vm-advance.py           bdae4cc700eb390d1cf62eee33c29228caa68c80
+Makefile                                f909aeb9152ffd36beaba5246034b128bc074895
+testenv/Makefile                        8988b75883754700383665eb1b5dc9c49666e6e0
+tests/test_qemu_provenance.py           bc807b3adadae8b0b18b537818808c62f8fc1d31
+tests/test_package_reproducibility.py   8d2dc69a6cf2673aa6cd6454bca2b6252e23cd79
+tests/test_build_entrypoints.py         9ec13f75c8950a8c9bbd82cb41ae70f33f0e997f
+tests/test_vm_advance_contract.py       f9b86756cd029208393ef5028a1766ec609be6f5
 ```
 
-The synthetic ZIP is not a product artifact.
-
-## Release-entrypoint hardening
-
-A follow-on audit found stale package ordering in the top-level Makefile, canonical GitHub Actions workflow, and `vm-advance.py`. They now agree with the production gate:
+Policy surfaces were synchronized:
 
 ```text
-static
--> official Anki backend
--> five real APKGs incl. typed-answer fixture
--> ARMHF/ABI
--> exact PW6 rootfs QEMU
--> package-and-audit
--> durable non-hardware release evidence
+docs/TEST_ENVIRONMENT.md   11016d272f34d248ad8919b521f133b6dd2e5088
+testenv/README.md          372b305556cab6c09efe05a935c8203299c8c18d
+docs/RELEASE_GATES.md      6ad2522d4f105edbf099febf585af8d96e0af086
+VM_RUNBOOK.md              7bdb674f91157674c0cd2fb501662117d3c97651
+CODEX_COORDINATION.md      85cae1a49ca21633c05fc37b32e328c6f259a0ba
 ```
 
-Current behavior:
+Targeted regression evidence from the current execution container:
 
 ```text
-make package requires QEMU=<fresh run-qemu-smoke output>
-public GitHub Actions emits NOT-A-RELEASE host/ARMHF checkpoint only
-vm-advance without rootfs -> armhf-checkpoint-passed, no installer
-vm-advance with incomplete required APKG coverage -> qemu-checkpoint-passed, no installer
-vm-advance packages only after semantic + ARMHF + exact-rootfs QEMU gates
+rootfs-image QEMU fixture: 4/4 PASS
+  valid retained image              PASS
+  missing ROOTFS_IMAGE              rc=66
+  non-file ROOTFS_IMAGE             rc=66
+  stale ARMHF source provenance     rc=66
+log SHA-256
+  ca9a95f5bacea22d190c507098d697f565d1e44a88dc5dfba556699f8e1782c3
+
+package rootfs-image predicates:
+  correct image                     rc=0
+  wrong image hash                  rc=66
+  rootfs_verified=false             rc=66
+  missing canonical image marker    rc=66
+log SHA-256
+  8f38bd14c63e79de30b01d4d0122010680e276d2cc62f08a83e9c1289b540d5e
 ```
 
-Current blobs:
+Detailed report: `docs/VM_ROOTFS_IMAGE_PROVENANCE_HARDENING_20260822.md`.
+
+## Existing lifecycle/source hardening
+
+Previously persisted targeted evidence includes:
 
 ```text
-Makefile                                  cd6c77d55f3f1cda1f5edcaeeaf3a854e1d1ec68
-.github/workflows/kindle-anki-port.yml   a3f80ec5b598c4a8de43e68d85b31fcc6622eaba
-testenv/scripts/vm-advance.py            0bce7c09adf5d65df33bd4f48163dcb645224b48
-tests/test_vm_advance_contract.py        3c52f8de67cbbc267ab59fd70a2d837b6adb39d3
-VM_RUNBOOK.md                             b00d067e33245ab971c46378d6a81760a0225202
+test_zombie_operation_lock.sh   5/5 PASS
+test_sync_wrapper_signal.sh     3/3 PASS
+KAP_ZOMBIE_LOCK_20260822.log SHA-256
+2a97d443b30b172d7e636464f8bfda759e10ce1d120257ab7c8ef97c0e007250
+
+test_armhf_provenance.py         6/6 PASS
+test_host_backend_provenance.py  5/5 PASS
 ```
 
-Detailed report: `docs/VM_RELEASE_ENTRYPOINT_HARDENING_20260822.md`.
-
-## Release-policy documentation alignment
-
-A further policy audit found `docs/RELEASE_GATES.md` still described a generic `Package` gate before any exact-rootfs QEMU gate and listed hardware acceptance in the same numbered release sequence. That contradicted the executable QEMU-before-package policy and the separate-HIL completion semantics.
-
-It is now aligned with the other maintained policy surfaces:
-
-```text
-L0 host/static
--> L1 ARMHF/ABI
--> L2 exact PW6 rootfs QEMU
--> L2.5 package/privacy/reproducibility
--> durable GitHub software artifacts
--> separate physical PW6 HIL
-```
-
-`tests/test_build_entrypoints.py` now reads `docs/RELEASE_GATES.md` in addition to `docs/TEST_ENVIRONMENT.md` and `testenv/README.md`, and fails if the document stops requiring exact-rootfs QEMU before package construction or folds HIL back into software delivery.
-
-Current release-policy blobs:
-
-```text
-docs/TEST_ENVIRONMENT.md          86bf0ce922844fcbb74c9af4996d7dbf61635e80
-testenv/README.md                 979e45d878a3255f7ea429b17dec0dd36050f2d9
-docs/RELEASE_GATES.md             6b40202cc35115270e72811933fe781b379f8fff
-tests/test_build_entrypoints.py   009872702acab56cb1cd9ca62ce599f9d8352b6a
-```
-
-Targeted regression:
-
-```text
-old RELEASE_GATES contract: FAIL
-new RELEASE_GATES contract: PASS
-test_build_entrypoints.py py_compile: PASS
-KAP_RELEASE_GATE_POLICY_20260822.log SHA-256
-503bc75f03c1648ec7031eb7919f8a3cdf04a81f159234902a51b4134648218d
-```
-
-Commits:
-
-```text
-70e939954f193e7fb70dfb7c9be295156ad6393f
-1baf30a181c6438c08770dce4a29ccc10e750ed0
-5d99fbaf1d0679135001e32609fe90ee677c128d
-61695cc717681c1de64b6bd212465fb7c76b5ae1
-af58e6669dcc2bfc93fac975d746009530d58b54
-```
-
-Detailed report: `docs/VM_RELEASE_GATE_POLICY_HARDENING_20260822.md`.
+Release packaging is also already bound to clean source identity, exact Anki pin, exact ARMHF binary hashes and QEMU manifest/source/Anki evidence. The new work extends that invariant to the **full rootfs image** itself.
 
 ## Current validation limitation
 
-No fresh complete current-head build is claimed. The direct execution container still fails ordinary `git clone`/fetch because `github.com` DNS resolution is unavailable (`rc=128`), and the private PW6 rootfs is not mounted.
+No fresh complete current-head build is claimed. Ordinary Git materialization in the execution container still fails:
 
-The canonical GitHub Actions run for code head `1baf30a181c6438c08770dce4a29ccc10e750ed0` failed before any recorded job step. Job `96929703461` exposed zero steps and no usable log blob; a rerun request was accepted, but no step-level result was available in this continuation. This is not counted as green and is not treated as a code regression result.
+```text
+fatal: unable to access 'https://github.com/melspixel/Kanki.git/': Could not resolve host: github.com
+rc=128
+```
 
-## Stale installer checkpoint
+Canonical GitHub Actions checkpoint run `32534150567` at checkpoint `5fbb1b977bd1c15c72039eb299ec3221008c4fab` also failed before any recorded job step; job `96931794076` exposed no steps. This is infrastructure/unavailable-runner evidence, not a code-level failure or green build.
+
+## Stale installer
 
 ```text
 Kindle-Anki-Port-PW6-armhf.zip
 SHA-256 9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225
 ```
 
-It cannot satisfy the current QEMU-bound release chain and remains stale.
+It does not satisfy the current full-image-bound release chain and remains stale.
 
 ## Current blockers / next actions
 
 1. Materialize the latest clean branch head in a network-capable build VM with exact pinned Anki/Cargo/protoc/KindleHF inputs.
-2. Run complete static gates, including release-entrypoint, VM-driver, QEMU/package and all three documentation-order contracts.
+2. Run complete static gates, including updated rootfs-image QEMU/package/entrypoint/VM-driver tests.
 3. Run full official Anki backend plus five real APKG integrations from that same source identity.
 4. Run ARMHF cross-build and ABI/GLIBC/export audit.
-5. Supply the checksum-matching private PW6 rootfs and run exact-rootfs QEMU for those exact ARMHF bytes.
-6. Run the QEMU-bound package gate and persist final ZIP/SHA-256/manifest/contents/all reports durably on GitHub.
-7. Perform physical PW6 HIL separately after software-delivery hashes are recorded.
+5. Supply **both** private PW6 inputs: extracted 5.19.6 rootfs and retained `pw6-rootfs.img` whose SHA-256 is `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`.
+6. Run exact-rootfs QEMU for those exact ARMHF bytes and persist full-image-bound QEMU evidence.
+7. Run package/reproducibility/privacy/content gates and persist final ZIP/SHA-256/manifest/contents/all reports durably on GitHub.
+8. Perform physical PW6 HIL separately after software-delivery hashes exist.
 
 ## Completion definition
 
-**Not released.** Completion requires the full current-head source -> Anki -> APKG -> ARMHF -> exact-rootfs QEMU -> package -> durable GitHub evidence chain. Physical PW6 acceptance is a separate final result.
+**Not released.** Completion requires the full current-head source -> Anki -> APKG -> ARMHF -> retained-image-bound exact-rootfs QEMU -> package -> durable GitHub evidence chain. Physical PW6 acceptance is a separate final result.
