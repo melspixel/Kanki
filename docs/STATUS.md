@@ -6,7 +6,7 @@
 **Release state:** implementation in progress; not yet PW6-accepted  
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-22
-**Current fully recorded non-hardware candidate:** `d5f70e061b318202d132203f115dabc00d7bc45b`
+**Current fully recorded non-hardware candidate:** `b2f6a60c1a7d1c7a1137a4851fe17b6d51ed66cc`
 
 For zero-context takeover, read `docs/RESUME.md` first. For desktop reviewer semantics read `docs/ANKI_DESKTOP_PARITY.md`. For builds outside GitHub Actions read `docs/LOCAL_BUILD.md`.
 
@@ -86,7 +86,7 @@ The canonical script refuses a dirty root checkout by default, validates source 
 ### Verified local baseline
 
 The current clean local non-hardware candidate is recorded for exact SHA
-`d5f70e061b318202d132203f115dabc00d7bc45b`:
+`b2f6a60c1a7d1c7a1137a4851fe17b6d51ed66cc`:
 
 - host: macOS 26.4.1 x86-64 with Docker Desktop engine 29.4.0, using the
   `linux/amd64` builder platform;
@@ -102,7 +102,10 @@ The current clean local non-hardware candidate is recorded for exact SHA
   Generic flex compatibility maps valid non-negative `order` values to the
   old WebKit natural-number ordinal groups, while leaving negative and
   non-integer values free of invalid legacy declarations. The deterministic
-  ZIP host contract also passed;
+  ZIP host contract and install-integrity contract also passed. The latter
+  proves a clean package and bounded runtime state pass while stale regular
+  files, symlinks, tampering, missing manifest-owned files and a missing
+  manifest are rejected with distinct failures;
 - `sh tools/local_anki_bridge_docker.sh` — **PASS**; pinned Anki built as a
   native x86-64 typed library; a backend-created disposable nine-card
   collection passed queue counts, question/answer rendering, semantic
@@ -133,20 +136,21 @@ The current clean local non-hardware candidate is recorded for exact SHA
   `out/host-anki/apkg-packets.json`;
 - `bash tools/local_package_docker.sh` — **PASS**; typed Anki and all six
   ARMHF native executables built, renderer/reproducibility policy passed,
-  `MANIFEST.sha256` verified, forbidden archive paths were absent, and all 24
+  `MANIFEST.sha256` and the packaged authenticated `kanki-verify.sh` verified
+  the complete install tree, forbidden archive paths were absent, and all 24
   required review/sync exports were individually present; required
   GLIBC versions were within the pinned sysroot. The package contains the
   checksum-pinned MathJax runtime/license and records its identity;
 - two consecutive clean invocations of the same canonical package command on
   this SHA produced byte-identical ZIPs, `BUILD.json`, manifests and archive
-  evidence. Both archives contain 1,296 sorted regular files, use source date
-  epoch `1787330453`, and have the same SHA-256;
+  evidence. Both archives contain 1,297 sorted regular files, use source date
+  epoch `1787331729`, and have the same SHA-256;
 - package SHA-256:
-  `ad375f5f88a49fc8ff64d1de634f3f6206dc883b3480839c40f36a9d43b19d42`;
-- byte-identical companion evidence hashes are `7e509c1f87d61d22adc62e3e6525c19a0342728948c8b9531b4d1ba9731dee54`
-  for `BUILD.json`, `7ff272fa88ff74e968fb1bde7256828715bf23e5759931da1435ad7f262f5c11`
-  for the 1,290-entry manifest, and
-  `c53a7bb054dec313d6ca4fe81a6482a3d11db37d826d2e9c842ede166f332a4e`
+  `d6746127d49449a2fbcfe1d8b98e01376991a9115a2df521d31509f44d83d3e8`;
+- byte-identical companion evidence hashes are `0de78d7366060b14082528d985e00864709f073adfe7509c00b2d3b3fc4f9242`
+  for `BUILD.json`, `b4646b15866a884a5dead5a56ccb441be3e04138efd83904a607f296fced1051`
+  for the 1,291-entry manifest, and
+  `20a4f37c5dc803476b300f9199c68fc3f48f953da81bb83f643b2339b82ce460`
   for `archive-info.txt`;
 - `bash tools/local_pw6_rootfs_audit.sh` — **PASS** against the authenticated
   official PW6 5.19.6 recovery bundle. The audit verified the 412,492,749-byte
@@ -163,7 +167,7 @@ The current clean local non-hardware candidate is recorded for exact SHA
   symbols plus all four Lab126 CSS-pixel/zoom symbols, and instantiated
   `mixersink` and `ttssrc` after modeling the firmware's `/usr/lib/tts` mount.
   Evidence is under ignored
-  `out/firmware/pw6-5.19.6/evidence/d5f70e061b318202d132203f115dabc00d7bc45b/`;
+  `out/firmware/pw6-5.19.6/evidence/b2f6a60c1a7d1c7a1137a4851fe17b6d51ed66cc/`;
 - build identity pins Anki
   `e5a6fbe27fdd4d57d5f712191b4a753032e57853`, Kindle SDK
   `b4a6c99d718a7cf74935f36105c62491b4336a61`, audiobook helper
@@ -310,6 +314,33 @@ last advanced only 24 minutes before the second stability check at 00:45
 +08:00, so it was not deleted or closed in a race with another writer. Recheck
 the exact remote tip and ownership before retirement; no unaudited commit
 through `d27258c` is required by `rewrite-v1`.
+
+### Install-integrity checkpoint
+
+The first real failure in the clean-install/rollback category was found by a
+read-only source/contract audit: the launch and sync scripts used
+`sha256sum -c MANIFEST.sha256`, which rejected missing or modified listed files
+but silently accepted an extra stale regular file from another package
+version. That contradicted the documented mixed-version refusal contract even
+though the existing host and package gates were green.
+
+Commit `b2f6a60c1a7d1c7a1137a4851fe17b6d51ed66cc` is the minimum behavioral
+fix. It adds one package-owned verifier, authenticates that verifier from its
+exact manifest record before execution, compares the complete regular-file set
+against the manifest, rejects all symlinks and permits only explicitly bounded
+runtime state. Launch, sync and diagnostic reporting use the same verifier;
+the canonical package recipe and host policy own its inclusion and call sites.
+No installer touches `/mnt/us/anki_data` or `/mnt/us/extensions/ranki`.
+
+On that exact SHA, the new host contract reproduced and rejected stale,
+partial, tampered and symlinked installs; the full host and typed-Anki gates
+passed; two canonical packages were byte-identical with the hashes above; the
+verifier passed against the actual 1,297-file package tree; and the official
+PW6 rootfs audit passed. The required BusyBox `sha256sum`/`grep` forms were also
+executed through the target ARM shell under QEMU. No compiler, test or package
+error followed the fix. The first open failure remains physical PW6 execution
+(`hardware_execution=not_run`); historical upgrade and rollback still require
+real-device evidence.
 
 ### Baseline failure ledger
 
@@ -499,7 +530,8 @@ Because behavior-changing commits landed afterward, these do not close the curre
 - renderer diagnostics daemon behavior on ARMHF/PW6;
 - original unmodified COCA plus an unrelated rich/user APKG and their PW6
   geometry; the seven small pinned-Anki APKG fixtures pass on host;
-- clean install / historical upgrade / rollback;
+- physical clean install / historical upgrade / rollback; host/package mixed-
+  install integrity passes;
 - diagnostic privacy review;
 - PW6 review/sync/scroll/sleep-wake/USB lifecycle acceptance;
 - independent maintainer reproduction from repository docs only.
@@ -508,7 +540,7 @@ Because behavior-changing commits landed afterward, these do not close the curre
 
 1. Preserve candidate identity before device transfer with
    `shasum -a 256 out/local-kindle/Kanki-rewrite-hw3.zip`; the expected value
-   is `ad375f5f88a49fc8ff64d1de634f3f6206dc883b3480839c40f36a9d43b19d42`.
+   is `d6746127d49449a2fbcfe1d8b98e01376991a9115a2df521d31509f44d83d3e8`.
 2. Obtain explicit local test access to original COCA and at least one
    unrelated representative APKG, then run the same privacy-reviewed path
    without modifying or committing the decks and without adding deck CSS.

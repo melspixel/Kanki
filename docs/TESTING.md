@@ -104,7 +104,10 @@ Passing means relative hierarchy, DOM order, overflow and controls match the fix
 - compare two clean canonical builds of the exact candidate byte-for-byte;
 - bind sorted archive paths, permissions and timestamps to source-controlled
   inputs and record the source date epoch/archive hash;
-- verify `MANIFEST.sha256` and refusal of mixed/partial components;
+- verify `MANIFEST.sha256` plus the packaged authenticated verifier against the
+  actual assembled tree: clean and explicitly permitted runtime state pass;
+  extra stale regular files, symlinks, tampering, missing manifest-owned files
+  and a missing manifest fail;
 - verify package includes diagnostic/report runtime and does not include `extensions/ranki`, `collection.anki2` or user `config.ini`;
 - package contains no Amazon firmware or proprietary library bytes.
 

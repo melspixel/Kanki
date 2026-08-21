@@ -245,6 +245,22 @@ only **obsolete-scaffold** and was removed with before/after host gates. The
 production backend remains pinned Anki plus `bridge/`; the production Kindle
 application remains the source-owned native code in `device/`.
 
+### 4.6 Install identity and mixed-version refusal
+
+A source audit found that plain `sha256sum -c` verified manifest-owned files
+but accepted extra stale regular files. Exact candidate
+`b2f6a60c1a7d1c7a1137a4851fe17b6d51ed66cc` closes that gap with the
+package-owned `scripts/kanki-verify.sh`: callers first authenticate its exact
+manifest record, then it verifies all listed hashes, rejects symlinks and
+rejects regular files outside the manifest except the explicit bounded runtime
+state documented in `docs/INSTALL.md`.
+
+The host contract, two byte-identical canonical package builds, verification
+of the actual 1,297-file package tree and the authenticated PW6 5.19.6 rootfs
+audit pass on that exact SHA. This is software evidence only. Physical clean
+install, historical upgrade and rollback remain Gate E work, and must never
+delete or replace `/mnt/us/anki_data` or touch `/mnt/us/extensions/ranki`.
+
 ## 5. Recommended target layout
 
 Do **not** perform a mass rename as the first task. First get a local green baseline. Once behavior is stable, reorganize toward clear ownership. A reasonable target is:
