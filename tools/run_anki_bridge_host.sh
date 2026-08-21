@@ -5,6 +5,9 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 
 ANKI_COMMIT=${ANKI_COMMIT:-e5a6fbe27fdd4d57d5f712191b4a753032e57853}
+ANKI_I18N_NORMALIZATION=btree-map-v1
+ANKI_I18N_UPSTREAM_SHA256=0844f9f54d95b1d6008a80226cc75829d1dc638f0388f231272d5ba88d8defb8
+ANKI_I18N_NORMALIZED_SHA256=bd0d82698a6a56a095063eee822001a101be55566971493cb4a7552d5600a50c
 OUT_DIR=${KANKI_HOST_BRIDGE_OUT_DIR:-$ROOT/out/host-anki}
 BUILD_COMMIT=${KANKI_BUILD_COMMIT:-$(git rev-parse HEAD)}
 PROTOC=${PROTOC:-$(command -v protoc || true)}
@@ -47,12 +50,14 @@ SCRATCH=$(mktemp -d /tmp/kanki-host-anki.XXXXXX)
 SYNC_SERVER_PID=
 ANKI_LIB_RS=third_party/anki/rslib/src/lib.rs
 ANKI_CARGO=third_party/anki/rslib/Cargo.toml
+ANKI_I18N_GATHER=third_party/anki/rslib/i18n/gather.rs
 ANKI_BRIDGE_RS=third_party/anki/rslib/src/kanki_bridge.rs
 ANKI_SYNC_RS=third_party/anki/rslib/src/kanki_sync_bridge.rs
 ANKI_FIXTURE_RS=third_party/anki/rslib/src/bin/kanki_fixture.rs
 ANKI_APKG_FIXTURE_RS=third_party/anki/rslib/src/bin/kanki_apkg_fixture.rs
 cp "$ANKI_LIB_RS" "$SCRATCH/lib.rs.original"
 cp "$ANKI_CARGO" "$SCRATCH/Cargo.toml.original"
+cp "$ANKI_I18N_GATHER" "$SCRATCH/i18n-gather.rs.original"
 
 cleanup() {
     if [ -n "$SYNC_SERVER_PID" ]; then
@@ -61,6 +66,8 @@ cleanup() {
     fi
     cp "$SCRATCH/lib.rs.original" "$ANKI_LIB_RS" 2>/dev/null || true
     cp "$SCRATCH/Cargo.toml.original" "$ANKI_CARGO" 2>/dev/null || true
+    cp "$SCRATCH/i18n-gather.rs.original" "$ANKI_I18N_GATHER" \
+        2>/dev/null || true
     rm -f "$ANKI_BRIDGE_RS" "$ANKI_SYNC_RS" "$ANKI_FIXTURE_RS" \
         "$ANKI_APKG_FIXTURE_RS"
     rmdir third_party/anki/rslib/src/bin 2>/dev/null || true
@@ -72,12 +79,23 @@ mkdir -p "$OUT_DIR"
 rm -f "$OUT_DIR/bridge-smoke.txt" "$OUT_DIR/bridge-integration.txt" \
       "$OUT_DIR/sync-integration.txt" \
       "$OUT_DIR/bridge-exports.txt" \
-      "$OUT_DIR/bridge-dynamic.txt" "$OUT_DIR/bridge-library.sha256"
+      "$OUT_DIR/bridge-dynamic.txt" "$OUT_DIR/bridge-library.sha256" \
+      "$OUT_DIR/anki-i18n-info.txt"
 
 printf '%s\n' '== initialize pinned Anki translations =='
 git -C third_party/anki submodule update --init --depth 1 ftl/core-repo ftl/qt-repo
 mkdir -p third_party/anki/out/rslib/proto third_party/anki/out/extracted/protoc/bin
 ln -sf "$PROTOC" third_party/anki/out/extracted/protoc/bin/protoc
+
+printf '%s\n' '== normalize pinned Anki i18n build order =='
+python3 tools/normalize_anki_i18n.py "$ANKI_I18N_GATHER" \
+    | tee "$OUT_DIR/anki-i18n-info.txt"
+grep -q "KANKI_ANKI_I18N_NORMALIZATION=$ANKI_I18N_NORMALIZATION" \
+    "$OUT_DIR/anki-i18n-info.txt"
+grep -q "KANKI_ANKI_I18N_UPSTREAM_SHA256=$ANKI_I18N_UPSTREAM_SHA256" \
+    "$OUT_DIR/anki-i18n-info.txt"
+grep -q "KANKI_ANKI_I18N_NORMALIZED_SHA256=$ANKI_I18N_NORMALIZED_SHA256" \
+    "$OUT_DIR/anki-i18n-info.txt"
 
 printf '%s\n' '== embed semantic Kanki bridges =='
 cp bridge/anki_bridge.rs "$ANKI_BRIDGE_RS"

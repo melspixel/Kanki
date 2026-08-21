@@ -12,6 +12,8 @@ Tests in this directory are cross-layer contracts for the rewrite. They are inte
   upstream APKG fixtures;
 - source contracts enforce semantic typed bridge, audio, privacy and package
   invariants without substituting for executable integration;
+- `anki_i18n_determinism_contract.py` authenticates the fixed upstream Anki
+  i18n generator and its build-only ordered-map normalization;
 - `rootfs_audit_source_contract.py` pins the PW6 firmware audit identity and
   evidence boundary; `tools/audit_pw6_rootfs.sh` supplies the corresponding
   executable loader/QEMU evidence;

@@ -37,6 +37,7 @@ cargo fmt --all -- --check
 rustfmt --edition 2021 --check bridge/anki_bridge.rs bridge/fixture.rs bridge/apkg_fixture.rs
 cargo clippy --workspace --all-targets -- -D warnings
 python3 tools/check_policy.py
+python3 tests/anki_i18n_determinism_contract.py
 python3 tests/bridge_source_contract.py
 python3 tests/audio_source_contract.py
 python3 tests/rootfs_audit_source_contract.py

@@ -139,6 +139,10 @@ for required in [
     'BUILD_EPOCH=$(git show -s --format=%ct "$BUILD_COMMIT")',
     "python3 tools/create_reproducible_zip.py",
     '"source_date_epoch": $BUILD_EPOCH',
+    "python3 tools/normalize_anki_i18n.py",
+    '"anki_i18n_normalization": "$ANKI_I18N_NORMALIZATION"',
+    '"anki_i18n_upstream_sha256": "$ANKI_I18N_UPSTREAM_SHA256"',
+    '"anki_i18n_normalized_sha256": "$ANKI_I18N_NORMALIZED_SHA256"',
 ]:
     if required not in package_recipe:
         errors.append(f"canonical package recipe lacks deterministic archive input: {required}")

@@ -12,6 +12,9 @@ AUDIOBOOK_COMMIT=${AUDIOBOOK_COMMIT:-62edf76feb1b7f4af2f01754957e8d57eb3e7d67}
 MINIAUDIO_COMMIT=${MINIAUDIO_COMMIT:-4a5b74bef029b3592c54b6048650ee5f972c1a48}
 MATHJAX_VERSION=2.7.9
 MATHJAX_SHA256=7131e739848edc14aa661a5516995866b81a477fab8b039d7cc324930e71f786
+ANKI_I18N_NORMALIZATION=btree-map-v1
+ANKI_I18N_UPSTREAM_SHA256=0844f9f54d95b1d6008a80226cc75829d1dc638f0388f231272d5ba88d8defb8
+ANKI_I18N_NORMALIZED_SHA256=bd0d82698a6a56a095063eee822001a101be55566971493cb4a7552d5600a50c
 KOX_VERSION=${KOX_VERSION:-2026.08}
 KOX_SHA256=${KOX_SHA256:-8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0}
 PROTOC=${PROTOC:-/usr/bin/protoc}
@@ -70,20 +73,24 @@ rm -f "$OUT_DIR/$PACKAGE_NAME.zip" "$OUT_DIR/$PACKAGE_NAME.zip.sha256" \
       "$OUT_DIR/package-contents.txt" "$OUT_DIR/package-exports.txt" \
       "$OUT_DIR/package-glibc.txt" "$OUT_DIR/sysroot-glibc.txt" \
       "$OUT_DIR/toolchain-info.txt" "$OUT_DIR/mathjax-info.txt" \
-      "$OUT_DIR/archive-info.txt"
+      "$OUT_DIR/anki-i18n-info.txt" "$OUT_DIR/archive-info.txt"
 
 ANKI_LIB_RS=third_party/anki/rslib/src/lib.rs
 ANKI_CARGO=third_party/anki/rslib/Cargo.toml
+ANKI_I18N_GATHER=third_party/anki/rslib/i18n/gather.rs
 ANKI_BRIDGE_RS=third_party/anki/rslib/src/kanki_bridge.rs
 ANKI_SYNC_RS=third_party/anki/rslib/src/kanki_sync_bridge.rs
 LIB_BACKUP="$SCRATCH/anki-lib.rs.original"
 CARGO_BACKUP="$SCRATCH/anki-Cargo.toml.original"
+I18N_GATHER_BACKUP="$SCRATCH/anki-i18n-gather.rs.original"
 cp "$ANKI_LIB_RS" "$LIB_BACKUP"
 cp "$ANKI_CARGO" "$CARGO_BACKUP"
+cp "$ANKI_I18N_GATHER" "$I18N_GATHER_BACKUP"
 
 cleanup() {
     cp "$LIB_BACKUP" "$ANKI_LIB_RS" 2>/dev/null || true
     cp "$CARGO_BACKUP" "$ANKI_CARGO" 2>/dev/null || true
+    cp "$I18N_GATHER_BACKUP" "$ANKI_I18N_GATHER" 2>/dev/null || true
     rm -f "$ANKI_BRIDGE_RS" "$ANKI_SYNC_RS"
 }
 trap cleanup EXIT INT TERM
@@ -92,6 +99,16 @@ printf '%s\n' '== initialize pinned Anki translation submodules =='
 git -C third_party/anki submodule update --init --depth 1 ftl/core-repo ftl/qt-repo
 mkdir -p third_party/anki/out/rslib/proto third_party/anki/out/extracted/protoc/bin
 ln -sf "$PROTOC" third_party/anki/out/extracted/protoc/bin/protoc
+
+printf '%s\n' '== normalize pinned Anki i18n build order =='
+python3 tools/normalize_anki_i18n.py "$ANKI_I18N_GATHER" \
+    | tee "$OUT_DIR/anki-i18n-info.txt"
+grep -q "KANKI_ANKI_I18N_NORMALIZATION=$ANKI_I18N_NORMALIZATION" \
+    "$OUT_DIR/anki-i18n-info.txt"
+grep -q "KANKI_ANKI_I18N_UPSTREAM_SHA256=$ANKI_I18N_UPSTREAM_SHA256" \
+    "$OUT_DIR/anki-i18n-info.txt"
+grep -q "KANKI_ANKI_I18N_NORMALIZED_SHA256=$ANKI_I18N_NORMALIZED_SHA256" \
+    "$OUT_DIR/anki-i18n-info.txt"
 
 printf '%s\n' '== install/reuse pinned KindleHF toolchain =='
 KOX_MARKER="$HOME/.kanki-kox-${KOX_VERSION}-${KOX_SHA256}"
@@ -217,6 +234,9 @@ cat > "$EXT/BUILD.json" <<EOF
   "miniaudio_commit": "$MINIAUDIO_COMMIT",
   "mathjax_version": "$MATHJAX_VERSION",
   "mathjax_sha256": "$MATHJAX_SHA256",
+  "anki_i18n_normalization": "$ANKI_I18N_NORMALIZATION",
+  "anki_i18n_upstream_sha256": "$ANKI_I18N_UPSTREAM_SHA256",
+  "anki_i18n_normalized_sha256": "$ANKI_I18N_NORMALIZED_SHA256",
   "source_date_epoch": $BUILD_EPOCH,
   "koxtoolchain_version": "$KOX_VERSION",
   "koxtoolchain_sha256": "$KOX_SHA256",
@@ -270,6 +290,12 @@ grep -q "\"koxtoolchain_version\": \"$KOX_VERSION\"" "$EXT/BUILD.json"
 grep -q "\"koxtoolchain_sha256\": \"$KOX_SHA256\"" "$EXT/BUILD.json"
 grep -q "\"mathjax_version\": \"$MATHJAX_VERSION\"" "$EXT/BUILD.json"
 grep -q "\"mathjax_sha256\": \"$MATHJAX_SHA256\"" "$EXT/BUILD.json"
+grep -q "\"anki_i18n_normalization\": \"$ANKI_I18N_NORMALIZATION\"" \
+    "$EXT/BUILD.json"
+grep -q "\"anki_i18n_upstream_sha256\": \"$ANKI_I18N_UPSTREAM_SHA256\"" \
+    "$EXT/BUILD.json"
+grep -q "\"anki_i18n_normalized_sha256\": \"$ANKI_I18N_NORMALIZED_SHA256\"" \
+    "$EXT/BUILD.json"
 grep -q "\"source_date_epoch\": $BUILD_EPOCH" "$EXT/BUILD.json"
 grep -q "KANKI_ARCHIVE_SOURCE_DATE_EPOCH=$BUILD_EPOCH" "$OUT_DIR/archive-info.txt"
 python3 tools/check_policy.py
