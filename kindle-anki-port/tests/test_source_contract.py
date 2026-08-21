@@ -26,11 +26,26 @@ def rust_exports(source: str) -> set[str]:
     )
 
 
+def native_host_source() -> tuple[str, list[Path]]:
+    wrapper = ROOT / "native" / "app.c"
+    fragments = sorted((ROOT / "native").glob("app_part*.inc"))
+    require(wrapper.is_file(), "native/app.c is missing")
+    require(len(fragments) == 4, f"expected four native host fragments, found {len(fragments)}")
+    text = "\n".join(
+        [wrapper.read_text(encoding="utf-8")]
+        + [path.read_text(encoding="utf-8") for path in fragments]
+    )
+    for fragment in fragments:
+        require(f'#include "{fragment.name}"' in wrapper.read_text(encoding="utf-8"),
+                f"native/app.c does not include {fragment.name}")
+    return text, [wrapper, *fragments]
+
+
 def main() -> int:
     header = (ROOT / "core" / "kap_core.h").read_text(encoding="utf-8")
     port = (ROOT / "core" / "src" / "port.rs").read_text(encoding="utf-8")
     bridge = (ROOT / "core" / "src" / "services_bridge.rs").read_text(encoding="utf-8")
-    app = (ROOT / "native" / "app.c").read_text(encoding="utf-8")
+    app, app_files = native_host_source()
     sync = (ROOT / "native" / "sync.c").read_text(encoding="utf-8")
     reviewer_html = (ROOT / "web" / "reviewer.html").read_text(encoding="utf-8")
     reviewer_js = (ROOT / "web" / "reviewer.js").read_text(encoding="utf-8")
@@ -90,7 +105,7 @@ def main() -> int:
     runtime_files = [
         ROOT / "core" / "src" / "port.rs",
         ROOT / "core" / "src" / "services_bridge.rs",
-        ROOT / "native" / "app.c",
+        *app_files,
         ROOT / "native" / "audio.c",
         ROOT / "native" / "sync.c",
         *sorted((ROOT / "web").glob("*")),
