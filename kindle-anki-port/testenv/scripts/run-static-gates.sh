@@ -37,12 +37,15 @@ run() {
 run python3 -m py_compile \
     "$ROOT/tools/inject_into_anki.py" "$ROOT/tools/audit_package.py" \
     "$ROOT/tools/audit_generated_services.py" \
+    "$ROOT/testenv/scripts/package_audit.py" \
     "$ROOT/testenv/scripts/prepare-pw6-rootfs.py" \
     "$ROOT/testenv/scripts/verify-pw6-rootfs.py" \
+    "$ROOT/testenv/scripts/vm-advance.py" \
     "$ROOT/tests/test_injector.py" "$ROOT/tests/test_semantic_boundary.py" \
     "$ROOT/tests/test_source_contract.py" "$ROOT/tests/test_package_audit.py" \
     "$ROOT/tests/test_prepare_pw6_rootfs.py" "$ROOT/tests/test_rootfs_prepare_script.py" \
-    "$ROOT/tests/test_build_entrypoints.py" "$ROOT/tests/test_prepare_sysroot.py"
+    "$ROOT/tests/test_build_entrypoints.py" "$ROOT/tests/test_prepare_sysroot.py" \
+    "$ROOT/tests/test_vm_advance_contract.py"
 run python3 "$ROOT/tests/test_injector.py"
 run python3 "$ROOT/tests/test_semantic_boundary.py"
 run python3 "$ROOT/tests/test_source_contract.py"
@@ -51,8 +54,15 @@ run python3 "$ROOT/tests/test_prepare_pw6_rootfs.py"
 run python3 "$ROOT/tests/test_rootfs_prepare_script.py"
 run python3 "$ROOT/tests/test_build_entrypoints.py"
 run python3 "$ROOT/tests/test_prepare_sysroot.py"
+run python3 "$ROOT/tests/test_vm_advance_contract.py"
 run sh -n "$ROOT/testenv/scripts/prepare-pw6-rootfs.sh"
 run sh -n "$ROOT/testenv/scripts/prepare-sysroot.sh"
+run sh -n "$ROOT/testenv/scripts/run-host-gates.sh"
+run sh -n "$ROOT/testenv/scripts/run-host-backend-gates.sh"
+run sh -n "$ROOT/testenv/scripts/run-armhf-gates.sh"
+run sh -n "$ROOT/testenv/scripts/run-qemu-host-sanity.sh"
+run sh -n "$ROOT/testenv/scripts/run-qemu-smoke.sh"
+run sh -n "$ROOT/testenv/scripts/package-and-audit.sh"
 run sh -n "$ROOT/testenv/tests/audio/test-audio.sh"
 run node --check "$ROOT/web/bridge.js"
 run node --check "$ROOT/web/css_compat.js"
