@@ -83,7 +83,10 @@ At capture time `main` was
 `f9d2c884a3e191f5975d484675a3283d1bbb4c3d` and `rewrite-v1` was
 `48e63674036a370fcfbfd5471ff8ea3ee25b30a7`. The object IDs are the durable
 provenance record; a recovery clone must still retain/fetch the corresponding
-object or GitHub PR ref.
+object or GitHub PR ref. Immediately before retirement on 2026-08-22,
+`kindle-anki-port` advanced by two commits; its row below records the refreshed
+tip, which descends from the original captured tip
+`afe207d3a771273f75f306c482b65b9cfd8c1bbe`.
 
 | Historical remote branch | Preserved tip SHA | Initial ancestry/content disposition |
 | --- | --- | --- |
@@ -93,7 +96,7 @@ object or GitHub PR ref.
 | `dropin-native-renderer` | `4212ab0054faaf4c6f156835729f69d87500148a` | non-ancestor; content audit required |
 | `handoff-codex-cleanup` | `92a7313a2608324616ee140fc030bcc5b31787fb` | temporary non-ancestor; content audit required |
 | `kanki-next-bootstrap` | `86dcd09f3a3f34e7669ddd310dc360781a98ed74` | non-ancestor; content audit required |
-| `kindle-anki-port` | `afe207d3a771273f75f306c482b65b9cfd8c1bbe` | non-ancestor; content audit required |
+| `kindle-anki-port` | `e294aaa070153b19c9751d85ba025ee32f27cd0f` | non-ancestor; refreshed content audit complete |
 | `kindleanki-v1-closure` | `90dae0fdf57889fc70d4ac447908eee04287394f` | fully contained in `rewrite-v1` |
 | `refactor-anki-compat` | `2bc08be6b6cb27c70fff55f2c27fbdc3d1c8a075` | fully contained in `rewrite-v1` |
 | `renderer-adaptive-v2` | `0993c13d87819c11ea161d3e3c07c8363552b411` | non-ancestor; content audit required |
@@ -117,8 +120,8 @@ intended long-term branch set is small:
 
 #### Final retirement audit
 
-The content audit completed on 2026-08-22 against cleanup code point
-`7a4c74c38e23a5ddc9f5f17dee4abc84f43628bb`:
+The content audit completed on 2026-08-22 and was refreshed against rewrite
+code point `8c97be710b3c43f8c485fec040ff1172db997a88`:
 
 - `desktop-anki-kindle-port`, `kindleanki-v1-closure`,
   `refactor-anki-compat`, `test3-native-audio`, `test4-audio-ui`,
@@ -146,7 +149,13 @@ The content audit completed on 2026-08-22 against cleanup code point
   semantic boundary, sync-worker and QEMU goals are covered more directly by
   the current pinned-Anki disposable integration, controlled normal/full/media
   sync tests, canonical ARMHF package and authenticated PW6 rootfs audit. No
-  separate port tree or split overlay is needed by the rewrite.
+  separate port tree or split overlay is needed by the rewrite. Its two late
+  commits derive a GLIBC ceiling from that tree's target sysroot and add a
+  relocatable-protoc library-path heuristic. The canonical package already
+  compares every packaged ELF GLIBC requirement with the complete pinned
+  KindleHF sysroot version set and records both evidence files; its fixed
+  Docker builder supplies `/usr/bin/protoc`, so it neither needs nor should
+  inject the branch's additional `LD_LIBRARY_PATH` heuristic.
 - the useful directory-ownership commits from `repo-cleanup-v1` were
   cherry-picked and corrected for the current build. The two one-shot patch
   tools were independently audited/removed with a policy guard, and the sole
