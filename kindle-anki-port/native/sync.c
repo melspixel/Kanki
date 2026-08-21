@@ -173,8 +173,13 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[index], "--collection") == 0 && index + 1 < argc) collection = argv[++index];
         else if (strcmp(argv[index], "--media") == 0 && index + 1 < argc) media = argv[++index];
         else if (strcmp(argv[index], "--media-db") == 0 && index + 1 < argc) media_db = argv[++index];
-        else if (strcmp(argv[index], "--full-upload") == 0) mode = 1;
-        else if (strcmp(argv[index], "--full-download") == 0) mode = 2;
+        else if (strcmp(argv[index], "--full-upload") == 0) {
+            if (mode != 0 && mode != 1) { usage(argv[0]); return 64; }
+            mode = 1;
+        } else if (strcmp(argv[index], "--full-download") == 0) {
+            if (mode != 0 && mode != 2) { usage(argv[0]); return 64; }
+            mode = 2;
+        }
         else if (strcmp(argv[index], "--no-media") == 0) sync_media = 0;
         else if (strcmp(argv[index], "--server-usn") == 0 && index + 1 < argc) {
             char *end = NULL;
