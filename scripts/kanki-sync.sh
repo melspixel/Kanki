@@ -7,7 +7,11 @@ LOCK="$DIR/.kanki.lock"
 CONFIG="$DIR/config.ini"
 OLD_CONFIG=/mnt/us/extensions/ranki/config.ini
 
-if [ -d "$LOCK" ]; then
+# External syncs must never race the reviewer. The launcher owns the same lock
+# while performing an in-process handoff: the reviewer has exited and closed
+# the collection, but the launcher PID deliberately remains the lock owner so
+# a second Kanki launch cannot enter during sync.
+if [ -d "$LOCK" ] && [ "${KANKI_SYNC_FROM_LAUNCHER:-0}" != "1" ]; then
     printf '%s sync refused while Kanki is running\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG"
     exit 74
 fi
