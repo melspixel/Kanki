@@ -3,6 +3,7 @@ name: Build Kanki package
 on:
   workflow_dispatch:
   push:
+    branches-ignore: [kindle-anki-port]
     paths:
       - 'src/**'
       - 'scripts/**'
@@ -10,6 +11,11 @@ on:
       - '.github/workflows/build.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'tools/**'
+      - '.github/workflows/build.yml'
 
 jobs:
   build:
