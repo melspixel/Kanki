@@ -81,8 +81,9 @@ The following preservation ledger was captured with a read-only
 `git ls-remote --heads origin` on 2026-08-21, before deleting any branch.
 At capture time `main` was
 `f9d2c884a3e191f5975d484675a3283d1bbb4c3d` and `rewrite-v1` was
-`48e63674036a370fcfbfd5471ff8ea3ee25b30a7`. A deleted name can be
-reconstructed directly from the recorded object ID.
+`48e63674036a370fcfbfd5471ff8ea3ee25b30a7`. The object IDs are the durable
+provenance record; a recovery clone must still retain/fetch the corresponding
+object or GitHub PR ref.
 
 | Historical remote branch | Preserved tip SHA | Initial ancestry/content disposition |
 | --- | --- | --- |
@@ -113,6 +114,49 @@ intended long-term branch set is small:
 - `main`
 - one active integration branch until release (`rewrite-v1`)
 - short-lived focused feature branches
+
+#### Final retirement audit
+
+The content audit completed on 2026-08-22 against cleanup code point
+`7a4c74c38e23a5ddc9f5f17dee4abc84f43628bb`:
+
+- `desktop-anki-kindle-port`, `kindleanki-v1-closure`,
+  `refactor-anki-compat`, `test3-native-audio`, `test4-audio-ui`,
+  `test4-final` and `test5-coca-layout` have no commits outside
+  `rewrite-v1`.
+- `test2-ci` adds only `ci-test2.txt`; it contains no product or test logic.
+- `ci-validation` changes the historical `src/` audio helper and old workflow.
+  Its useful process-group stop behavior is present in
+  `device/audio/kanki_audio_server.c` and enforced by
+  `tests/audio_source_contract.py`; its ARMEL/static helper recipe is not the
+  canonical PW6 ARMHF package path.
+- `anki-26.08-backend` is the rejected RAnki runtime redirect experiment. It
+  installs a backend shim through `LD_PRELOAD`; the rewrite instead builds the
+  fixed Anki source with the semantic `bridge/` ABI and has executable
+  host/ARMHF/rootfs evidence.
+- `renderer-adaptive-v2`, `kanki-next-bootstrap` and
+  `dropin-native-renderer` retain historical firmware research, but their
+  branch-side runtime still packages RAnki/redirect shims and the adaptive
+  layer hard-codes `LOGICAL_VIEWPORT_PX = 420` while rewriting media queries.
+  The accepted Lab126 symbols, persistent reviewer, privacy-bounded
+  diagnostics and fixed-firmware audit now live in source-owned
+  `device/`, `assets/`, `scripts/` and `tools/audit_pw6_rootfs.sh` without
+  those forbidden mechanisms.
+- `kindle-anki-port` is a second parallel source/overlay product tree. Its
+  semantic boundary, sync-worker and QEMU goals are covered more directly by
+  the current pinned-Anki disposable integration, controlled normal/full/media
+  sync tests, canonical ARMHF package and authenticated PW6 rootfs audit. No
+  separate port tree or split overlay is needed by the rewrite.
+- the useful directory-ownership commits from `repo-cleanup-v1` were
+  cherry-picked and corrected for the current build. The two one-shot patch
+  tools were independently audited/removed with a policy guard, and the sole
+  obsolete Rust scaffold was removed after dependency and host-gate proof.
+  `handoff-codex-cleanup` is the superseded subset; neither temporary cleanup
+  branch retains required code.
+
+With their exact tips preserved above, all 16 historical/temporary names in
+the ledger are approved for retirement. PRs whose heads are these experiments
+must be closed as superseded; PR #10 remains the only active rewrite PR.
 
 ### 4.2 Transitional developer patch scripts
 
