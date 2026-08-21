@@ -1,12 +1,14 @@
-#!/bin/sh
-set -eu
-PROJECT_ROOT=${PROJECT_ROOT:?}
-ANKI_ROOT=${ANKI_ROOT:?}
-python3 -m py_compile "$PROJECT_ROOT/tools/inject_into_anki.py"
-for f in "$PROJECT_ROOT"/web/*.js; do node --check "$f"; done
-for f in "$PROJECT_ROOT"/scripts/*.sh; do sh -n "$f"; done
-cc -O2 -std=c99 -Wall -Wextra -Werror -I"$PROJECT_ROOT/core" "$PROJECT_ROOT/native/app.c" -ldl -o /tmp/kap-app-host
-cc -O2 -std=c99 -Wall -Wextra -Werror "$PROJECT_ROOT/native/audio.c" -ldl -lpthread -lm -o /tmp/kap-audio-host
-(cd "$ANKI_ROOT" && PROTOC=/usr/bin/protoc CARGO_TERM_COLOR=never cargo test -p anki --features rustls kap_port::tests --lib --no-fail-fast)
-(cd "$ANKI_ROOT" && PROTOC=/usr/bin/protoc CARGO_TERM_COLOR=never cargo build -p anki --features rustls --release)
-nm -D "$ANKI_ROOT/target/release/libanki.so" | grep ' kap_'
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT=${PROJECT_ROOT:?set PROJECT_ROOT to kindle-anki-port source root}
+ANKI_ROOT=${ANKI_ROOT:?set ANKI_ROOT to the exact pinned official Anki checkout}
+CARGO_HOME=${CARGO_HOME:?set CARGO_HOME to the prepared offline cache}
+PROTOC=${PROTOC:?set PROTOC to the pinned protoc executable}
+
+# Compatibility entry point. Keep one source of truth for both static and
+# official-backend gates instead of duplicating a weaker subset here.
+KAP_BUILD_DIR=${KAP_BUILD_DIR:-$PROJECT_ROOT/build/static-gates} \
+  sh "$PROJECT_ROOT/testenv/scripts/run-static-gates.sh"
+PROJECT="$PROJECT_ROOT" ANKI="$ANKI_ROOT" CARGO_HOME="$CARGO_HOME" PROTOC="$PROTOC" \
+  bash "$PROJECT_ROOT/testenv/scripts/run-host-backend-gates.sh"
