@@ -7,7 +7,7 @@
 **Target:** PW6 / ARMv7 hard-float  
 **Checkpoint:** 2026-08-21
 
-For zero-context takeover, read `docs/RESUME.md` first.
+For zero-context takeover, read `docs/RESUME.md` first. For exact reviewer-semantic differences against pinned desktop Anki, read `docs/ANKI_DESKTOP_PARITY.md`.
 
 ## What is implemented on the branch
 
@@ -33,7 +33,7 @@ The rewrite is no longer only an architecture/bootstrap skeleton. The branch con
 - duplicate-instance/reactivation helper;
 - mandatory build identity and manifest verification for launch and sync;
 - redacted diagnostic-bundle script and Kindle-home report shortcut;
-- handoff, architecture, install, test and ADR documentation;
+- handoff, architecture, install, test, desktop-parity and ADR documentation;
 - host, Anki bridge, ARMHF, device, audio, CSS and package workflows.
 
 Implementation presence is not the same as verification. Issue #11 remains the closure authority.
@@ -42,6 +42,8 @@ Implementation presence is not the same as verification. Issue #11 remains the c
 
 - Added `docs/RESUME.md` as a zero-context maintainer entry point.
 - Expanded `docs/HANDOFF.md` into an operational handoff contract.
+- Added `docs/ANKI_DESKTOP_PARITY.md` comparing reviewer semantics directly against the pinned Anki 26.08.1 desktop code.
+- Added ADR 0002 for observability and reproducible device builds.
 - Updated README/INSTALL/TESTING/issue #11/PR #10 to distinguish implemented from verified.
 - Added `tools/run_host_gates.sh` as a one-command local host verification path.
 - Added a minimal GitHub Actions runner probe to separate CI infrastructure failures from product failures.
@@ -71,11 +73,24 @@ These results are engineering evidence, but they do **not** close the current ca
 
 ## Current blocker — isolated from product source
 
-The zero-step Actions failure remains reproducible on the current implementation line. On PR head `5c638b7a0cd39ce1ecd29e9daccc156fbbea6a9a`, minimal **Actions runner probe** run `32471193305`, job `96738122462`, completed `failure` with `steps = null`. The seven normal workflows triggered from that same head also failed before useful execution.
+At PR head `0a0822ce751cc18baa57dbd268df9a7f2be0f1d2`, minimal **Actions runner probe** run `32472150633`, job `96741001992`, completed `failure` with `steps = null`. All seven normal workflows triggered from the same head also completed `failure` before useful execution.
 
 The probe contains no Kanki build dependencies and only requests an `ubuntu-latest` runner with a trivial shell step. This isolates the immediate blocker to GitHub Actions job execution/runner/account/repository infrastructure, not to a Kanki compiler/test failure.
 
 Until the probe enters its first real step, do not change product source merely because these zero-step runs are red.
+
+## Desktop Anki parity findings that remain open
+
+A direct source audit against pinned `qt/aqt/reviewer.py` and `qt/aqt/theme.py` found several semantic items that must be closed before release:
+
+- typed-answer `{{FrontSide}}` separator placement in the current bridge is not yet desktop-equivalent;
+- card autoplay is currently inferred too aggressively from the presence of AV tags instead of coming from Anki card semantics;
+- desktop can replay question audio on the answer side depending on card/deck settings, while the current packet exposes answer tags only;
+- the native rating bar currently allocates four buttons unconditionally, while desktop scheduling can present 2/3/4 logical ratings;
+- Lab126 CSS-pixel configuration is currently reviewer-entry-oriented and should be verified/moved to the WebView lifecycle boundary;
+- ordinary HTTP(S) links from card HTML need an explicit policy so they cannot silently replace the persistent reviewer document.
+
+These are documented in `docs/ANKI_DESKTOP_PARITY.md`; do not hide them behind visual CSS fixes.
 
 ## Renderer diagnostics behavior now designed into the rewrite
 
@@ -112,7 +127,7 @@ The following still require same-commit evidence before release:
 - native Kindle shell and Lab126 CSS-pixel behavior on the candidate;
 - `kanki-diag` ARMHF build, launch and bounded metric/capture behavior;
 - complete generic CSS compatibility corpus;
-- renderer parity corpus including original representative APKG decks without modification;
+- renderer parity corpus including type-answer, autoplay/replay semantics, rating-cardinality cases and original representative APKG decks without modification;
 - reproducible installable package and manifest verification;
 - clean-install / historical-upgrade / rollback tests;
 - PW6 deck/review/audio/sync/scroll/lifecycle acceptance;
@@ -123,12 +138,13 @@ The following still require same-commit evidence before release:
 
 1. Restore GitHub-hosted Actions execution at the repository/account level; rerun the minimal probe first.
 2. Do not edit product/workflow build logic in response to a zero-step failure.
-3. Once the probe executes, fix only the first real failing step in the narrowest workflow.
-4. Establish one green host commit, then typed Anki host bridge, ARMHF bridge/device/audio/CSS/diagnostics, then package.
-5. Freeze the first complete candidate only after all non-hardware gates are green on the same SHA.
-6. Produce the first rewrite installable ZIP from the package workflow, not manually.
-7. Run PW6 hardware acceptance, including the new automatic renderer metrics and opt-in raw capture if required.
-8. Feed acceptance evidence back into issue #11 and update handoff/status before every handoff.
+3. While Actions is blocked, continue source-level parity audit and record/fix deterministic semantic differences that can be proven from the pinned Anki/Kindle source.
+4. Once the probe executes, fix only the first real failing step in the narrowest workflow.
+5. Establish one green host commit, then typed Anki host bridge, ARMHF bridge/device/audio/CSS/diagnostics, then package.
+6. Freeze the first complete candidate only after all non-hardware gates are green on the same SHA.
+7. Produce the first rewrite installable ZIP from the package workflow, not manually.
+8. Run PW6 hardware acceptance, including the new automatic renderer metrics and opt-in raw capture if required.
+9. Feed acceptance evidence back into issue #11 and update handoff/status before every handoff.
 
 ## Release rule
 
