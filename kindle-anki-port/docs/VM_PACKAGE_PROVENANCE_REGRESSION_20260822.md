@@ -11,6 +11,22 @@ package: bind release archive to ARMHF provenance
 
 The build container again could not resolve `github.com`, so a normal public clone/fetch and the full pinned Anki/KindleHF build were not available in this execution environment. Ordinary compilation remains VM-owned; no local-host compilation task was created.
 
+Exact failed clone command:
+
+```sh
+rm -rf /tmp/Kanki && \
+git clone --branch kindle-anki-port --single-branch \
+  https://github.com/melspixel/Kanki.git /tmp/Kanki && \
+cd /tmp/Kanki && git rev-parse HEAD
+```
+
+Observed failure:
+
+```text
+fatal: unable to access 'https://github.com/melspixel/Kanki.git/': Could not resolve host: github.com
+exit status 128
+```
+
 ## Defect found
 
 Commit `3001f4e1d9bfe91714bd76a21fbdbf32109fd1b0` correctly hardened `testenv/scripts/package-and-audit.sh` so a release archive cannot be relabelled from stale ARMHF outputs. The package script now requires:
@@ -56,9 +72,39 @@ Canonical test blob after the repair:
 286938ddf9ae5ee85972cebf97c52fa599ce2a67  tests/test_package_reproducibility.py
 ```
 
-## Validation boundary
+## Targeted predicate validation
 
-The failure is established directly from the production package predicates and the previous fixture bytes: the package script uses exact `grep -qx 'ARMHF gates: PASS'` plus parsed `source_commit`/`anki_commit` equality checks, while the old fixture generated neither required value.
+Because the complete checkout was unavailable, the exact production provenance predicates from `package-and-audit.sh` were exercised independently with the old fixture bytes, repaired fixture bytes, a stale source commit and a stale Anki commit.
+
+The targeted command used the production forms:
+
+```sh
+grep -qx 'ARMHF gates: PASS' "$ARMHF/ARMHF-GATES.txt"
+ARMHF_BUILD_COMMIT=$(sed -n 's/^source_commit=//p' "$ARMHF/BUILD-PROVENANCE.txt")
+ARMHF_ANKI_COMMIT=$(sed -n 's/^anki_commit=//p' "$ARMHF/BUILD-PROVENANCE.txt")
+[ "$ARMHF_BUILD_COMMIT" = "$BUILD_COMMIT" ]
+[ "$ARMHF_ANKI_COMMIT" = "$ANKI_COMMIT" ]
+```
+
+Observed matrix:
+
+```text
+old_fixture rc=66 out=reject: ARMHF-GATES
+repaired_fixture rc=0 out=accept
+wrong_source rc=66 out=reject: source_commit=0000000000000000000000000000000000000000
+wrong_anki rc=66 out=reject: anki_commit=0000000000000000000000000000000000000000
+```
+
+Targeted evidence log:
+
+```text
+KAP_PACKAGE_PROVENANCE_PREDICATE_20260822.log
+SHA-256 be2fb3028aa247735564ac1ed048356408a5550a518e05f2a84041eb355f843c
+```
+
+This confirms both sides of the repaired fixture contract: the previous bytes are rejected by the current production gate, the repaired bytes satisfy it, and both provenance mismatch classes remain fail-closed.
+
+## Validation boundary
 
 A full execution of `run-static-gates.sh` is **not** claimed in this report because the execution container cannot materialize the repository through public DNS and no complete canonical checkout is mounted. The next network-capable build VM must run the actual gated test from the repaired head.
 
