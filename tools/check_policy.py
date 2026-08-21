@@ -4,31 +4,94 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-assets = [
+
+renderer_assets = [
     ROOT / "assets/reviewer/reviewer.css",
     ROOT / "assets/reviewer/reviewer.js",
+    ROOT / "assets/reviewer/css_compat.js",
+    ROOT / "assets/reviewer/css_runtime.js",
+    ROOT / "assets/reviewer/diagnostics.js",
+    ROOT / "assets/device/reviewer-shell.html",
 ]
 renderer_rs = (ROOT / "crates/kanki-renderer/src/lib.rs").read_text(encoding="utf-8")
 production_renderer_rs = renderer_rs.split("#[cfg(test)]", 1)[0]
 text = (
-    "\n".join(path.read_text(encoding="utf-8") for path in assets)
+    "\n".join(path.read_text(encoding="utf-8") for path in renderer_assets)
     + "\n"
     + production_renderer_rs
 ).lower()
-forbidden = ["coca-english", "dictionary-logo", ".pos-badge", ".word {"]
-errors = [
-    f"deck-specific token in generic renderer: {item}"
-    for item in forbidden
-    if item in text
+
+errors: list[str] = []
+
+# A generic reviewer must never accumulate one-deck fixes. If a deck needs a
+# selector here, the compatibility boundary is wrong and must be redesigned.
+forbidden_deck_tokens = [
+    "coca-english",
+    "dictionary-logo",
+    ".pos-badge",
+    ".word {",
+    "merriam-webster",
 ]
+for item in forbidden_deck_tokens:
+    if item in text:
+        errors.append(f"deck-specific token in generic renderer: {item}")
+
+# The rewrite uses Kindle/Lab126 CSS pixels rather than re-creating the legacy
+# 420px/media-query patch stack.
+forbidden_layout_tokens = ["logical_viewport_px", "media_rewritten", "9999px"]
+for item in forbidden_layout_tokens:
+    if item in text:
+        errors.append(f"legacy viewport/media rewrite token in renderer: {item}")
+if re.search(r"(?i)(viewport|logical|breakpoint)[^\n]{0,80}420px", text):
+    errors.append("hard-coded 420px logical viewport/breakpoint is forbidden")
+
 css = (ROOT / "assets/reviewer/reviewer.css").read_text(encoding="utf-8")
 if re.search(r"(?m)^\s*svg\s*\{", css):
     errors.append("generic SVG sizing rule is forbidden")
-if "id=\"qa\"" not in (
-    ROOT / "assets/reviewer/reviewer.html"
-).read_text(encoding="utf-8"):
-    errors.append("persistent #qa root is missing")
+if re.search(r"(?m)^\s*img\s*\{[^}]*\b(width|height)\s*:", css, re.S):
+    errors.append("generic fixed image sizing rule is forbidden")
+
+shell = (ROOT / "assets/device/reviewer-shell.html").read_text(encoding="utf-8")
+if 'id="qa"' not in shell:
+    errors.append("persistent #qa root is missing from device reviewer shell")
+for required in ["css_compat.js", "css_runtime.js", "diagnostics.js", "reviewer.js"]:
+    if required not in shell:
+        errors.append(f"device reviewer shell does not load required runtime: {required}")
+
+# Keep the host fixture aligned with the persistent reviewer contract as well.
+host_reviewer = (ROOT / "assets/reviewer/reviewer.html").read_text(encoding="utf-8")
+if 'id="qa"' not in host_reviewer:
+    errors.append("persistent #qa root is missing from host reviewer fixture")
+
+# Default renderer diagnostics are metadata-only. Raw source is explicit opt-in
+# and bounded; the privacy-safe runtime must not scrape element text.
+diagnostics = (ROOT / "assets/reviewer/diagnostics.js").read_text(encoding="utf-8")
+if "textContent" in diagnostics or "innerText" in diagnostics:
+    errors.append("privacy-safe renderer diagnostics must not scrape element text")
+for required in ["RAW_RENDER_LIMIT = 12", "METRIC_RENDER_LIMIT = 200", "ELEMENT_LIMIT = 40"]:
+    if required not in diagnostics:
+        errors.append(f"renderer diagnostic bound missing: {required}")
+if "rawCaptureEnabled" not in diagnostics:
+    errors.append("raw renderer capture must remain an explicit runtime policy")
+
+launch = (ROOT / "scripts/kanki-launch.sh").read_text(encoding="utf-8")
+for required in ["render-debug", "enable-render-capture", "kanki-diag", "MANIFEST.sha256"]:
+    if required not in launch:
+        errors.append(f"launcher observability/integrity contract missing: {required}")
+
+# Release reproducibility: KindleHF is checksum pinned and no workflow may
+# silently float to a new 'latest' cross toolchain.
+toolchain = (ROOT / "tools/install_kindlehf_toolchain.sh").read_text(encoding="utf-8")
+if "KOX_VERSION=2026.08" not in toolchain:
+    errors.append("KindleHF koxtoolchain release is not pinned")
+if "8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0" not in toolchain:
+    errors.append("KindleHF koxtoolchain checksum is not pinned")
+for workflow in (ROOT / ".github/workflows").glob("*.yml"):
+    workflow_text = workflow.read_text(encoding="utf-8")
+    if "releases/latest/download/kindlehf" in workflow_text:
+        errors.append(f"floating KindleHF toolchain URL in {workflow.relative_to(ROOT)}")
+
 if errors:
     print("\n".join(errors), file=sys.stderr)
     raise SystemExit(1)
-print("renderer policy: pass")
+print("renderer/reproducibility policy: pass")
