@@ -80,7 +80,8 @@ jobs:
       - name: Audit ABI and semantic exports
         run: |
           LIB=third_party/anki/target/release/libanki.so
-          nm -D "$LIB" | grep -E ' kanki_(build_info_json|core_new|open_collection_json|deck_tree_json|next_card_json|answer_json|bury_current_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee bridge-exports.txt
+          nm -D "$LIB" | grep -E ' kanki_(build_info_json|core_new|open_collection_json|deck_tree_json|next_card_json|prepare_answer_json|answer_json|bury_current_json|sync_core_new|sync_collection_json|sync_full_json|sync_media_json)$' | tee bridge-exports.txt
+          grep -q ' kanki_prepare_answer_json$' bridge-exports.txt
           readelf -d "$LIB" > bridge-dynamic.txt
           sha256sum "$LIB" > bridge-library.sha256
       - uses: actions/upload-artifact@v4
