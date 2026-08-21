@@ -43,6 +43,7 @@ jobs:
           node --check assets/reviewer/reviewer.js
           node --check assets/reviewer/css_compat.js
           node --check assets/reviewer/css_runtime.js
+          node --check assets/reviewer/diagnostics.js
           sh -n scripts/kanki-launch.sh
           sh -n scripts/kanki-sync.sh
           sh -n tools/install_kindlehf_toolchain.sh
