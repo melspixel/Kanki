@@ -60,9 +60,20 @@ if [ -n "${PROTOC_LIBDIR:-}" ] && [ -d "$PROTOC_LIBDIR" ]; then
   export LD_LIBRARY_PATH="$PROTOC_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 
+# Materialize the maintained semantic bridge and prove that the checkout now
+# differs from the exact pinned Anki commit only by that deterministic overlay.
+# The injector rejects unrelated tracked, staged or untracked source changes and
+# verifies the bytes of every overlay-owned file against pinned HEAD + PROJECT.
 python3 "$PROJECT/tools/inject_into_anki.py" --project "$PROJECT" --anki "$ANKI" --skip-submodules
+
+# Do not let ignored/stale Cargo output in a reused Anki checkout influence a
+# release gate. Pin Cargo's target directory to the checkout-owned conventional
+# path and recreate it from scratch before the official checks/tests/build.
+export CARGO_TARGET_DIR="$ANKI/target"
+rm -rf "$CARGO_TARGET_DIR"
+
 cd "$ANKI"
 cargo check -p anki --features rustls --lib --offline
 cargo test -p anki --features rustls --lib --offline --no-fail-fast
 cargo build -p anki --features rustls --release --offline
-nm -D target/release/libanki.so | grep ' kap_'
+nm -D "$CARGO_TARGET_DIR/release/libanki.so" | grep ' kap_'
