@@ -13,7 +13,6 @@ permissions:
 env:
   DECK_ID: '413429709'
   INFO_URL: https://ankiweb.net/shared/info/413429709
-  DOWNLOAD_URL: https://ankiweb.net/shared/download/413429709
 
 jobs:
   transport:
@@ -28,10 +27,24 @@ jobs:
           sudo apt-get install -y curl unzip python3 zstd
           out=/tmp/kap-real-typed
           mkdir -p "$out"
+          ua='Mozilla/5.0 KAP compatibility test transport'
+          curl -fsSL --retry 4 --connect-timeout 30 -A "$ua" \
+            "$INFO_URL" -o "$out/info.html"
+          key=$(python3 - "$out/info.html" <<'PY'
+          import html, re, sys
+          text=open(sys.argv[1],encoding='utf-8').read()
+          match=re.search(r'<input[^>]+name=["\x27]k["\x27][^>]+value=["\x27]([^"\x27]+)',text,re.I)
+          if not match:
+              match=re.search(r'<input[^>]+value=["\x27]([^"\x27]+)["\x27][^>]+name=["\x27]k["\x27]',text,re.I)
+          if not match: raise SystemExit('AnkiWeb shared-deck key not found')
+          print(html.unescape(match.group(1)))
+          PY
+          )
+          test -n "$key"
+          download_url="https://ankiweb.net/shared/downloadDeck/${DECK_ID}?k=${key}"
           apkg="$out/4000-Essential-English-Words-front-back-typed.apkg"
-          curl -fL --retry 4 --connect-timeout 30 \
-            -A 'Mozilla/5.0 KAP compatibility test transport' \
-            "$DOWNLOAD_URL" -o "$apkg"
+          curl -fL --retry 4 --connect-timeout 30 -A "$ua" \
+            "$download_url" -o "$apkg"
           test "$(stat -c %s "$apkg")" -gt 1000000
           unzip -t "$apkg" >/dev/null
           unzip -Z1 "$apkg" | grep -Eq '^collection\.anki2$|^collection\.anki21$|^collection\.anki21b$'
@@ -66,10 +79,11 @@ jobs:
           {
             printf 'source=AnkiWeb public shared deck\n'
             printf 'info_url=%s\n' "$INFO_URL"
-            printf 'download_url=%s\n' "$DOWNLOAD_URL"
+            printf 'download_endpoint=AnkiWeb keyed shared/downloadDeck flow\n'
             printf 'deck_id=%s\n' "$DECK_ID"
             printf 'purpose=private compatibility test input only\n'
           } > "$out/PROVENANCE.txt"
+          rm -f "$out/info.html"
           cat "$out/PROVENANCE.txt"
           cat "$out/APKG-SHA256SUMS"
 
