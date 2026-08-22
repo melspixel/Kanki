@@ -10,13 +10,27 @@
 #ifndef KAP_APP_ID
 #define KAP_APP_ID "com.melspixel.kindleankiport"
 #endif
+#ifndef KAP_WINDOW_TITLE
 #define KAP_WINDOW_TITLE "L:A_N:application_ID:" KAP_APP_ID "_PC:N"
+#endif
+#ifndef KAP_LIPC_SET_PROP
 #define KAP_LIPC_SET_PROP "/usr/bin/lipc-set-prop"
+#endif
+#ifndef KAP_KEYBOARD_PUBLISHER
 #define KAP_KEYBOARD_PUBLISHER "com.lab126.keyboard"
+#endif
+#ifndef KAP_KEYBOARD_LAYOUT
 #define KAP_KEYBOARD_LAYOUT "abc"
+#endif
+#ifndef KAP_KEYBOARD_MODE
 #define KAP_KEYBOARD_MODE "1"
+#endif
+#ifndef KAP_PLATFORM_CHILD_TIMEOUT_MS
 #define KAP_PLATFORM_CHILD_TIMEOUT_MS 2000L
+#endif
+#ifndef KAP_PLATFORM_CHILD_POLL_MS
 #define KAP_PLATFORM_CHILD_POLL_MS 25L
+#endif
 
 static int g_kap_keyboard_requested = 0;
 
