@@ -22,6 +22,32 @@ Those checkpoints predate the current release-provenance and lifecycle hardening
 
 ## Latest material advances
 
+### 0. Current-head reviewer fixture dependency repaired
+
+A current-head targeted rerun reproduced a real canonical static-gate failure before the first reviewer fixture:
+
+```text
+TypeError: window.kapCreateAudioQueue is not a function
+```
+
+`web/reviewer.js` now depends on `web/audio_queue.js`, but `tests/test_reviewer_runtime_fixtures.js` evaluated only the reviewer source. The fixture now loads the real audio queue source in the same VM context immediately before the reviewer source. No audio behavior is stubbed or reimplemented.
+
+Executed current-head blob-verified results:
+
+```text
+audio queue syntax/lifecycle       PASS
+CSS compatibility syntax/fixtures  PASS (9 fixtures)
+reviewer syntax/runtime fixtures    PASS (10 fixture groups)
+```
+
+Evidence:
+
+```text
+docs/VM_REVIEWER_FIXTURE_DEPENDENCY_20260822.md
+```
+
+This is a targeted static checkpoint, not a full current-head release-chain pass.
+
 ### 1. Bounded audio-helper shutdown
 
 A native lifecycle defect was found in the production host: `stop_audio()` sent SIGTERM and then used an unbounded blocking `waitpid()`. A GStreamer helper wedged during a Bluetooth/device-route transition could therefore pin application cleanup, delay collection close, and make a later launcher request appear to crash or remain a duplicate instance.
@@ -132,7 +158,7 @@ A stale binary, copied target directory, non-Git source tree, unrelated dirty An
 ## Active blockers / next execution targets
 
 1. Materialize a complete clean copy of the latest canonical branch head in a network-capable build VM.
-2. Run the full static gate, now including shell portability and bounded audio supervision.
+2. Run the full static gate, now including the reviewer dependency fix, shell portability, and bounded audio supervision.
 3. Rerun official Anki tests and all five real APKG integrations from that exact source/Anki identity.
 4. Rebuild ARMHF and repeat ELF/ABI/GLIBC/export audit.
 5. Supply both exact private PW6 inputs:
@@ -142,7 +168,7 @@ A stale binary, copied target directory, non-Git source tree, unrelated dirty An
 7. Only then assemble and persist the final installer and complete reports on GitHub.
 8. Run physical PW6 HIL separately.
 
-The isolated execution container still cannot resolve `github.com` through normal DNS, does not contain the complete live branch worktree, and does not have the private rootfs/image pair. These limitations do not justify weakening the gates or moving ordinary compilation to the user's host.
+The isolated execution container still cannot resolve `github.com` through normal DNS, does not contain the complete live branch worktree, and does not have the private rootfs/image pair. GitHub Actions reruns for the current starting head failed before recording any job step or log. These limitations do not justify weakening the gates or moving ordinary compilation to the user's host.
 
 ## Persistence rule
 

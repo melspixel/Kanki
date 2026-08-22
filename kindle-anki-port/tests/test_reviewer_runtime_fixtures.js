@@ -6,6 +6,7 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
+const audioQueueSource = fs.readFileSync(path.join(root, 'web/audio_queue.js'), 'utf8');
 const source = fs.readFileSync(path.join(root, 'web/reviewer.js'), 'utf8');
 
 class Node {
@@ -225,6 +226,7 @@ function makeHarness() {
   };
   window.window = window;
   const context = {window, document, Date: FakeDate, JSON, Math, Number, String, parseInt, isNaN, Error};
+  vm.runInNewContext(audioQueueSource, context, {filename: 'audio_queue.js'});
   vm.runInNewContext(source, context, {filename: 'reviewer.js'});
   return {window, document, calls, scrolls, setNow(value) { now = value; }};
 }
