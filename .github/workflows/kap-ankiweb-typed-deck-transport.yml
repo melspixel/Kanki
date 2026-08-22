@@ -1,0 +1,78 @@
+name: Temporary KAP real typed APKG transport
+
+# Disposable one-shot transport. This branch is never merged.
+on:
+  push:
+    branches: [transport/kap-public-apkg-20260822]
+    paths:
+      - '.github/workflows/kap-ankiweb-typed-deck-transport.yml'
+
+permissions:
+  contents: read
+
+env:
+  DECK_ID: '413429709'
+  INFO_URL: https://ankiweb.net/shared/info/413429709
+  DOWNLOAD_URL: https://ankiweb.net/shared/download/413429709
+
+jobs:
+  transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Download and validate real shared typed-answer deck
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y curl unzip python3
+          out=/tmp/kap-real-typed
+          mkdir -p "$out"
+          apkg="$out/4000-Essential-English-Words-front-back-typed.apkg"
+          curl -fL --retry 4 --connect-timeout 30 \
+            -A 'Mozilla/5.0 KAP compatibility test transport' \
+            "$DOWNLOAD_URL" -o "$apkg"
+          test "$(stat -c %s "$apkg")" -gt 1000000
+          unzip -t "$apkg" >/dev/null
+          unzip -Z1 "$apkg" | grep -Eq '^collection\.anki2$|^collection\.anki21$'
+          python3 - "$apkg" <<'PY'
+          import json, sqlite3, sys, tempfile, zipfile
+          from pathlib import Path
+          apkg=Path(sys.argv[1])
+          with tempfile.TemporaryDirectory() as td:
+              td=Path(td)
+              with zipfile.ZipFile(apkg) as z:
+                  name=next((n for n in ('collection.anki2','collection.anki21') if n in z.namelist()),None)
+                  if not name: raise SystemExit('collection missing')
+                  z.extract(name,td)
+              db=sqlite3.connect(td/name)
+              models=json.loads(db.execute('select models from col').fetchone()[0])
+              templates=[]
+              for model in models.values():
+                  for tmpl in model.get('tmpls',[]):
+                      text=tmpl.get('qfmt','')+'\n'+tmpl.get('afmt','')
+                      if '{{type:' in text or '[[type:' in text:
+                          templates.append({'model':model.get('name'),'template':tmpl.get('name')})
+              db.close()
+              if not templates: raise SystemExit('no native Anki typed-answer template found')
+              print(json.dumps({'typed_templates':templates},ensure_ascii=False))
+          PY
+          sha256sum "$apkg" > "$out/APKG-SHA256SUMS"
+          {
+            printf 'source=AnkiWeb public shared deck\n'
+            printf 'info_url=%s\n' "$INFO_URL"
+            printf 'download_url=%s\n' "$DOWNLOAD_URL"
+            printf 'deck_id=%s\n' "$DECK_ID"
+            printf 'purpose=private compatibility test input only\n'
+          } > "$out/PROVENANCE.txt"
+          cat "$out/PROVENANCE.txt"
+          cat "$out/APKG-SHA256SUMS"
+
+      - name: Upload real typed-answer APKG
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-real-typed-apkg-413429709
+          path: /tmp/kap-real-typed/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
