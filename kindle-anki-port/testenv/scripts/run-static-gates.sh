@@ -87,6 +87,7 @@ run "$CC" -O2 -std=c99 -Wall -Wextra -Werror \
     "$ROOT/native/audio.c" -ldl -o "$BUILD/kap-audio-host"
 run "$CC" -O2 -std=c99 -Wall -Wextra -Werror -I"$ROOT/core" \
     "$ROOT/native/sync.c" -ldl -o "$BUILD/kap-sync-host"
+run "$BUILD/kap-app-host" --self-test-audio-supervision
 run "$BUILD/kap-audio-host" --self-test
 run "$BUILD/kap-sync-host" --self-test
 run sh "$ROOT/testenv/tests/audio/test-audio.sh"
