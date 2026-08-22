@@ -1,0 +1,56 @@
+name: Temporary KAP public real APKG transport
+
+# One-shot transport only. This disposable branch is never merged.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/kap-public-apkg-transport.yml'
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_REPO: https://github.com/taivop/anki-decks.git
+  UPSTREAM_COMMIT: df9cbeaa3f343e160f1046f97da3cc5b47b57610
+
+jobs:
+  transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Fetch exact public real-world decks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init /tmp/anki-decks
+          git -C /tmp/anki-decks remote add origin "$UPSTREAM_REPO"
+          git -C /tmp/anki-decks fetch --depth 1 origin "$UPSTREAM_COMMIT"
+          git -C /tmp/anki-decks checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/anki-decks rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test -z "$(git -C /tmp/anki-decks status --porcelain --untracked-files=all)"
+
+          out=/tmp/kap-public-apkg
+          mkdir -p "$out/decks"
+          find /tmp/anki-decks -maxdepth 1 -type f -name '*.apkg' -print0 \
+            | sort -z \
+            | xargs -0 -I{} cp '{}' "$out/decks/"
+          test "$(find "$out/decks" -maxdepth 1 -type f -name '*.apkg' | wc -l)" -ge 10
+          sha256sum "$out"/decks/*.apkg > "$out/APKG-SHA256SUMS"
+          {
+            printf 'source_repository=%s\n' "$UPSTREAM_REPO"
+            printf 'source_commit=%s\n' "$UPSTREAM_COMMIT"
+            printf 'license_note=upstream README describes author-created study decks; bytes retained as private test inputs only\n'
+            printf 'deck_count=%s\n' "$(find "$out/decks" -maxdepth 1 -type f -name '*.apkg' | wc -l)"
+          } > "$out/PROVENANCE.txt"
+          cat "$out/PROVENANCE.txt"
+          cat "$out/APKG-SHA256SUMS"
+
+      - name: Upload public real-world APKG set
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-public-real-apkg-df9cbeaa
+          path: /tmp/kap-public-apkg/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
