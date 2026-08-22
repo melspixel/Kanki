@@ -14,23 +14,30 @@ BUILD_COMMIT=${BUILD_COMMIT:-$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null || t
 ANKI_COMMIT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$PROJECT/upstream.lock.json")
 CANONICAL_ROOTFS_MANIFEST=$PROJECT/testenv/qemu/pw6-5.19.6-rootfs-manifest.json
 
-# The package provenance must name an immutable source commit. If a Git checkout
-# is available, also require the checked-out project tree to match it exactly;
-# ignored build/release outputs do not make the source tree dirty.
+# Final package bytes include maintained scripts/web/config/document launchers,
+# not only the ARMHF outputs. Therefore packaging itself must require a real,
+# resolvable clean Git source tree. A copied/non-Git tree (or a ref whose commit
+# object is missing) must never be allowed to claim an arbitrary BUILD_COMMIT.
 if ! printf '%s\n' "$BUILD_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
   echo "BUILD_COMMIT must be a full lowercase 40-hex Git commit" >&2
   exit 65
 fi
-if PROJECT_HEAD=$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null); then
-  if [ "$PROJECT_HEAD" != "$BUILD_COMMIT" ]; then
-    echo "BUILD_COMMIT does not match project HEAD: $BUILD_COMMIT != $PROJECT_HEAD" >&2
-    exit 66
-  fi
-  if [ -n "$(git -C "$PROJECT" status --porcelain --untracked-files=all -- .)" ]; then
-    echo "project source tree is dirty; refusing release packaging" >&2
-    git -C "$PROJECT" status --short --untracked-files=all -- . >&2 || true
-    exit 66
-  fi
+if ! PROJECT_HEAD=$(git -C "$PROJECT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null); then
+  echo "PROJECT must have a resolvable Git HEAD commit for release packaging" >&2
+  exit 66
+fi
+if [ "$PROJECT_HEAD" != "$BUILD_COMMIT" ]; then
+  echo "BUILD_COMMIT does not match project HEAD: $BUILD_COMMIT != $PROJECT_HEAD" >&2
+  exit 66
+fi
+if ! PROJECT_STATUS=$(git -C "$PROJECT" status --porcelain --untracked-files=all -- . 2>/dev/null); then
+  echo "unable to verify project source-tree cleanliness; refusing release packaging" >&2
+  exit 66
+fi
+if [ -n "$PROJECT_STATUS" ]; then
+  echo "project source tree is dirty; refusing release packaging" >&2
+  printf '%s\n' "$PROJECT_STATUS" >&2
+  exit 66
 fi
 
 # Never relabel stale cross-build outputs as a package from a newer source head.
