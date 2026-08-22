@@ -14,7 +14,7 @@ from pathlib import Path
 SOURCE_ROOT = Path(os.environ.get("KAP_SOURCE_ROOT", Path(__file__).resolve().parents[1])).resolve()
 PACKAGE_SCRIPT = SOURCE_ROOT / "testenv/scripts/package-and-audit.sh"
 SOURCE_DATE_EPOCH = 1787340224
-BUILD_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+BUILD_COMMIT = ""
 ANKI_COMMIT = json.loads((SOURCE_ROOT / "upstream.lock.json").read_text(encoding="utf-8"))["commit"]
 ROOTFS_IMAGE_SHA256 = json.loads(
     (SOURCE_ROOT / "testenv/qemu/pw6-5.19.6-rootfs-manifest.json").read_text(encoding="utf-8")
@@ -50,15 +50,36 @@ def make_project(root: Path) -> Path:
         SOURCE_ROOT / "testenv/qemu/pw6-5.19.6-rootfs-manifest.json",
         project / "testenv/qemu/pw6-5.19.6-rootfs-manifest.json",
     )
+    subprocess.run(["git", "init", "-q", str(project)], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.name", "KAP Test"], check=True)
+    subprocess.run(
+        ["git", "-C", str(project), "config", "user.email", "kap-test@example.invalid"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(project), "add", "."], check=True)
+    git_env = os.environ.copy()
+    git_env.update(
+        {
+            "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
+            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z",
+        }
+    )
+    subprocess.run(
+        ["git", "-C", str(project), "commit", "-qm", "package fixture"],
+        check=True,
+        env=git_env,
+    )
     return project
 
 
 def write_armhf_provenance(
     armhf: Path,
     *,
-    source_commit: str = BUILD_COMMIT,
+    source_commit: str | None = None,
     anki_commit: str = ANKI_COMMIT,
 ) -> None:
+    if source_commit is None:
+        source_commit = BUILD_COMMIT
     (armhf / "BUILD-PROVENANCE.txt").write_text(
         f"source_commit={source_commit}\nanki_commit={anki_commit}\n",
         encoding="utf-8",
@@ -82,13 +103,15 @@ def write_qemu_provenance(
     armhf: Path,
     project: Path,
     *,
-    source_commit: str = BUILD_COMMIT,
+    source_commit: str | None = None,
     anki_commit: str = ANKI_COMMIT,
     rootfs_input_verified: str = "true",
     rootfs_runtime_source: str = "verified-image-rdump",
     rootfs_image_sha256: str = ROOTFS_IMAGE_SHA256,
     binary_hash_overrides: dict[str, str] | None = None,
 ) -> None:
+    if source_commit is None:
+        source_commit = BUILD_COMMIT
     overrides = binary_hash_overrides or {}
     manifest = project / "testenv/qemu/pw6-5.19.6-rootfs-manifest.json"
     lines = [
@@ -190,11 +213,15 @@ def assert_provenance_rejected(
 
 
 def main() -> int:
+    global BUILD_COMMIT
     if not PACKAGE_SCRIPT.is_file():
         raise SystemExit(f"missing package script: {PACKAGE_SCRIPT}")
     with tempfile.TemporaryDirectory(prefix="kap-package-repro-") as td:
         temp = Path(td)
         project = make_project(temp)
+        BUILD_COMMIT = subprocess.check_output(
+            ["git", "-C", str(project), "rev-parse", "HEAD"], text=True
+        ).strip()
         armhf = make_armhf(temp)
         qemu = make_qemu(temp, armhf, project)
         dist = temp / "dist"
@@ -218,6 +245,36 @@ def main() -> int:
         ):
             if not (release / evidence).is_file():
                 raise AssertionError(f"release omitted QEMU evidence: {evidence}")
+
+        nongit = temp / "nongit-project"
+        shutil.copytree(project, nongit, ignore=shutil.ignore_patterns(".git"), symlinks=True)
+        nongit_result = run_package(
+            nongit,
+            armhf,
+            qemu,
+            temp / "nongit-dist",
+            temp / "nongit-release",
+            tz="UTC",
+            mask=0o022,
+        )
+        assert_provenance_rejected(nongit_result, "resolvable Git HEAD commit for release packaging")
+
+        broken = temp / "broken-project"
+        shutil.copytree(project, broken, symlinks=True)
+        head_object = broken / ".git" / "objects" / BUILD_COMMIT[:2] / BUILD_COMMIT[2:]
+        if not head_object.is_file():
+            raise AssertionError(f"expected loose fixture commit object: {head_object}")
+        head_object.unlink()
+        broken_result = run_package(
+            broken,
+            armhf,
+            qemu,
+            temp / "broken-dist",
+            temp / "broken-release",
+            tz="UTC",
+            mask=0o022,
+        )
+        assert_provenance_rejected(broken_result, "resolvable Git HEAD commit for release packaging")
 
         (release / "stale-sidecar.txt").write_text(
             "must disappear\n", encoding="utf-8"
