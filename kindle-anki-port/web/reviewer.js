@@ -8,6 +8,9 @@
   var touchStartX = 0;
   var touchStartY = 0;
   var touchStarted = false;
+  var audioQueue = window.kapCreateAudioQueue(function (operation, values) {
+    window.kapBridge.send(operation, values);
+  });
 
   function setStyleText(value) {
     if (noteStyle.styleSheet) noteStyle.styleSheet.cssText = value;
@@ -46,20 +49,6 @@
     }
   }
 
-  function playTag(tag) {
-    if (!tag) return;
-    if (tag.kind === 'sound') {
-      window.kapBridge.send('audio/play', {source: tag.source || ''});
-    } else if (tag.kind === 'tts') {
-      window.kapBridge.send('audio/tts', {
-        text: tag.text || '',
-        lang: tag.lang || '',
-        voices: tag.voices && tag.voices.length ? tag.voices.join(',') : '',
-        speed: typeof tag.speed === 'number' ? tag.speed : 1
-      });
-    }
-  }
-
   function replayButton(index, packet) {
     var button = document.createElement('button');
     button.type = 'button';
@@ -69,7 +58,9 @@
     button.appendChild(document.createTextNode('▶'));
     button.onclick = function () {
       var value = parseInt(this.getAttribute('data-kap-audio-index'), 10);
-      if (!isNaN(value) && packet.audio && value < packet.audio.length) playTag(packet.audio[value]);
+      if (!isNaN(value) && packet.audio && value < packet.audio.length) {
+        audioQueue.playOne(packet.audio[value]);
+      }
       return false;
     };
     return button;
@@ -189,7 +180,8 @@
       } else {
         window.scrollTo(0, 0);
       }
-      if (packet.audio && packet.audio.length) playTag(packet.audio[0]);
+      if (packet.autoplay === false) audioQueue.stop();
+      else audioQueue.start(packet.audio || []);
       window.kapBridge.send('ui/state', {
         mode: packet.kind,
         again: packet.intervals && packet.intervals[0] || '',
@@ -198,6 +190,7 @@
         easy: packet.intervals && packet.intervals[3] || ''
       });
     } catch (error) {
+      audioQueue.stop();
       showError(error);
       window.kapBridge.send('ui/render-failed', {message: String(error)});
     }
@@ -230,7 +223,7 @@
         if (!envelope.data || envelope.data.kind === 'finished') {
           current = null;
           textBox('kap-review-message', 'Review complete');
-          window.kapBridge.send('audio/stop', {});
+          audioQueue.stop();
           window.kapBridge.send('ui/state', {mode: 'finished'});
         } else {
           shownAt = new Date().getTime();
@@ -240,6 +233,7 @@
         window.kapBridge.send('review/next', {});
       }
     } catch (error) {
+      audioQueue.stop();
       showError(error);
       window.kapBridge.send('ui/state', {mode: 'error'});
     }
@@ -271,7 +265,8 @@
     requestReveal: requestReveal,
     pageDown: function () { page(1); },
     pageUp: function () { page(-1); },
-    typedValue: typedValue
+    typedValue: typedValue,
+    audioFinished: function () { audioQueue.finished(); }
   };
 
   window.kapBridge.send('ready', {view: 'reviewer'});
