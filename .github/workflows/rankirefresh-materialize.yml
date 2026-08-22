@@ -34,7 +34,7 @@ jobs:
       - name: Download and verify exact release
         run: |
           mkdir -p /tmp/rankirefresh-release
-          gdown --id "$DRIVE_FILE_ID" -O /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip
+          gdown "$DRIVE_FILE_ID" -O /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip
           printf '%s  %s\n' "$EXPECTED_SHA256" /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip | sha256sum -c -
       - name: Materialize release
         run: |
