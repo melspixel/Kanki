@@ -1,0 +1,15 @@
+name: Retired temporary KAP PW6 firmware transport
+
+# The first one-shot attempt used an incorrect KindleTool output path.
+# Kept manual-only on this disposable branch as an audit record.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retired:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Retired; use kap-pw6-firmware-transport-push.yml.'

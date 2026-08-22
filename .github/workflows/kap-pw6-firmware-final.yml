@@ -1,0 +1,67 @@
+name: Temporary KAP PW6 firmware final
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/kap-pw6-firmware-final.yml']
+permissions:
+  contents: read
+env:
+  FIRMWARE_URL: https://s3.amazonaws.com/firmwaredownloads/update_kindle_all_new_paperwhite_12th_5.19.6.bin
+  FIRMWARE_SHA256: 72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c
+  FIRMWARE_MD5: 697aeb33c02f46b9b0911ab05c28b06d
+  KINDLETOOL_COMMIT: 95291295e039a1a3bc0bc9d6040b07f640dae74a
+jobs:
+  transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Acquire exact firmware and pinned tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential git curl pkg-config zlib1g-dev libarchive-dev nettle-dev
+          out=/tmp/kap-pw6
+          mkdir -p "$out"
+          fw="$out/update_kindle_all_new_paperwhite_12th_5.19.6.bin"
+          curl -fL --retry 4 --connect-timeout 30 "$FIRMWARE_URL" -o "$fw"
+          printf '%s  %s\n' "$FIRMWARE_SHA256" "$fw" | sha256sum -c -
+          printf '%s  %s\n' "$FIRMWARE_MD5" "$fw" | md5sum -c -
+          git init /tmp/KindleTool
+          git -C /tmp/KindleTool remote add origin https://github.com/NiLuJe/KindleTool.git
+          git -C /tmp/KindleTool fetch --depth 1 origin "$KINDLETOOL_COMMIT"
+          git -C /tmp/KindleTool checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/KindleTool rev-parse HEAD)" = "$KINDLETOOL_COMMIT"
+          make -C /tmp/KindleTool -j2
+          cp /tmp/KindleTool/KindleTool/Release/kindletool "$out/kindletool"
+          cp /tmp/KindleTool/LICENSE "$out/KindleTool-LICENSE"
+          "$out/kindletool" version | tee "$out/kindletool-version.txt"
+          {
+            printf 'firmware_url=%s\n' "$FIRMWARE_URL"
+            printf 'firmware_size=%s\n' "$(stat -c %s "$fw")"
+            printf 'firmware_sha256=%s\n' "$FIRMWARE_SHA256"
+            printf 'firmware_md5=%s\n' "$FIRMWARE_MD5"
+            printf 'kindletool_commit=%s\n' "$KINDLETOOL_COMMIT"
+          } > "$out/PROVENANCE.txt"
+          sha256sum "$fw" "$out/kindletool" "$out/KindleTool-LICENSE" "$out/kindletool-version.txt" "$out/PROVENANCE.txt" > "$out/SHA256SUMS"
+      - name: Upload verified firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-PW6-5.19.6-official-firmware
+          path: /tmp/kap-pw6/update_kindle_all_new_paperwhite_12th_5.19.6.bin
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+      - name: Upload tool and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-PW6-5.19.6-tools-and-provenance
+          path: |
+            /tmp/kap-pw6/kindletool
+            /tmp/kap-pw6/KindleTool-LICENSE
+            /tmp/kap-pw6/kindletool-version.txt
+            /tmp/kap-pw6/PROVENANCE.txt
+            /tmp/kap-pw6/SHA256SUMS
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
