@@ -21,6 +21,7 @@ def main() -> int:
     top_make = (ROOT / "Makefile").read_text(encoding="utf-8")
     env_make = (ROOT / "testenv" / "Makefile").read_text(encoding="utf-8")
     env_readme = (ROOT / "testenv" / "README.md").read_text(encoding="utf-8")
+    static_gates = (ROOT / "testenv" / "scripts" / "run-static-gates.sh").read_text(encoding="utf-8")
     host_compat = (ROOT / "testenv" / "scripts" / "run-host-gates.sh").read_text(encoding="utf-8")
     package_compat = (ROOT / "testenv" / "scripts" / "package_audit.py").read_text(encoding="utf-8")
     workflow = (REPO / ".github" / "workflows" / "kindle-anki-port.yml").read_text(encoding="utf-8")
@@ -55,6 +56,31 @@ def main() -> int:
     require(env_make, 'ROOTFS_IMAGE="$(ROOTFS_IMAGE)"', "testenv Makefile")
     require(env_make, 'python3 scripts/package_audit.py --package "$(PACKAGE)"', "testenv Makefile")
     require(env_make, 'sh "$(PROJECT_ROOT)/tests/test_zombie_operation_lock.sh"', "testenv Makefile")
+
+    # GitHub's contents API does not preserve executable bits for every shell
+    # fixture. Static gates must invoke non-executable test scripts explicitly
+    # through sh, so a clean archive/checkout behaves the same as a developer
+    # worktree with locally repaired modes.
+    require(
+        static_gates,
+        'run sh "$ROOT/tests/test_sync_wrapper_signal.sh"',
+        "static gate shell portability",
+    )
+    require(
+        static_gates,
+        'run sh "$ROOT/tests/test_sync_worker.sh"',
+        "static gate shell portability",
+    )
+    forbid(
+        static_gates,
+        'run "$ROOT/tests/test_sync_wrapper_signal.sh"',
+        "static gate shell portability",
+    )
+    forbid(
+        static_gates,
+        'run "$ROOT/tests/test_sync_worker.sh"',
+        "static gate shell portability",
+    )
 
     require(host_compat, "run-static-gates.sh", "host compatibility wrapper")
     require(host_compat, "run-host-backend-gates.sh", "host compatibility wrapper")
