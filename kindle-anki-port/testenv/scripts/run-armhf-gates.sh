@@ -56,6 +56,13 @@ if [ "$ANKI_HEAD" != "$PINNED_ANKI_COMMIT" ]; then
   exit 67
 fi
 
+# Re-run the idempotent injector for the ARMHF gate itself. This is important:
+# HEAD equality alone does not constrain a dirty Anki worktree, and the host gate
+# deliberately leaves the maintained semantic bridge as a working-tree overlay.
+# The injector now verifies that those are the only modifications and that every
+# overlay-owned byte is exactly derived from pinned Anki HEAD + clean PROJECT.
+python3 "$PROJECT/tools/inject_into_anki.py" --project "$PROJECT" --anki "$ANKI" --skip-submodules
+
 export PATH="$TOOLCHAIN_BIN:$PATH"
 export CARGO_HOME PROTOC CARGO_NET_OFFLINE=true
 if [ -z "${PROTOC_LIBDIR:-}" ]; then
@@ -75,6 +82,12 @@ export CC_armv7_unknown_linux_gnueabihf="$TRIPLE-gcc"
 export CXX_armv7_unknown_linux_gnueabihf="$TRIPLE-g++"
 export AR_armv7_unknown_linux_gnueabihf="$TRIPLE-ar"
 
+# Ignore and destroy any caller-provided/stale Cargo target state. The ARMHF
+# binaries must be rebuilt from the verified source overlay in this invocation,
+# not reused from an ignored target directory copied into the Anki checkout.
+export CARGO_TARGET_DIR="$ANKI/target"
+rm -rf "$CARGO_TARGET_DIR"
+
 # The compatibility ceiling must come from the target sysroot, not from the
 # build host. A stale hard-coded ceiling can silently accept a binary that
 # links on the cross toolchain but will not load on the Kindle userspace.
@@ -93,7 +106,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 cd "$ANKI"
 cargo build -p anki --features rustls --release --target "$RUST_TARGET" --offline
-cp "target/$RUST_TARGET/release/libanki.so" "$OUT/libanki-kindle.so"
+cp "$CARGO_TARGET_DIR/$RUST_TARGET/release/libanki.so" "$OUT/libanki-kindle.so"
 "$TRIPLE-gcc" -O2 -std=c99 -Wall -Wextra -Werror -I"$PROJECT/core" \
   -DKAP_BUILD_COMMIT=\"$BUILD_COMMIT\" \
   -DKAP_ANKI_COMMIT=\"$ANKI_COMMIT\" \
