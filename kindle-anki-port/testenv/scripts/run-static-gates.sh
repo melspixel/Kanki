@@ -92,9 +92,9 @@ run "$BUILD/kap-sync-host" --self-test
 run sh "$ROOT/testenv/tests/audio/test-audio.sh"
 run env PROJECT_ROOT="$ROOT" CC="$CC" sh "$ROOT/testenv/tests/lifecycle/test-launcher-integration.sh"
 run "$ROOT/tests/test_lifecycle.sh"
-run "$ROOT/tests/test_sync_wrapper_signal.sh"
+run sh "$ROOT/tests/test_sync_wrapper_signal.sh"
 run sh "$ROOT/tests/test_zombie_operation_lock.sh"
-run "$ROOT/tests/test_sync_worker.sh"
+run sh "$ROOT/tests/test_sync_worker.sh"
 if [ -n "${KAP_GENERATED_BACKEND:-}" ]; then
     run python3 "$ROOT/tools/audit_generated_services.py" "$KAP_GENERATED_BACKEND"
 fi
