@@ -1,0 +1,15 @@
+KINDLE_ANKI_PORT_SHELL_ENTRYPOINT_TARGETED_V1
+project_head_at_test=163cc8575bf8952ecc0adbaf7201ce2bf1821ac0
+run_static_git_blob=55aa46dafb83dfaf7921769945ef736029130978
+run_static_raw_sha256=d54df65d13e59308b191620efca68871ba4f6ca1f69d70e16f2f3d8206528e4e
+test_build_entrypoints_git_blob=de7b2e0bf3605b4e23fa3229b2821249baf48932
+
+sh -n run-static-gates.sh: PASS
+required: run sh "$ROOT/tests/test_sync_wrapper_signal.sh": PASS
+required: run sh "$ROOT/tests/test_sync_worker.sh": PASS
+forbidden direct invocation of non-executable sync wrapper fixture: ABSENT
+forbidden direct invocation of non-executable sync worker fixture: ABSENT
+
+scope=targeted shell-entrypoint portability check
+full_current_head_static_gate=NOT_CLAIMED
+reason=the execution container cannot resolve github.com and does not hold the complete current clean branch worktree
