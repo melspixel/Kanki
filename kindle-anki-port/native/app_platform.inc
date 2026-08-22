@@ -32,6 +32,7 @@
 #define KAP_PLATFORM_CHILD_POLL_MS 25L
 #endif
 
+static int g_kap_keyboard_state_known = 0;
 static int g_kap_keyboard_requested = 0;
 
 static int kap_uri_operation_is(const char *uri, const char *operation) {
@@ -59,10 +60,6 @@ static int kap_wait_child_bounded(App *app, pid_t pid, int *status_out) {
         }
         if (result < 0) {
             if (errno == EINTR) continue;
-            if (errno == ECHILD) {
-                if (status_out) *status_out = status;
-                return 1;
-            }
             log_line(app, "platform child wait failed pid=%ld: %s",
                      (long)pid, strerror(errno));
             return 0;
@@ -116,7 +113,11 @@ static int kap_set_keyboard_visible(App *app, int visible) {
     char open_value[160];
     int ok;
     visible = visible != 0;
-    if (visible == g_kap_keyboard_requested) return 1;
+
+    /* The process cannot know whether a previous crashed instance left the
+     * system keyboard visible. The first request therefore always normalizes
+     * Lab126 state; later duplicate requests are suppressed. */
+    if (g_kap_keyboard_state_known && visible == g_kap_keyboard_requested) return 1;
 
     if (visible) {
         if (snprintf(open_value, sizeof(open_value), "%s:%s:%s",
@@ -131,6 +132,7 @@ static int kap_set_keyboard_visible(App *app, int visible) {
     }
 
     if (ok) {
+        g_kap_keyboard_state_known = 1;
         g_kap_keyboard_requested = visible;
         log_line(app, "keyboard requested=%d", visible);
     }
