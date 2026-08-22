@@ -24,11 +24,10 @@ VM_RUNBOOK.md
 Newest detailed report/evidence:
 
 ```text
+docs/VM_GIT_IDENTITY_FAIL_CLOSED_20260822.md
+docs/logs/KAP_GIT_IDENTITY_TARGETED_20260822.log
 docs/VM_QEMU_IMAGE_RUNTIME_BINDING_20260822.md
 docs/logs/KAP_QEMU_IMAGE_RUNTIME_TARGETED_20260822.log
-docs/VM_ROOTFS_IMAGE_PROVENANCE_HARDENING_20260822.md
-docs/logs/KAP_ROOTFS_IMAGE_QEMU_TARGETED_20260822.log
-docs/logs/KAP_ROOTFS_IMAGE_BINDING_20260822.log
 ```
 
 ## Product boundary
@@ -74,24 +73,16 @@ PW6 target libc oracle ceiling: GLIBC_2.35
 
 These predate current release-provenance hardening and must be rerun from the eventual release head.
 
-The old installer remains stale:
+The old installer remains stale and must never be relabeled final:
 
 ```text
 Kindle-Anki-Port-PW6-armhf.zip
 SHA-256 9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225
 ```
 
-Never publish or relabel it as final.
-
 ## Exact PW6 5.19.6 runtime identity
 
-Canonical manifest:
-
-```text
-testenv/qemu/pw6-5.19.6-rootfs-manifest.json
-```
-
-Pinned values:
+Canonical manifest: `testenv/qemu/pw6-5.19.6-rootfs-manifest.json`.
 
 ```text
 firmware MD5              697aeb33c02f46b9b0911ab05c28b06d
@@ -105,84 +96,81 @@ target GLIBC max          2.35
 
 The actual checksum-matching private rootfs tree/image pair is not currently mounted in the execution VM. Hash metadata alone is never accepted as a dynamic L2 run.
 
-## Current release-provenance hardening
+## Release-provenance hardening
 
-### Source/ARMHF/QEMU/package identity
+### Rootfs/QEMU binding
 
-Existing production gates already require:
+`ROOTFS_IMAGE` is mandatory and must match the canonical full-image SHA-256. `run-qemu-smoke.sh` verifies the supplied extracted tree and retained image, invalidates old dynamic PASS evidence, requires `debugfs`, freshly `rdump`s the verified image to a private temporary tree, verifies that tree, and runs every QEMU `-L` check only against the image-derived runtime. Provenance records `rootfs_input_verified=true`, `rootfs_verified=true`, and `rootfs_runtime_source=verified-image-rdump`. `package-and-audit.sh` rejects all older image-hash-only/caller-tree QEMU evidence.
 
-```text
-clean project HEAD == BUILD_COMMIT
-pinned Anki HEAD == upstream.lock.json
-ARMHF-GATES.txt == PASS
-ARMHF source/Anki provenance matches package identity
-QEMU source/Anki/manifest/binary hashes match the exact release inputs
-package construction occurs only after QEMU PASS
-```
+Previous targeted regression: 9/9 PASS; `docs/logs/KAP_QEMU_IMAGE_RUNTIME_TARGETED_20260822.log` SHA-256 `985e150dbe7390582d8daad57d6cc0f244c296c60e0434d496e95b3e24f461ac`.
 
-Lifecycle hardening also rejects stale zombie operation-lock owners and protects wrapper-death/sync collection ownership. See the earlier `docs/VM_*_20260822.md` reports for exact regressions.
+### Git object/source identity — newest hardening
 
-### Full rootfs-image identity requirement
+A deeper audit found that the source identity checks were still not completely fail-closed. Plain `git rev-parse HEAD` can print a ref value even when the referenced commit object cannot be resolved; then `git status` fails. A failed `git status` nested inside `[ -n "$(...)" ]` can be interpreted as an empty clean result under Bash `set -e` contexts. Packaging had a stronger gap: its Git checkout check was optional, so a copied non-Git project tree could theoretically package modified maintained `web/`, `scripts/`, config or document launcher bytes while declaring an arbitrary syntactically valid `BUILD_COMMIT`.
 
-`ROOTFS_IMAGE` remains mandatory and must match the canonical full-image SHA-256. `run-qemu-smoke.sh` verifies both the supplied extracted tree and the retained image, and `package-and-audit.sh` revalidates the image hash and verification evidence.
-
-### New image-derived runtime binding
-
-A deeper audit found that the prior image requirement still executed QEMU with `-L "$ROOTFS"`, where `ROOTFS` was an independently supplied extracted directory. The verifier proves selected loader/libc/WebKit/version oracles plus the separately supplied image hash, but it cannot prove every library in that caller directory came from the retained image. The provenance could therefore name the canonical image while QEMU resolved other dependencies from unrelated bytes.
-
-This is now fixed fail-closed:
+This is now closed:
 
 ```text
+run-host-backend-gates.sh
+run-armhf-gates.sh
 run-qemu-smoke.sh
-  -> verifies supplied ROOTFS + canonical retained ROOTFS_IMAGE
-  -> invalidates prior dynamic QEMU PASS/provenance before a new L2 attempt
-  -> requires debugfs
-  -> rdump's ROOTFS_IMAGE into a private temporary tree
-  -> verifies that image-derived tree
-  -> runs all QEMU -L checks only against the image-derived tree
-  -> records rootfs_input_verified=true
-  -> records rootfs_runtime_source=verified-image-rdump
-  -> writes QEMU-SMOKE.txt only after all dynamic checks pass
+  -> require git rev-parse --verify 'HEAD^{commit}'
+  -> explicitly require git status itself to succeed
+  -> reject dirty source
+  -> host/ARMHF also require pinned Anki HEAD^{commit} to resolve
 
 package-and-audit.sh
-  -> requires input-rootfs-verification.txt
-  -> requires rootfs_input_verified=true
-  -> requires rootfs_runtime_source=verified-image-rdump
-  -> rejects all pre-hardening QEMU provenance
-  -> persists both supplied-tree and image-derived verification reports
+  -> now requires a real resolvable Git project checkout unconditionally
+  -> requires HEAD == BUILD_COMMIT
+  -> explicitly fails if source-tree cleanliness cannot be established
+  -> therefore cannot create final ZIP bytes from a copied/non-Git or broken-object source tree
 ```
 
-Current core/test blobs:
+Current production/test blobs:
 
 ```text
-testenv/scripts/run-qemu-smoke.sh       0a785125c0afa5957ae0c5115dd91ddd7ba896c9
-testenv/scripts/package-and-audit.sh    524bbe1dc914b18eb146b5266a14794ddd0abe4f
-tests/test_qemu_provenance.py           e1be1b7c5d4dc0a9bf747f8693ed4f2b3604b1a2
-tests/test_package_reproducibility.py   d554df6aea2c90e80b379b366eb3f43664281bf9
+testenv/scripts/run-armhf-gates.sh          aeee9ba7f5759ce44b161c8669111f527a3dc0b2
+testenv/scripts/run-host-backend-gates.sh   1efcdd18b017deed1b76871e1d598715eb298e56
+testenv/scripts/run-qemu-smoke.sh           1bd183e72a1d6490eac36cb5a165c75074efd62a
+testenv/scripts/package-and-audit.sh        9d41690315b8dcaa8333d2a6fe0cd2bc3b10f4b0
+tests/test_armhf_provenance.py              9208c15a1ac243a413057abab5c550f0400a006c
+tests/test_host_backend_provenance.py       9137193089492ba5834cd35613ceddae0a09e271
+tests/test_qemu_provenance.py               6ff2672ac10772437f73e1cd35e8fa6b38867a87
+tests/test_package_reproducibility.py       dfd005fa252f9f9211a6def7a2873439df77d527
 ```
 
-Targeted QEMU provenance regression reconstructed in the current execution container:
+Targeted Git failure-mode reproducer:
 
 ```text
-9 tests: PASS
-  includes image-derived -L assertion
-  includes failed-rerun stale PASS invalidation
-log SHA-256 985e150dbe7390582d8daad57d6cc0f244c296c60e0434d496e95b3e24f461ac
+clean resolvable commit: PASS
+dirty tree detection: PASS
+plain rev-parse with missing HEAD object reproduced old unsafe prerequisite
+old status-command-substitution failure reproduced as survivable
+HEAD^{commit} missing-object rejection: PASS
+non-Git package-source rejection: PASS
+log SHA-256 649526115118aa93996b3e66f75fff77111e0d0abee506bff167cb6cc0da13d7
 ```
 
-This is targeted regression evidence, not a complete current-head build. Exact commands and commits are in `docs/VM_QEMU_IMAGE_RUNTIME_BINDING_20260822.md`.
+Exact defect model, commands, commits and evidence are in `docs/VM_GIT_IDENTITY_FAIL_CLOSED_20260822.md`.
+
+Lifecycle hardening also rejects stale zombie operation-lock owners and protects wrapper-death/sync collection ownership; see the earlier `docs/VM_*_20260822.md` reports.
 
 ## Current environment limitation
 
-No fresh **complete current-head** build is claimed. Normal Git materialization still fails in the execution container:
+No fresh **complete current-head** build is claimed. Normal network access in the execution container still fails DNS resolution, including both GitHub and the official Amazon S3 firmware host:
 
 ```text
 git clone ... https://github.com/melspixel/Kanki.git
 fatal: Could not resolve host: github.com
 rc=128
+
+curl ... https://s3.amazonaws.com/firmwaredownloads/...
+curl: (6) Could not resolve host: s3.amazonaws.com
 ```
 
-The private checksum-matching PW6 rootfs tree **and retained image** are also absent. Historical/synthetic evidence must not be promoted to final provenance.
+The latest observed GitHub Actions checkpoint for the code-hardening head also failed before any recorded workflow step (run `32539353539`, job `96946124261`; steps list empty), so it is infrastructure evidence, not a test result.
+
+The private checksum-matching PW6 rootfs tree **and retained image** are absent. Historical/synthetic evidence must not be promoted to final provenance.
 
 ## Local/Codex boundary
 
@@ -190,13 +178,13 @@ The private checksum-matching PW6 rootfs tree **and retained image** are also ab
 
 ## Ordered next actions
 
-1. Materialize the then-current clean branch head in a network-capable build VM with exact pinned Anki, Cargo cache, protoc and KindleHF inputs.
+1. Materialize the then-current clean branch head in a network-capable build VM with complete Git objects, exact pinned Anki, Cargo cache, protoc and KindleHF inputs.
 2. Install/verify `e2fsprogs/debugfs` in addition to the existing build/QEMU toolchain.
-3. Run complete static gates, including updated image-derived QEMU/package provenance tests.
+3. Run complete static gates, including the new missing-Git-object/non-Git-package regressions plus image-derived QEMU/package provenance tests.
 4. From the same source/Anki identity, run full official backend tests and all five real APKG integrations including typed-answer coverage.
 5. Run ARMHF cross-build plus ELF/ABI/GLIBC/export audit.
 6. Supply both private PW6 inputs: extracted 5.19.6 rootfs and retained `pw6-rootfs.img` with SHA-256 `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`.
-7. Run exact-rootfs QEMU against a temporary runtime tree rdump'ed from that exact image and persist the new provenance/evidence.
+7. Run exact-rootfs QEMU against a temporary runtime tree freshly `rdump`ed from that exact image and persist new provenance/evidence.
 8. Only then run package audit/reproducibility/privacy/content checks and persist final ZIP/SHA-256/manifest/contents/full reports on GitHub.
 9. Begin separate physical PW6 HIL only after software-delivery hashes exist.
 
