@@ -188,9 +188,19 @@ int main(int argc, char **argv) {
     hkey[0] = '\0';
     endpoint[0] = '\0';
     for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--full-upload") == 0) full_direction = 1;
-        else if (strcmp(argv[i], "--full-download") == 0) full_direction = -1;
-        else if (strcmp(argv[i], "--library") == 0 && i + 1 < argc) library_path = argv[++i];
+        if (strcmp(argv[i], "--full-upload") == 0) {
+            if (full_direction < 0) {
+                fprintf(stderr, "sync: --full-upload and --full-download are mutually exclusive\n");
+                return 64;
+            }
+            full_direction = 1;
+        } else if (strcmp(argv[i], "--full-download") == 0) {
+            if (full_direction > 0) {
+                fprintf(stderr, "sync: --full-upload and --full-download are mutually exclusive\n");
+                return 64;
+            }
+            full_direction = -1;
+        } else if (strcmp(argv[i], "--library") == 0 && i + 1 < argc) library_path = argv[++i];
         else if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) config_path = argv[++i];
         else {
             fprintf(stderr, "usage: %s [--full-upload|--full-download] [--library PATH] [--config PATH]\n", argv[0]);
