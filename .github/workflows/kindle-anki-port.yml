@@ -1,11 +1,10 @@
 name: Kindle Anki Port build checkpoint
 
+# GitHub Actions is a reproducibility/checkpoint definition, not the primary
+# development compiler. Keep it manual-only while hosted-runner quota is
+# unavailable; ordinary builds run in the persistent Linux VM.
 on:
   workflow_dispatch:
-  push:
-    branches: [kindle-anki-port]
-  pull_request:
-    branches: [main]
 
 permissions:
   contents: read
@@ -104,7 +103,7 @@ jobs:
 
       # Deliberately do not run run-qemu-smoke.sh or package-and-audit.sh here.
       # Exact-rootfs QEMU requires checksum-verified private PW6 5.19.6 bytes,
-      # which are not stored in GitHub. The production package gate now requires
+      # which are not stored in GitHub. The production package gate requires
       # fresh exact-rootfs QEMU evidence for the exact ARMHF bytes it archives.
       - name: Persist non-hardware build checkpoint
         run: |
