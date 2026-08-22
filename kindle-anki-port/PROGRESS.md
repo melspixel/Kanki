@@ -10,7 +10,7 @@ Updated: 2026-08-22 UTC
 | Ordinary GitHub source | complete | maintained source under `kindle-anki-port/` |
 | Official Anki semantic bridge | hardened + green historical checkpoint | deterministic overlay now verified against pinned HEAD + clean project; prior full `rslib`: `539 passed; 0 failed`; final clean-head rerun required |
 | Five real APKG integration | green historical checkpoint | C-ABI reviewer lifecycle passed; typed-answer/AV observed; final clean-head rerun required |
-| Reviewer/native host | deterministic fixtures green historically | full current-head rerun pending |
+| Reviewer/native host | targeted current-head fixtures green | commit `f0925bf767cf59708ef3ee72ebaaff046cdd6b1d` repaired missing audio-queue fixture dependency; audio/CSS/reviewer groups pass; full static gate still pending |
 | Sync/collection ownership | hardened | wrapper-death/zombie-owner races reproduced and fixed |
 | Git source identity | hardened | host/ARMHF/QEMU require resolvable `HEAD^{commit}` + successful clean-status query; package requires real Git checkout |
 | Anki working-tree provenance | hardened newest | injector requires exact deterministic overlay only; unrelated tracked/staged/untracked Anki changes rejected |
@@ -21,9 +21,41 @@ Updated: 2026-08-22 UTC
 | Exact-rootfs QEMU provenance | hardened | QEMU executes only against a tree freshly `rdump`ed from verified retained image; stale rerun PASS invalidated |
 | Package privacy/provenance | hardened | package requires exact-rootfs QEMU evidence and resolvable clean Git source bytes |
 | Release entrypoints/orchestrator | hardened | Makefiles/VM driver/public CI prevent package-before-exact-QEMU; `--rootfs` requires `--rootfs-image` |
-| Public GitHub Actions | checkpoint-only / infrastructure unavailable | previous observed checkpoint failed before any recorded step; not test evidence |
+| Public GitHub Actions | checkpoint-only / infrastructure unavailable | current-head retry failed before any recorded step; no log/artifact; not test evidence |
 | Final ZIP persistence | incomplete | old ZIP stale; fresh current-head installer absent |
 | PW6 hardware acceptance | not started | separate physical final result after software-delivery hashes exist |
+
+## Current-head targeted reviewer checkpoint
+
+Exact current-head blobs were materialized through the GitHub Git object API and verified with `git hash-object` before execution. The unpatched reviewer fixture failed immediately because `reviewer.js` now constructs its audio queue at load time while the fixture had not loaded `audio_queue.js`.
+
+Reproduced first failure:
+
+```text
+TypeError: window.kapCreateAudioQueue is not a function
+```
+
+Repair committed at:
+
+```text
+f0925bf767cf59708ef3ee72ebaaff046cdd6b1d
+```
+
+The fixture now evaluates the real `web/audio_queue.js` in the same VM context before `web/reviewer.js`. Targeted VM results:
+
+```text
+node --check web/audio_queue.js                         PASS
+node tests/test_audio_queue.js                          PASS
+node --check web/css_compat.js                          PASS
+node tests/test_css_compat_fixtures.js                  PASS (9 fixtures)
+node --check web/reviewer.js                            PASS
+node --check tests/test_reviewer_runtime_fixtures.js    PASS
+node tests/test_reviewer_runtime_fixtures.js            PASS (10 fixture groups)
+```
+
+Evidence: `docs/VM_REVIEWER_FIXTURE_DEPENDENCY_20260822.md`.
+
+This checkpoint is not a complete `run-static-gates.sh` result and does not replace the required clean-current-head host/APKG/ARMHF/QEMU chain.
 
 ## Historical checkpoints — not final provenance
 
@@ -155,6 +187,8 @@ fatal: unable to access 'https://github.com/melspixel/Kanki.git/': Could not res
 rc=128
 ```
 
+A current-head GitHub Actions retry also failed before any recorded step and produced no job log or artifact. It is not source-test evidence.
+
 The private checksum-matching PW6 rootfs tree/image pair is also absent. Historical/synthetic evidence must not be promoted to final provenance.
 
 ## Stale installer
@@ -170,7 +204,7 @@ It remains stale and must not be published as final.
 
 1. Resolve and materialize the live clean branch head with complete Git objects in a network-capable build VM with exact pinned Anki/Cargo/protoc/KindleHF inputs.
 2. Install/verify `e2fsprogs/debugfs` plus existing host/QEMU/toolchain dependencies.
-3. Run complete static gates, including the new deterministic-overlay/target-state regressions plus existing Git/QEMU/package provenance suites.
+3. Run complete static gates from the new head, including the repaired reviewer fixture dependency and deterministic-overlay/target-state regressions plus existing Git/QEMU/package provenance suites.
 4. Run full official Anki backend from the verified deterministic overlay and persist fresh results/library hash.
 5. Run all five real APKG integrations, including typed-answer coverage.
 6. Run fresh ARMHF cross-build and ABI/GLIBC/export audit; ARMHF must independently verify the same overlay and start from a recreated Cargo target.

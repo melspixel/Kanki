@@ -9,6 +9,7 @@ Last updated: 2026-08-22 UTC
 - Project root: `kindle-anki-port/`
 - Official Anki pin: `e5a6fbe27fdd4d57d5f712191b4a753032e57853` (26.08.1)
 - Ordinary-source materialization milestone: `0cf4716d8f66af96d38233ec5f723151787278d7`
+- Latest current-head targeted test repair: `f0925bf767cf59708ef3ee72ebaaff046cdd6b1d`
 - Always resolve the live branch HEAD before building; documentation/test-evidence commits advance HEAD too.
 
 Read before continuing:
@@ -24,6 +25,7 @@ VM_RUNBOOK.md
 Newest detailed report/evidence:
 
 ```text
+docs/VM_REVIEWER_FIXTURE_DEPENDENCY_20260822.md
 docs/VM_ANKI_OVERLAY_PROVENANCE_HARDENING_20260822.md
 docs/logs/KAP_ANKI_OVERLAY_TARGETED_20260822.log
 docs/VM_GIT_IDENTITY_FAIL_CLOSED_20260822.md
@@ -57,6 +59,28 @@ complete ordinary source
 ```
 
 Only after those software artifacts/hashes exist may physical PW6 HIL begin; HIL is recorded separately.
+
+## Current-head targeted checkpoint
+
+The 2026-08-22 continuation materialized exact current-head blobs through the GitHub Git object API and independently verified each with `git hash-object`. It ran the audio queue, CSS compatibility and reviewer runtime fixture groups in the isolated VM.
+
+The first unpatched reviewer run failed before fixture 1:
+
+```text
+TypeError: window.kapCreateAudioQueue is not a function
+```
+
+Root cause: `web/reviewer.js` has a production dependency on `web/audio_queue.js`, while the standalone fixture evaluated only the reviewer source. Commit `f0925bf767cf59708ef3ee72ebaaff046cdd6b1d` makes the fixture load the real audio queue source in the same VM context immediately before reviewer source.
+
+Verified targeted results from the patched tree:
+
+```text
+audio queue syntax/lifecycle       PASS
+CSS compatibility syntax/fixtures  PASS (9 fixtures)
+reviewer syntax/runtime fixtures    PASS (10 fixture groups)
+```
+
+This is current-head evidence for those targeted groups only. It is not a complete `run-static-gates.sh` pass and does not upgrade any historical host/APKG/ARMHF/QEMU result to release provenance.
 
 ## Historical green checkpoints — regression evidence only
 
@@ -166,6 +190,8 @@ fatal: unable to access 'https://github.com/melspixel/Kanki.git/': Could not res
 rc=128
 ```
 
+GitHub Actions was retried for the starting head, but the replacement job again completed with zero recorded steps and no downloadable log/artifact. That is infrastructure failure, not source-test evidence.
+
 The private checksum-matching PW6 rootfs tree **and retained image** are also absent. Historical/synthetic evidence must not be promoted to final provenance.
 
 ## Local/Codex boundary
@@ -176,7 +202,7 @@ The private checksum-matching PW6 rootfs tree **and retained image** are also ab
 
 1. Resolve the live branch head, then materialize that exact clean commit in a network-capable build VM with complete Git objects, exact pinned Anki, Cargo cache, protoc and KindleHF inputs.
 2. Install/verify `e2fsprogs/debugfs` in addition to the existing build/QEMU toolchain.
-3. Run complete static gates, including deterministic Anki-overlay tests, missing-Git-object/non-Git package regressions and image-derived QEMU/package provenance tests.
+3. Run complete static gates from the new head, including the repaired reviewer fixture dependency, deterministic Anki-overlay tests, missing-Git-object/non-Git package regressions and image-derived QEMU/package provenance tests.
 4. From the same source/Anki identity, run the full official Anki backend gate. The hardened injector must report only the deterministic overlay, and Cargo target state must be freshly recreated.
 5. Run all five real APKG integrations including typed-answer coverage against that fresh host library.
 6. Run ARMHF cross-build plus ELF/ABI/GLIBC/export audit; the ARMHF gate independently re-verifies the exact Anki overlay and recreates Cargo target state.
