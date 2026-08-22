@@ -1,0 +1,12 @@
+KAP deterministic Anki overlay targeted reproducer
+date=2026-08-22
+scope=synthetic local Git fixture; not a full current-head build
+py_compile: PASS
+clean deterministic injection: PASS
+idempotent reinjection: PASS
+unrelated untracked source rejection: PASS
+overlay-owned byte tamper rejection: PASS
+unrelated tracked source rejection: PASS
+unrelated staged source rejection: PASS
+gate-owned Cargo target recreation / caller target isolation: PASS
+targeted cases: 7/7 PASS
