@@ -1,0 +1,42 @@
+KAP platform-reference checkpoint
+source_start=ae349e0126bc95d4350acc6885e4ee443a91c88e
+source_code_checkpoint=21f39b86b99e31182f7815bcc0bd707b4e75bbd5
+
+=== maintained platform adapter test ===
++ gcc -O2 -std=c99 -Wall -Wextra -Werror tests/test_platform_adapter.c
++ tests/test-platform-adapter
+keyboard requested=0
+keyboard requested=1
+keyboard requested=0
+test_platform_adapter: ok (startup close, open, de-duplicate, reveal close)
+
+=== JavaScript and composition checkpoint ===
++ node --check web/ime.js
++ node tests/test_ime_runtime.js
+test_ime_runtime: ok (focus, blur, reveal, state and back ordering)
++ gcc synthetic app composition
++ run synthetic app composition with fake lipc-set-prop
+keyboard requested=0
+keyboard requested=1
+keyboard requested=0
+native platform composition: ok
++ verify startup-close/open/close argument vectors
++ preprocessor window-title assertion
+platform reference checkpoint: PASS
+
+=== platform reference contract ===
+test_platform_reference_contract: ok
+
+=== observed lipc argument vector ===
+-s
+com.lab126.keyboard
+close
+com.melspixel.kindleankiport
+-s
+com.lab126.keyboard
+open
+com.melspixel.kindleankiport:abc:1
+-s
+com.lab126.keyboard
+close
+com.melspixel.kindleankiport
