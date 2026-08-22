@@ -137,7 +137,7 @@ jobs:
           sudo apt-get install -y unzip python3-pip
           python3 -m pip install --disable-pip-version-check gdown
           mkdir -p /tmp/rankirefresh-release
-          gdown --id "$DRIVE_FILE_ID" -O /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip
+          gdown "$DRIVE_FILE_ID" -O /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip
           printf '%s  %s\n' "$EXPECTED_SHA256" /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip | sha256sum -c -
 
       - name: Publish complete compiled package and runtime tree
