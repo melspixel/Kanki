@@ -1,10 +1,11 @@
-name: Materialize RankiRefresh Diagnostic 1
+name: Materialize RankiRefresh preserved releases
 
 on:
   push:
     branches: [rankirefresh-sync]
     paths:
       - 'kindle-anki-port/RankiRefresh/.materialize-request'
+      - 'kindle-anki-port/RankiRefresh/releases/2026-08-22/.materialize-request'
       - 'kindle-anki-port/RankiRefresh/scripts/materialize-dist.sh'
       - '.github/workflows/rankirefresh-materialize.yml'
 
@@ -13,35 +14,69 @@ permissions:
   actions: read
 
 jobs:
-  materialize:
+  release-2026-08-22:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      DRIVE_FILE_ID: 1PnR04NSFrTWNQL_-WwzP_srWDS_OJD0g
+      EXPECTED_SHA256: a91dfe8b95d55469b567307951c4981aa5492d9ea763926f4557cd6f9dd7d002
+      RELEASE_ROOT: kindle-anki-port/RankiRefresh/releases/2026-08-22
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: rankirefresh-sync
-
-      - name: Install archive tools
+      - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip zip curl
-
-      - name: Materialize complete compiled result
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash kindle-anki-port/RankiRefresh/scripts/materialize-dist.sh
-
-      - name: Commit compiled result into RankiRefresh
+          sudo apt-get install -y unzip file binutils python3-pip
+          python3 -m pip install --disable-pip-version-check gdown pyelftools
+      - name: Download and verify exact release
+        run: |
+          mkdir -p /tmp/rankirefresh-release
+          gdown --id "$DRIVE_FILE_ID" -O /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip
+          printf '%s  %s\n' "$EXPECTED_SHA256" /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip | sha256sum -c -
+      - name: Materialize release
+        run: |
+          DIST="$RELEASE_ROOT/dist"
+          rm -rf "$DIST" "$RELEASE_ROOT/recovered-source"
+          mkdir -p "$DIST/unpacked" "$RELEASE_ROOT/recovered-source/package" "$RELEASE_ROOT/recovered-source/embedded"
+          cp /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip "$DIST/"
+          printf '%s  Kanki-release-2026-08-22.zip\n' "$EXPECTED_SHA256" > "$DIST/Kanki-release-2026-08-22.zip.sha256"
+          unzip -q "$DIST/Kanki-release-2026-08-22.zip" -d "$DIST/unpacked"
+          cp "$DIST/unpacked/ranki/ranki.sh" "$RELEASE_ROOT/recovered-source/package/ranki.sh"
+          cp "$DIST/unpacked/ranki/kindle-system-fingerprint.sh" "$RELEASE_ROOT/recovered-source/package/kindle-system-fingerprint.sh"
+          cp "$DIST/unpacked/ranki/config.ini.default" "$RELEASE_ROOT/recovered-source/package/config.ini.default"
+          cp "$DIST/unpacked/ranki/KANKI_BUILD.txt" "$RELEASE_ROOT/recovered-source/package/KANKI_BUILD.txt"
+          python3 - <<'PY'
+          from pathlib import Path
+          from elftools.elf.elffile import ELFFile
+          release=Path('kindle-anki-port/RankiRefresh/releases/2026-08-22')
+          so=release/'dist/unpacked/ranki/libkanki-webkit-armhf.so'; out=release/'recovered-source/embedded'
+          wanted={'KANKI_REVIEWER_CSS':'KANKI_REVIEWER_CSS.recovered.css','KANKI_COMPAT_JS':'KANKI_COMPAT_JS.recovered.js','SCALE_NATIVE':'SCALE_NATIVE.recovered.html','SCALE_FALLBACK':'SCALE_FALLBACK.recovered.html'}
+          with so.open('rb') as fh:
+              elf=ELFFile(fh); symtab=elf.get_section_by_name('.symtab')
+              if symtab is None: raise SystemExit('missing .symtab')
+              for n,fn in wanted.items():
+                  syms=symtab.get_symbol_by_name(n) or []
+                  if len(syms)!=1: raise SystemExit('%s: expected one symbol, got %s'%(n,len(syms)))
+                  sym=syms[0]; sec=elf.get_section(sym['st_shndx']); start=sym['st_value']-sec['sh_addr']; data=sec.data()[start:start+sym['st_size']]
+                  if data.endswith(b'\0'): data=data[:-1]
+                  (out/fn).write_bytes(data)
+          PY
+          node --check "$RELEASE_ROOT/recovered-source/embedded/KANKI_COMPAT_JS.recovered.js"
+          (cd "$DIST/unpacked/ranki" && sha256sum * | sort > ../FILE_SHA256.txt)
+          file "$DIST/unpacked/ranki"/* > "$DIST/ARTIFACT_AUDIT.txt"
+          cat > "$RELEASE_ROOT/recovered-source/README.md" <<'EOF'
+          # Recovered source-readable payloads
+          These files are copied or extracted from the exact user-supplied 2026-08-22 release. This is not the missing original C source tree for `build=93be8aa`; see `../SOURCE_STATUS.md`.
+          EOF
+          sed -i 's/^          //' "$RELEASE_ROOT/recovered-source/README.md"
+      - name: Commit materialized release
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin kindle-anki-port rankirefresh-sync
-          git rebase origin/rankirefresh-sync
-          git add kindle-anki-port/RankiRefresh/dist
-          if git diff --cached --quiet; then
-            echo 'Compiled result already materialized; nothing to commit.'
-            exit 0
-          fi
-          git commit -m 'RankiRefresh: materialize Diagnostic 1 compiled result'
+          git add "$RELEASE_ROOT/dist" "$RELEASE_ROOT/recovered-source"
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'RankiRefresh: materialize 2026-08-22 release artifact'
           git push origin HEAD:rankirefresh-sync
