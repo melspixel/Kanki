@@ -86,6 +86,9 @@ run node "$ROOT/tests/test_css_compat_fixtures.js"
 run node "$ROOT/tests/test_reviewer_runtime_fixtures.js"
 run sh -n "$ROOT/scripts/launch.sh"
 run sh -n "$ROOT/scripts/sync.sh"
+run "$CC" -O2 -std=c99 -Wall -Wextra -Werror \
+    "$ROOT/tests/test_platform_adapter.c" -o "$BUILD/test-platform-adapter"
+run "$BUILD/test-platform-adapter"
 run "$CC" -O2 -std=c99 -Wall -Wextra -Werror -I"$ROOT/core" \
     "$ROOT/native/app.c" -ldl -o "$BUILD/kap-app-host"
 run "$CC" -O2 -std=c99 -Wall -Wextra -Werror \
