@@ -54,6 +54,7 @@ class ArmhfProvenanceTests(unittest.TestCase):
         self.cargo_home = self.tmp / "cargo-home"
         self.out = self.tmp / "out"
         self.marker = self.tmp / "cargo-called"
+        self.inject_marker = self.tmp / "inject-called"
         self.protoc = self.tmp / "protoc"
 
         init_repo(self.anki)
@@ -61,6 +62,12 @@ class ArmhfProvenanceTests(unittest.TestCase):
         self.anki_pin = commit_all(self.anki, "pinned anki")
 
         init_repo(self.project)
+        (self.project / "tools").mkdir()
+        (self.project / "tools" / "inject_into_anki.py").write_text(
+            "import os, pathlib\n"
+            "pathlib.Path(os.environ['INJECT_MARKER']).write_text('called\\n')\n",
+            encoding="utf-8",
+        )
         (self.project / "upstream.lock.json").write_text(
             json.dumps({"commit": self.anki_pin}) + "\n", encoding="utf-8"
         )
@@ -95,6 +102,7 @@ class ArmhfProvenanceTests(unittest.TestCase):
                 "SYSROOT": str(self.tmp / "fixture-sysroot"),
                 "GLIBC_CEILING": "2.35",
                 "CARGO_MARKER": str(self.marker),
+                "INJECT_MARKER": str(self.inject_marker),
             }
         )
         env.update(overrides)
@@ -102,6 +110,7 @@ class ArmhfProvenanceTests(unittest.TestCase):
 
     def invoke(self, **overrides: str) -> subprocess.CompletedProcess[str]:
         self.marker.unlink(missing_ok=True)
+        self.inject_marker.unlink(missing_ok=True)
         return subprocess.run(
             ["bash", str(SCRIPT)],
             cwd=self.tmp,
@@ -114,11 +123,17 @@ class ArmhfProvenanceTests(unittest.TestCase):
     def assert_blocked_before_cargo(self, proc: subprocess.CompletedProcess[str], code: int) -> None:
         self.assertEqual(proc.returncode, code, proc.stdout + proc.stderr)
         self.assertFalse(self.marker.exists(), proc.stdout + proc.stderr)
+        self.assertFalse(self.inject_marker.exists(), proc.stdout + proc.stderr)
 
-    def test_clean_pinned_checkouts_reach_cargo(self) -> None:
-        proc = self.invoke()
+    def test_clean_pinned_checkouts_reach_cargo_via_injector_and_fresh_target(self) -> None:
+        stale = self.anki / "target" / "release" / "libanki.so"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("stale\n", encoding="utf-8")
+        proc = self.invoke(CARGO_TARGET_DIR=str(self.tmp / "caller-target"))
         self.assertEqual(proc.returncode, 77, proc.stdout + proc.stderr)
+        self.assertTrue(self.inject_marker.exists(), proc.stdout + proc.stderr)
         self.assertTrue(self.marker.exists(), proc.stdout + proc.stderr)
+        self.assertFalse(stale.exists(), proc.stdout + proc.stderr)
 
     def test_invalid_build_commit_is_rejected(self) -> None:
         proc = self.invoke(BUILD_COMMIT="not-a-commit")
