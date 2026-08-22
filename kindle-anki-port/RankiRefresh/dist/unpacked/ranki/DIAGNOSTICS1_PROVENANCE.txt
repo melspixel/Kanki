@@ -1,0 +1,12 @@
+RankiRefresh / Kanki Anki26 Diagnostic 1
+
+source_ci_merge=f178e5e59e001bbf4964760d722fd6b9b10a28f1
+source_tree=8fb4d25339660e1b82a984f666b2e54d7a45defa
+renderer_branch_commit=ba484b13e69d04f9dc85082a399b0bd544c256d5
+renderer_ci_run=32402849169
+renderer_artifact_id=9419164966
+backend_branch_commit=b872a164c58aa5955975169944a647fdd678e99e
+backend_ci_run=32399204271
+backend_artifact_id=9418086875
+anki_ref=26.08
+anki_commit=666c2c64d4a1772c03948f5b667438da63ddaa76
