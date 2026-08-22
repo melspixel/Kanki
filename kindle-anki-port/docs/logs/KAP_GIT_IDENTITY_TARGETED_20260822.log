@@ -1,0 +1,7 @@
+case=clean_resolvable PASS
+case=dirty_detected PASS
+case=plain_rev_parse_missing_object PASS (old prerequisite can be fooled)
+case=old_status_substitution_failure_ignored PASS (reproduced old fail-open behavior)
+case=verify_commit_missing_object_rejected PASS
+case=nongit_package_source_rejected PASS
+case=all PASS
