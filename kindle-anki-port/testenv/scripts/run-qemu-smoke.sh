@@ -16,23 +16,30 @@ BUILD_COMMIT=${BUILD_COMMIT:-$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null || p
 ANKI_COMMIT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$PROJECT/upstream.lock.json")
 
 # Exact-rootfs QEMU evidence is a release gate, not an interchangeable smoke
-# fixture. Bind it to the current clean project source, the pinned Anki base,
+# fixture. Bind it to a resolvable current Git commit, the pinned Anki base,
 # the corresponding ARMHF release outputs, and the canonical PW6 manifest.
+# A printable ref is not enough: rev-parse HEAD can succeed even when the
+# referenced commit object is missing, while a failed `git status` can look
+# empty inside command substitution unless its status is checked explicitly.
 if ! printf '%s\n' "$BUILD_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
   echo "BUILD_COMMIT must be a full lowercase 40-hex Git commit" >&2
   exit 65
 fi
-if ! PROJECT_HEAD=$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null); then
-  echo "PROJECT must be a Git checkout for exact-rootfs QEMU smoke" >&2
+if ! PROJECT_HEAD=$(git -C "$PROJECT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null); then
+  echo "PROJECT must have a resolvable Git HEAD commit for exact-rootfs QEMU smoke" >&2
   exit 66
 fi
 if [ "$PROJECT_HEAD" != "$BUILD_COMMIT" ]; then
   echo "BUILD_COMMIT does not match project HEAD: $BUILD_COMMIT != $PROJECT_HEAD" >&2
   exit 66
 fi
-if [ -n "$(git -C "$PROJECT" status --porcelain --untracked-files=all -- .)" ]; then
+if ! PROJECT_STATUS=$(git -C "$PROJECT" status --porcelain --untracked-files=all -- . 2>/dev/null); then
+  echo "unable to verify project source-tree cleanliness; refusing exact-rootfs QEMU smoke" >&2
+  exit 66
+fi
+if [ -n "$PROJECT_STATUS" ]; then
   echo "project source tree is dirty; refusing exact-rootfs QEMU smoke" >&2
-  git -C "$PROJECT" status --short --untracked-files=all -- . >&2 || true
+  printf '%s\n' "$PROJECT_STATUS" >&2
   exit 66
 fi
 if ! printf '%s\n' "$ANKI_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
