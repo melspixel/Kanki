@@ -36,6 +36,13 @@ def commit_all(path: Path, message: str) -> str:
     return run("git", "rev-parse", "HEAD", cwd=path).stdout.strip()
 
 
+def remove_loose_object(path: Path, object_id: str) -> None:
+    obj = path / ".git" / "objects" / object_id[:2] / object_id[2:]
+    if not obj.is_file():
+        raise AssertionError(f"expected loose fixture Git object: {obj}")
+    obj.unlink()
+
+
 class HostBackendProvenanceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp_obj = tempfile.TemporaryDirectory(prefix="kap-host-provenance-")
@@ -141,12 +148,24 @@ class HostBackendProvenanceTests(unittest.TestCase):
         self.assert_blocked_before_injection(proc, 66)
         self.assertIn("project source tree is dirty", proc.stderr)
 
+    def test_project_head_commit_object_must_exist(self) -> None:
+        remove_loose_object(self.project, self.project_head)
+        proc = self.invoke()
+        self.assert_blocked_before_injection(proc, 66)
+        self.assertIn("resolvable Git HEAD commit", proc.stderr)
+
     def test_anki_checkout_head_must_equal_lock(self) -> None:
         (self.anki / "README").write_text("different head\n", encoding="utf-8")
         commit_all(self.anki, "different anki")
         proc = self.invoke()
         self.assert_blocked_before_injection(proc, 67)
         self.assertIn("Anki checkout HEAD does not match", proc.stderr)
+
+    def test_anki_head_commit_object_must_exist(self) -> None:
+        remove_loose_object(self.anki, self.anki_pin)
+        proc = self.invoke()
+        self.assert_blocked_before_injection(proc, 67)
+        self.assertIn("resolvable Git HEAD commit", proc.stderr)
 
 
 if __name__ == "__main__":
