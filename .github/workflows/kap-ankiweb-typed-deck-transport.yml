@@ -1,0 +1,97 @@
+name: Temporary KAP real typed APKG transport
+
+# Disposable one-shot transport. This branch is never merged.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/kap-ankiweb-typed-deck-transport.yml'
+
+permissions:
+  contents: read
+
+env:
+  DECK_ID: '413429709'
+  INFO_URL: https://ankiweb.net/shared/info/413429709
+
+jobs:
+  transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Download and validate real shared typed-answer deck
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y curl unzip python3 zstd
+          out=/tmp/kap-real-typed
+          mkdir -p "$out"
+          ua='Mozilla/5.0 KAP compatibility test transport'
+          curl -fsSL --retry 4 --connect-timeout 30 -A "$ua" \
+            "$INFO_URL" -o "$out/info.html"
+          key=$(python3 - "$out/info.html" <<'PY'
+          import html, re, sys
+          text=open(sys.argv[1],encoding='utf-8').read()
+          match=re.search(r'<input[^>]+name=["\x27]k["\x27][^>]+value=["\x27]([^"\x27]+)',text,re.I)
+          if not match:
+              match=re.search(r'<input[^>]+value=["\x27]([^"\x27]+)["\x27][^>]+name=["\x27]k["\x27]',text,re.I)
+          if not match: raise SystemExit('AnkiWeb shared-deck key not found')
+          print(html.unescape(match.group(1)))
+          PY
+          )
+          test -n "$key"
+          download_url="https://ankiweb.net/shared/downloadDeck/${DECK_ID}?k=${key}"
+          apkg="$out/4000-Essential-English-Words-front-back-typed.apkg"
+          curl -fL --retry 4 --connect-timeout 30 -A "$ua" \
+            "$download_url" -o "$apkg"
+          test "$(stat -c %s "$apkg")" -gt 1000000
+          unzip -t "$apkg" >/dev/null
+          unzip -Z1 "$apkg" | grep -Eq '^collection\.anki2$|^collection\.anki21$|^collection\.anki21b$'
+          python3 - "$apkg" <<'PY'
+          import json, sqlite3, subprocess, sys, tempfile, zipfile
+          from pathlib import Path
+          apkg=Path(sys.argv[1])
+          with tempfile.TemporaryDirectory() as td:
+              td=Path(td)
+              with zipfile.ZipFile(apkg) as z:
+                  name=next((n for n in ('collection.anki21b','collection.anki21','collection.anki2') if n in z.namelist()),None)
+                  if not name: raise SystemExit('collection missing')
+                  z.extract(name,td)
+              collection=td/'collection.anki2'
+              if name == 'collection.anki21b':
+                  subprocess.run(['zstd','-q','-d','-f',str(td/name),'-o',str(collection)],check=True)
+              else:
+                  collection=td/name
+              db=sqlite3.connect(collection)
+              models=json.loads(db.execute('select models from col').fetchone()[0])
+              templates=[]
+              for model in models.values():
+                  for tmpl in model.get('tmpls',[]):
+                      text=tmpl.get('qfmt','')+'\n'+tmpl.get('afmt','')
+                      if '{{type:' in text or '[[type:' in text:
+                          templates.append({'model':model.get('name'),'template':tmpl.get('name')})
+              db.close()
+              if not templates: raise SystemExit('no native Anki typed-answer template found')
+              print(json.dumps({'typed_templates':templates},ensure_ascii=False))
+          PY
+          sha256sum "$apkg" > "$out/APKG-SHA256SUMS"
+          {
+            printf 'source=AnkiWeb public shared deck\n'
+            printf 'info_url=%s\n' "$INFO_URL"
+            printf 'download_endpoint=AnkiWeb keyed shared/downloadDeck flow\n'
+            printf 'deck_id=%s\n' "$DECK_ID"
+            printf 'purpose=private compatibility test input only\n'
+          } > "$out/PROVENANCE.txt"
+          rm -f "$out/info.html"
+          cat "$out/PROVENANCE.txt"
+          cat "$out/APKG-SHA256SUMS"
+
+      - name: Upload real typed-answer APKG
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-real-typed-apkg-413429709
+          path: /tmp/kap-real-typed/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
