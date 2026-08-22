@@ -1,0 +1,47 @@
+name: Materialize RankiRefresh Diagnostic 1
+
+on:
+  push:
+    branches: [rankirefresh-sync]
+    paths:
+      - 'kindle-anki-port/RankiRefresh/.materialize-request'
+      - 'kindle-anki-port/RankiRefresh/scripts/materialize-dist.sh'
+      - '.github/workflows/rankirefresh-materialize.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: rankirefresh-sync
+
+      - name: Install archive tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip curl
+
+      - name: Materialize complete compiled result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash kindle-anki-port/RankiRefresh/scripts/materialize-dist.sh
+
+      - name: Commit compiled result into RankiRefresh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin kindle-anki-port rankirefresh-sync
+          git rebase origin/rankirefresh-sync
+          git add kindle-anki-port/RankiRefresh/dist
+          if git diff --cached --quiet; then
+            echo 'Compiled result already materialized; nothing to commit.'
+            exit 0
+          fi
+          git commit -m 'RankiRefresh: materialize Diagnostic 1 compiled result'
+          git push origin HEAD:rankirefresh-sync

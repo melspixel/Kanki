@@ -1,0 +1,116 @@
+name: Build Kanki package
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'tools/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [main, anki-26.08-backend]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      KOX_TAG: "2025.05"
+      GST_PLAY_COMMIT: "62edf76feb1b7f4af2f01754957e8d57eb3e7d67"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARM cross compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabi curl unzip zip
+
+      - name: Validate generic compatibility assets
+        run: |
+          node --check src/anki_adaptive_v2.js
+          node --check src/anki_compat.js
+          node --check src/render_diagnostics.js
+          python3 -m py_compile tools/embed_assets.py
+          if grep -Eqi 'COCA-English|dictionary-logo-link|\.word\{|\.pos-badge\{' \
+              src/anki_adaptive_v2.js src/anki_compat.js src/render_diagnostics.js src/anki_reviewer.css; then
+            echo 'Deck-specific styling leaked into the generic renderer.' >&2
+            exit 1
+          fi
+          python3 tools/embed_assets.py src/anki_reviewer.css src/anki_compat.js > /tmp/kanki_embedded_assets.h
+          test -s /tmp/kanki_embedded_assets.h
+          grep -q 'kanki-layout-v2' /tmp/kanki_embedded_assets.h
+          grep -q 'KANKI_RENDER' /tmp/kanki_embedded_assets.h
+
+      - name: Fetch pinned miniaudio header
+        run: |
+          curl -fL --retry 3 -o src/miniaudio.h \
+            https://raw.githubusercontent.com/mackron/miniaudio/0.11.21/miniaudio.h
+
+      - name: Build decoder-only audio helpers
+        run: |
+          COMMON='-DMA_NO_RUNTIME_LINKING -DMA_NO_THREADING -DMA_NO_NODE_GRAPH -DMA_NO_ENGINE -DMA_NO_RESOURCE_MANAGER'
+          arm-linux-gnueabihf-gcc -O2 -static -s -Isrc $COMMON \
+            src/kanki_audio_server.c -o kanki-audio-armhf -lm -latomic
+          arm-linux-gnueabi-gcc -O2 -static -s -Isrc $COMMON \
+            src/kanki_audio_server.c -o kanki-audio-armel -lm -latomic
+
+      - name: Build libc-version-independent WebKit/GTK compatibility shims
+        run: |
+          clang --target=arm-linux-gnueabihf -fuse-ld=lld -O2 -fPIC -fno-builtin \
+            -shared -nostdlib -I/tmp src/webkit_compat_shim.c -o libkanki-webkit-armhf.so
+          clang --target=arm-linux-gnueabi -fuse-ld=lld -O2 -fPIC -fno-builtin \
+            -shared -nostdlib -I/tmp src/webkit_compat_shim.c -o libkanki-webkit-armel.so
+
+      - name: Fetch Kindle-native GStreamer player source
+        run: |
+          curl -fL --retry 3 -o /tmp/gst-play.c \
+            "https://raw.githubusercontent.com/stradichenko/audiobook.koplugin/${GST_PLAY_COMMIT}/kindle/gst-play.c"
+
+      - name: Fetch Kindle hard-float koxtoolchain
+        run: |
+          curl -fL --retry 3 -o /tmp/kindlehf.tar.gz \
+            "https://github.com/koreader/koxtoolchain/releases/download/${KOX_TAG}/kindlehf.tar.gz"
+          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
+
+      - name: Build native GStreamer player for ARMHF
+        run: |
+          export PATH="$HOME/x-tools/arm-kindlehf-linux-gnueabihf/bin:$PATH"
+          arm-kindlehf-linux-gnueabihf-gcc -O2 -Wall -Wextra -Wno-unused-parameter \
+            -DKGP_NATIVE_GLIBC -o kanki-gst-play-armhf /tmp/gst-play.c -ldl
+          arm-kindlehf-linux-gnueabihf-readelf -l kanki-gst-play-armhf | grep -i interpreter
+          arm-kindlehf-linux-gnueabihf-readelf -V kanki-gst-play-armhf | grep -oE 'GLIBC_[0-9.]+' | sort -V | uniq | tail -3
+
+      - name: Inspect ARM outputs
+        run: |
+          file kanki-audio-armhf kanki-audio-armel kanki-gst-play-armhf libkanki-webkit-armhf.so libkanki-webkit-armel.so
+          readelf -d libkanki-webkit-armhf.so | grep NEEDED && exit 1 || true
+          readelf -d libkanki-webkit-armel.so | grep NEEDED && exit 1 || true
+          readelf -Ws libkanki-webkit-armhf.so | grep -E 'webkit_web_view_load_html_string|webkit_web_view_set_zoom_level|gtk_tree_view_expand_all'
+          strings libkanki-webkit-armhf.so | grep -q 'kanki-layout-v2'
+          nm -D libkanki-webkit-armhf.so | grep -E ' open$| write$| close$| getenv$' || true
+
+      - name: Download upstream Ranki release
+        run: |
+          curl -fL --retry 3 -o ranki-upstream.zip \
+            https://github.com/crazy-electron/ranki/releases/latest/download/ranki.zip
+          unzip -q ranki-upstream.zip -d package
+
+      - name: Assemble Kanki
+        run: |
+          cp scripts/ranki.sh package/ranki/ranki.sh
+          cp kanki-audio-armhf package/ranki/kanki-audio-armhf
+          cp kanki-audio-armel package/ranki/kanki-audio-armel
+          cp kanki-gst-play-armhf package/ranki/kanki-gst-play-armhf
+          cp libkanki-webkit-armhf.so package/ranki/libkanki-webkit-armhf.so
+          cp libkanki-webkit-armel.so package/ranki/libkanki-webkit-armel.so
+          printf 'Kanki adaptive renderer v2 + render diagnostics\ncommit=%s\n' "$GITHUB_SHA" > package/ranki/KANKI_BUILD.txt
+          chmod +x package/ranki/ranki.sh package/ranki/kanki-audio-armhf package/ranki/kanki-audio-armel package/ranki/kanki-gst-play-armhf
+          (cd package && zip -qr ../kanki.zip ranki)
+          sha256sum kanki.zip > kanki.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanki
+          path: |
+            kanki.zip
+            kanki.zip.sha256
