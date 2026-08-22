@@ -1,10 +1,14 @@
 name: One-shot Kindle Anki Port source snapshot
 
-# This workflow is a transport bridge for the network-isolated build VM.
-# It runs only when this workflow file itself is added or changed.
+# Transport bridge for the network-isolated build VM. It runs only when this
+# workflow file itself is added or changed, then remains dormant.
 on:
   push:
     branches: [kindle-anki-port]
+    paths:
+      - '.github/workflows/kindle-source-snapshot.yml'
+  pull_request:
+    branches: [main]
     paths:
       - '.github/workflows/kindle-source-snapshot.yml'
 
@@ -15,32 +19,35 @@ jobs:
   snapshot:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: kindle-anki-port
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Build exact Git bundle
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
           out=/tmp/kap-source-snapshot
           rm -rf "$out"
           mkdir -p "$out"
 
-          # Keep the exact branch ref and complete reachable history so the VM
-          # can clone a real clean checkout whose HEAD is GITHUB_SHA.
-          git bundle create "$out/Kanki-kindle-anki-port-${GITHUB_SHA}.bundle" \
+          # Publish a real branch ref in the bundle so the VM can clone a clean
+          # checkout whose HEAD is exactly SOURCE_SHA.
+          git update-ref refs/heads/kindle-anki-port "$SOURCE_SHA"
+          git bundle create "$out/Kanki-kindle-anki-port-${SOURCE_SHA}.bundle" \
             refs/heads/kindle-anki-port
-          git bundle verify "$out/Kanki-kindle-anki-port-${GITHUB_SHA}.bundle"
+          git bundle verify "$out/Kanki-kindle-anki-port-${SOURCE_SHA}.bundle"
 
-          git show -s --format=fuller "$GITHUB_SHA" > "$out/COMMIT.txt"
-          git ls-tree -r --full-tree "$GITHUB_SHA" > "$out/TREE.txt"
-          printf '%s\n' "$GITHUB_SHA" > "$out/HEAD.txt"
+          git show -s --format=fuller "$SOURCE_SHA" > "$out/COMMIT.txt"
+          git ls-tree -r --full-tree "$SOURCE_SHA" > "$out/TREE.txt"
+          printf '%s\n' "$SOURCE_SHA" > "$out/HEAD.txt"
           (
             cd "$out"
             sha256sum Kanki-kindle-anki-port-*.bundle COMMIT.txt TREE.txt HEAD.txt \
@@ -50,7 +57,7 @@ jobs:
       - name: Upload exact source snapshot
         uses: actions/upload-artifact@v4
         with:
-          name: Kanki-kindle-anki-port-source-${{ github.sha }}
+          name: Kanki-kindle-anki-port-source-${{ github.event.pull_request.head.sha || github.sha }}
           path: /tmp/kap-source-snapshot/
           if-no-files-found: error
           compression-level: 0
