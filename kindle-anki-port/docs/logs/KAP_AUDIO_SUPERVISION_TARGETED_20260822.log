@@ -1,0 +1,47 @@
+KINDLE_ANKI_PORT_AUDIO_SUPERVISION_TARGETED_V1
+
+source_commits:
+  0acb54413bcddf3d16700f516dfaf213ebe31795  bounded audio-helper shutdown
+  7456f953296970a96d4bc2dd39e5fcd8e441bc28  native self-test entry point
+  e1460fff9830cc19a1f6ce8e083cc5c248d74328  canonical static-gate invocation
+  1a4a1744ec7e50efaa212d170de549e71d671f23  source-contract enforcement
+
+canonical_blobs:
+  native/app_part3.inc                 c8059bb96c7f161ff92f9c1815bb085358329a04
+  native/app_part4.inc                 2b590e411e816cd8191a9dc96499ec53703e2f26
+  testenv/scripts/run-static-gates.sh  442538370c76922aab7ef4058bf0a9f1cc69e9f8
+  tests/test_source_contract.py        b8419a1b13662f831f9beac55649114f7f41b2e8
+
+standalone_strict_c_harness:
+  compiler_flags=-O2 -std=c99 -Wall -Wextra -Werror
+  result=PASS
+  source_sha256=5a996343993c642be048bdcc6abd40a988ff564ed969bf2a0edaf2ca869e9630
+  binary_sha256=19c8900dc06a219c612e7265691b8af1e712c87fd08e44d3c917aa2b7e584c02
+  log_sha256=447c4a2d2bd9f3f90f8de6c52e1027915892533408a5c81d01aeec3effb5164b
+  output:
+    audio pid=<pid> did not stop after 1000ms; forcing SIGKILL
+    kap-app audio supervision self-test: ok elapsed_ms=1002
+    status=0
+
+full_translation_unit_checkpoint:
+  input=last locally materialized monolithic native/app.c checkpoint with the exact current supervision block and self-test entry point applied
+  compiler_flags=-O2 -std=c99 -Wall -Wextra -Werror -Icore -ldl
+  result=PASS
+  binary_sha256=1ed70acb30140a49607ad3bcce513a055e97b760b540556ad05d2e936a7951c2
+  log_sha256=2e6f3a5b381aee1ba629e88d850f4f239f40606f08077681ed59493ac0c301d5
+  output:
+    audio pid=<pid> did not stop after 1000ms; forcing SIGKILL
+    kap-app audio supervision self-test: ok elapsed_ms=1002
+    status=0
+
+contract_checks:
+  bounded SIGTERM grace=PASS
+  SIGKILL fallback=PASS
+  child reap=PASS
+  audio_pid ownership cleared=PASS
+  canonical static gate invokes --self-test-audio-supervision=PASS
+  source contract rejects removal=PASS by inspection
+
+scope=targeted audio-supervision regression
+full_current_head_static_gate=NOT_CLAIMED
+reason=the isolated execution container does not contain a complete clean current-head worktree and cannot resolve github.com through normal DNS
