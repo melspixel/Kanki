@@ -1,0 +1,21 @@
+Kanki - Kindle reviewer layer over Ranki
+build=93be8aa
+built=2026-08-22
+
+Rendering, audio and the reviewer shell are provided by libkanki-webkit-*.so.
+Everything else in this package is unchanged from the upstream Ranki release
+and the Anki 26.08 backend it was assembled with.
+
+Type is governed by a floor and a ceiling. Each card is measured, scaled so
+its smallest substantial text reaches the floor, and anything the scaling
+cannot reach is truncated into range. A deck's own proportions survive
+between the limits.
+
+Layout settings live at the top of ranki.sh and take effect on the next
+launch. The gear at the bottom left of a card adjusts most of them on the
+device itself, for the current run.
+
+Diagnostics are off, and a launch with them off clears whatever an earlier
+diagnostic run left behind. Create a file named "enable-log" next to this one
+to collect ranki.log, and "enable-render-debug" to also capture per-render
+HTML and computed layout.
