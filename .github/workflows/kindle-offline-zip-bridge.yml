@@ -1,0 +1,82 @@
+name: One-shot offline bootstrap ZIP bridge
+
+# Portable one-time transport for the network-isolated VM. It copies the
+# already-generated pinned inputs from Actions run 32561552846 and adds the
+# zstd executable needed to unpack their .tar.zst members.
+on:
+  push:
+    branches: [kindle-anki-port]
+    paths:
+      - '.github/workflows/kindle-offline-zip-bridge.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  SOURCE_RUN_ID: '32561552846'
+  SOURCE_COMMIT: '92bf3ee11fc2b868a483cb49bd2abc5786d82112'
+  TAG: 'kap-offline-bootstrap-92bf3ee11fc2b868a483cb49bd2abc5786d82112'
+  ASSET: 'KAP-offline-bootstrap-92bf3ee11fc2b868a483cb49bd2abc5786d82112.zip'
+
+jobs:
+  bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zstd zip
+
+      - name: Download and flatten the completed offline artifacts
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/kap-artifacts /tmp/kap-flat
+          mkdir -p /tmp/kap-artifacts /tmp/kap-flat/bin
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --dir /tmp/kap-artifacts
+          find /tmp/kap-artifacts -type f -print -exec cp -n {} /tmp/kap-flat/ \;
+          cp -L /usr/bin/zstd /tmp/kap-flat/bin/zstd
+          chmod 755 /tmp/kap-flat/bin/zstd
+
+      - name: Verify pinned inputs
+        run: |
+          set -euo pipefail
+          cd /tmp/kap-flat
+          test -f anki-e5a6fbe27fdd4d57d5f712191b4a753032e57853.tar.zst
+          test -f rust-1.92.0-cargo-cache.tar.zst
+          test -f kindlehf-2025.05.tar.gz
+          test -f portable-host-tools-ubuntu2404.tar.zst
+          test -f anki-cargo-metadata.json
+          test -f anki-submodules.txt
+          test -f PROVENANCE.txt
+          test -f SHA256SUMS
+          grep -Fqx "source_sha=$SOURCE_COMMIT" PROVENANCE.txt
+          sha256sum -c SHA256SUMS
+          ./bin/zstd --version
+
+      - name: Build portable ZIP and publish it
+        run: |
+          set -euo pipefail
+          cd /tmp/kap-flat
+          printf '%s\n' "$SOURCE_RUN_ID" > SOURCE_RUN_ID.txt
+          printf '%s\n' "$SOURCE_COMMIT" > SOURCE_COMMIT.txt
+          find . -type f -printf '%P\n' | LC_ALL=C sort > CONTENTS.txt
+          TZ=UTC find . -exec touch -h -d '@0' {} +
+          zip -X -0 -q -r "/tmp/$ASSET" .
+          sha256sum "/tmp/$ASSET" > "/tmp/$ASSET.sha256"
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" "/tmp/$ASSET" "/tmp/$ASSET.sha256" \
+              --repo "${{ github.repository }}" --clobber
+          else
+            gh release create "$TAG" "/tmp/$ASSET" "/tmp/$ASSET.sha256" \
+              --repo "${{ github.repository }}" \
+              --target "$GITHUB_SHA" --prerelease \
+              --title 'Temporary KAP offline bootstrap transport' \
+              --notes 'Pinned one-time transport. Google Drive is the canonical working store.'
+          fi
