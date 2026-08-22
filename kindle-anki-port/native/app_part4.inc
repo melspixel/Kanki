@@ -203,6 +203,11 @@ int main(int argc, char **argv) {
     App app;
     const char *backend = DEFAULT_BACKEND;
     struct sigaction action;
+
+    if (argc == 2 && strcmp(argv[1], "--self-test-audio-supervision") == 0) {
+        return audio_supervision_self_test();
+    }
+
     memset(&app, 0, sizeof(app));
     app.log = fopen(LOG_PATH, "a");
     if (!app.log) app.log = stderr;
