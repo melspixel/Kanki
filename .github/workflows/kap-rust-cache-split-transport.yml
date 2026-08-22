@@ -1,0 +1,106 @@
+name: Temporary KAP Rust cache split transport
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/kap-rust-cache-split-transport.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  SOURCE_RUN_ID: '32562779483'
+  SOURCE_ARTIFACT: 'KAP-offline-rust-1.92.0-c1cb021579288f09d96ecb76472a9522cb90a661'
+  RUST_ARCHIVE: 'rust-1.92.0-cargo-cache.tar.zst'
+  RUST_SHA256: '1477ddf9f0660ac680493d60aaa070fb620ac352b1f0d687366053d815dff374'
+
+jobs:
+  split:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the already-pinned Rust/Cargo cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/kap-rust-source /tmp/kap-rust-parts
+          mkdir -p /tmp/kap-rust-source /tmp/kap-rust-parts
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --name "$SOURCE_ARTIFACT" \
+            --dir /tmp/kap-rust-source
+          test -f "/tmp/kap-rust-source/$RUST_ARCHIVE"
+          printf '%s  %s\n' "$RUST_SHA256" "/tmp/kap-rust-source/$RUST_ARCHIVE" \
+            | sha256sum -c -
+
+      - name: Split and verify four portable parts
+        shell: bash
+        run: |
+          set -euo pipefail
+          split --bytes=180000000 --numeric-suffixes=0 --suffix-length=2 \
+            "/tmp/kap-rust-source/$RUST_ARCHIVE" \
+            "/tmp/kap-rust-parts/$RUST_ARCHIVE.part."
+          test "$(find /tmp/kap-rust-parts -type f -name '*.part.*' | wc -l)" -eq 4
+          (cd /tmp/kap-rust-parts && sha256sum *.part.* > PARTS.sha256)
+          cat > /tmp/kap-rust-parts/REASSEMBLE.txt <<'EOF'
+          cat rust-1.92.0-cargo-cache.tar.zst.part.00 \
+              rust-1.92.0-cargo-cache.tar.zst.part.01 \
+              rust-1.92.0-cargo-cache.tar.zst.part.02 \
+              rust-1.92.0-cargo-cache.tar.zst.part.03 \
+              > rust-1.92.0-cargo-cache.tar.zst
+          sha256sum rust-1.92.0-cargo-cache.tar.zst
+          expected: 1477ddf9f0660ac680493d60aaa070fb620ac352b1f0d687366053d815dff374
+          EOF
+          cat /tmp/kap-rust-parts/PARTS.sha256
+          du -h /tmp/kap-rust-parts/*
+
+      - name: Upload part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-cache-part-00-c1cb0215
+          path: /tmp/kap-rust-parts/rust-1.92.0-cargo-cache.tar.zst.part.00
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-cache-part-01-c1cb0215
+          path: /tmp/kap-rust-parts/rust-1.92.0-cargo-cache.tar.zst.part.01
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-cache-part-02-c1cb0215
+          path: /tmp/kap-rust-parts/rust-1.92.0-cargo-cache.tar.zst.part.02
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-cache-part-03-c1cb0215
+          path: /tmp/kap-rust-parts/rust-1.92.0-cargo-cache.tar.zst.part.03
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-cache-manifest-c1cb0215
+          path: |
+            /tmp/kap-rust-parts/PARTS.sha256
+            /tmp/kap-rust-parts/REASSEMBLE.txt
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
