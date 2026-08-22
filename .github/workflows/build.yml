@@ -10,7 +10,7 @@ on:
       - 'tools/**'
       - '.github/workflows/build.yml'
   pull_request:
-    branches: [main]
+    branches: [main, kindle-anki-port]
     paths:
       - 'src/**'
       - 'scripts/**'
@@ -118,7 +118,7 @@ jobs:
             kanki.zip.sha256
 
   materialize_rankirefresh_20260822:
-    if: github.ref == 'refs/heads/rankirefresh-sync'
+    if: github.ref == 'refs/heads/rankirefresh-sync' || github.head_ref == 'rankirefresh-sync'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
