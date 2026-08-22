@@ -1,0 +1,16 @@
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/KANKI_BUILD.txt:                    ASCII text
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/config.ini.default:                 ASCII text
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/config.xml:                         XML 1.0 document, ASCII text
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/kanki-audio-armel:                  ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), statically linked, BuildID[sha1]=0383aca4521d1a79494987294f4f9f2407004321, for GNU/Linux 3.2.0, stripped
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/kanki-audio-armhf:                  ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), statically linked, BuildID[sha1]=bf45645963e802df5dc770bcecf5a010ec9f4fe2, for GNU/Linux 3.2.0, stripped
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/kanki-gst-play-armhf:               ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-armhf.so.3, for GNU/Linux 4.1.0, with debug_info, not stripped
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/kindle-system-fingerprint.sh:       POSIX shell script, ASCII text executable
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/libanki-26.08-armhf.so:             ELF 32-bit LSB shared object, ARM, EABI5 version 1 (SYSV), dynamically linked, not stripped
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/libkanki-backend-redirect-armhf.so: ELF 32-bit LSB shared object, ARM, EABI5 version 1 (SYSV), dynamically linked, BuildID[xxHash]=e00e4a3895ca024d, not stripped
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/libkanki-webkit-armel.so:           ELF 32-bit LSB shared object, ARM, EABI5 version 1 (SYSV), dynamically linked, not stripped
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/libkanki-webkit-armhf.so:           ELF 32-bit LSB shared object, ARM, EABI5 version 1 (SYSV), dynamically linked, not stripped
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/menu.json:                          JSON text data
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/ranki-armel:                        ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux.so.3, for GNU/Linux 2.6.32, BuildID[sha1]=bfebf3dd353d924a88942fc5034145a42164aa20, stripped
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/ranki-armhf:                        ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-armhf.so.3, for GNU/Linux 2.6.32, BuildID[sha1]=7f3c9f512ad5e1c893bd007c1ad836fee0c7c8e2, stripped
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/ranki.sh:                           Bourne-Again shell script, ASCII text executable
+kindle-anki-port/RankiRefresh/releases/2026-08-22/dist/unpacked/ranki/shortcut_ranki.sh:                  Bourne-Again shell script, ASCII text executable, with very long lines (10702)
