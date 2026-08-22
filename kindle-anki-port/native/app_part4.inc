@@ -22,8 +22,14 @@ static gboolean on_window_delete(void *widget, void *event, void *user_data) {
 static gboolean lifecycle_tick(void *user_data) {
     App *app = user_data;
     int status;
-    if (app->audio_pid > 0 && waitpid(app->audio_pid, &status, WNOHANG) == app->audio_pid) {
-        app->audio_pid = 0;
+    if (app->audio_pid > 0) {
+        pid_t completed = waitpid(app->audio_pid, &status, WNOHANG);
+        if (completed == app->audio_pid || (completed < 0 && errno == ECHILD)) {
+            app->audio_pid = 0;
+            execute_script(app,
+                           "if(window.kapReviewer&&window.kapReviewer.audioFinished){"
+                           "window.kapReviewer.audioFinished();}");
+        }
     }
     if (g_raise_requested) {
         g_raise_requested = 0;
