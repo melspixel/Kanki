@@ -4,102 +4,150 @@ Updated: 2026-08-22 UTC
 
 ## Current state
 
-VM-side continuation remains active with permission to install ordinary build/test dependencies. GitHub Actions quota exhaustion is not treated as a compiler blocker.
+VM-side continuation remains active. GitHub Actions quota exhaustion is not treated as a compiler blocker, and ordinary compilation is not delegated to the user's host.
 
-The former semantic-backend privacy blocker is resolved by the narrow `crate::services::kap_bridge`. Persisted checkpoints include full official Anki rslib `539/539`, five real-APKG C-ABI integrations, ARMHF hard-float binaries, ABI/GLIBC audit, package audit, and QEMU static ARM sanity.
+Persisted historical green checkpoints include:
 
-The canonical branch has since advanced through build-entrypoint, reproducibility and package-provenance hardening. These newer source changes still require one full immutable-head rebuild before any package can be release evidence.
+```text
+official Anki rslib             539/539
+five real APKG C-ABI flows      PASS
+reviewer runtime fixtures       PASS
+sync/lifecycle fixtures         PASS
+ARMHF hard-float build          PASS
+ABI/GLIBC audit                 PASS
+QEMU static ARM sanity          PASS
+```
+
+Those checkpoints predate the current release-provenance and lifecycle hardening. A complete clean-current-head rerun remains mandatory before release.
 
 ## Latest material advances
 
-### Clean-checkout shell-entrypoint portability
+### 1. Bounded audio-helper shutdown
 
-A fresh source audit found that two shell regression fixtures were committed without the executable bit while `run-static-gates.sh` invoked them directly. A developer worktree with locally repaired modes could pass, while a clean GitHub archive/checkout could fail with `Permission denied` before reaching the tests.
+A native lifecycle defect was found in the production host: `stop_audio()` sent SIGTERM and then used an unbounded blocking `waitpid()`. A GStreamer helper wedged during a Bluetooth/device-route transition could therefore pin application cleanup, delay collection close, and make a later launcher request appear to crash or remain a duplicate instance.
 
-The static gate now invokes those fixtures explicitly through `sh`:
+The native host now:
 
 ```text
-run sh "$ROOT/tests/test_sync_wrapper_signal.sh"
-run sh "$ROOT/tests/test_sync_worker.sh"
+clears audio_pid ownership
+-> SIGTERM
+-> bounded WNOHANG reap for 1000 ms
+-> SIGKILL fallback
+-> mandatory final reap
 ```
 
-`tests/test_build_entrypoints.py` now locks this contract and rejects regression to direct invocation. Targeted evidence:
+The real native binary exposes:
 
 ```text
-run-static-gates.sh shell syntax: PASS
-required sh-mediated invocations: PASS
-forbidden direct invocations: ABSENT
-run-static-gates.sh raw SHA-256:
-  d54df65d13e59308b191620efca68871ba4f6ca1f69d70e16f2f3d8206528e4e
+kap-app --self-test-audio-supervision
+```
+
+The canonical static gate compiles the host and executes that regression. The self-test creates a child that deliberately ignores SIGTERM and verifies bounded forced cleanup.
+
+Targeted strict-C and full translation-unit checkpoint evidence:
+
+```text
+audio pid=<pid> did not stop after 1000ms; forcing SIGKILL
+kap-app audio supervision self-test: ok elapsed_ms=1002
+status=0
 ```
 
 Commits:
 
 ```text
-9d68dd5bb72dfc16d3ab2f06e3c0b7405492f157  test: make static shell gates independent of executable bits
-163cc8575bf8952ecc0adbaf7201ce2bf1821ac0  test: lock clean-checkout shell invocation portability
+0acb54413bcddf3d16700f516dfaf213ebe31795  bound audio-helper shutdown
+7456f953296970a96d4bc2dd39e5fcd8e441bc28  expose native supervision self-test
+e1460fff9830cc19a1f6ce8e083cc5c248d74328  wire self-test into static gate
+1a4a1744ec7e50efaa212d170de549e71d671f23  lock source/static contract
 ```
 
-Persisted targeted log: `docs/logs/KAP_SHELL_ENTRYPOINT_TARGETED_20260822.log`. This is a focused check only; it does not replace the pending complete current-head static gate.
-
-### Lifecycle and reviewer/sync hardening
-
-The 2026-08-22 continuation added exact-source deterministic sync and reviewer runtime fixtures and then found/repaired a real lifecycle race.
+Evidence:
 
 ```text
-36c73d49251ca73d8448434b247e722c46c4fa99  reject conflicting full-sync directions
-4a27352fa7718e2d8e48fc603582e7d55f2b0653  sync fault injection and sanitized tracing
-78fbfa38c4599673eb356f88597bf7ea0707e9c1  expanded sync decision/error/abort matrix
-a3bdeaf924b5fb6d802c9454ac4c5435d3eb5b16  reviewer runtime fixture matrix
-3e139cb006be449b385ad26470ebe9327dc15393  reviewer runtime fixture added to static gate
-e72413501414507d4eb03ef3199000772be2dcf7  serialize launcher startup through PID publication
-fdb222d23384df1d3add2f4d84321709edd8ab41  hold shared operation lock across sync
-fe1b2084654361bc72ef047b07395f5422892823  fake-app process tracing for lifecycle races
-e949a6b8c2b0718dbd39e06af311c52cb635ba5d  lifecycle race/exclusion/stale-lock regression matrix
+docs/VM_AUDIO_SUPERVISION_HARDENING_20260822.md
+docs/logs/KAP_AUDIO_SUPERVISION_TARGETED_20260822.log
 ```
 
-Persisted results:
+This is targeted evidence only. Real Bluetooth route switching remains a physical PW6 gate.
+
+### 2. Clean-checkout shell-entrypoint portability
+
+Two shell regression fixtures were committed without the executable bit while the static gate invoked them directly. A developer worktree with repaired modes could pass while a clean archive failed before executing tests.
+
+The gate now uses:
 
 ```text
-test_sync_worker: ok
-test_reviewer_runtime_fixtures: ok (10 fixture groups)
-test_lifecycle: ok
+sh tests/test_sync_wrapper_signal.sh
+sh tests/test_sync_worker.sh
 ```
 
-The lifecycle defect was reproduced before repair: two near-simultaneous launch requests could both pass the PID check and start two reviewer processes. A shared atomic operation-lock directory now serializes launch through child PID publication and gives sync exclusive collection ownership for its full worker lifetime. Later targeted work also closed wrapper-SIGKILL and zombie-owner stale-lock windows.
+and `tests/test_build_entrypoints.py` locks that contract.
 
-Detailed evidence: `docs/VM_CONTINUATION_20260822.md`, `docs/VM_LIFECYCLE_HARDENING_20260822.md`, and `docs/VM_ZOMBIE_LOCK_HARDENING_20260822.md`.
-
-### Build/package provenance hardening
-
-The canonical build/test entry points now delegate to the maintained host, ARMHF, QEMU and package gates rather than weaker compatibility wrappers. External sysroot hashing is path-independent, the VM driver cannot report broad success without all required gates, and package ZIP metadata is normalized across timezone and umask. See `docs/VM_BUILD_ENTRYPOINT_HARDENING_20260822.md`.
-
-The release packager now also refuses stale cross-build outputs: `ARMHF-GATES.txt` must record PASS and `BUILD-PROVENANCE.txt` must match both the release `BUILD_COMMIT` and pinned Anki commit.
-
-That production hardening exposed a deterministic static-test regression: `tests/test_package_reproducibility.py` still generated placeholder ARMHF provenance and therefore could no longer pass the production package preconditions. The fixture has been repaired without weakening package validation and now also contains negative stale-source and stale-Anki provenance cases.
+Commits:
 
 ```text
-3001f4e1d9bfe91714bd76a21fbdbf32109fd1b0  package: bind release archive to ARMHF provenance
-03a4e00be7a9d31848879430cdb6046eb2a6e536  test: bind package reproducibility fixture to ARMHF provenance
-286938ddf9ae5ee85972cebf97c52fa599ce2a67  repaired test blob
+9d68dd5bb72dfc16d3ab2f06e3c0b7405492f157
+163cc8575bf8952ecc0adbaf7201ce2bf1821ac0
 ```
 
-Detailed evidence: `docs/VM_PACKAGE_PROVENANCE_REGRESSION_20260822.md`.
+Evidence: `docs/logs/KAP_SHELL_ENTRYPOINT_TARGETED_20260822.log`.
+
+### 3. Existing lifecycle and sync hardening
+
+The continuation previously reproduced and fixed:
+
+- concurrent-launch PID publication race;
+- reviewer/sync collection-open overlap;
+- sync-wrapper death leaving an unprotected worker;
+- zombie operation-lock owners;
+- stale-lock cleanup and ownership-aware release;
+- conflicting full-sync direction and sync error propagation;
+- packaging of transient/user state.
+
+Detailed evidence remains in:
+
+```text
+docs/VM_CONTINUATION_20260822.md
+docs/VM_LIFECYCLE_HARDENING_20260822.md
+docs/VM_ZOMBIE_LOCK_HARDENING_20260822.md
+docs/VM_PACKAGE_HARDENING_20260822.md
+```
+
+### 4. Source/build/runtime provenance hardening
+
+Current release gates require:
+
+```text
+resolvable clean project HEAD^{commit}
++ exact pinned Anki HEAD^{commit}
++ deterministic allowed Anki overlay only
++ fresh gate-owned Cargo target
++ fresh ARMHF output
++ retained-image-bound exact PW6 QEMU
++ QEMU-bound package audit
+```
+
+A stale binary, copied target directory, non-Git source tree, unrelated dirty Anki source, caller-supplied rootfs directory, or package-before-QEMU path cannot claim release provenance.
 
 ## Active blockers / next execution targets
 
-The next build target is a **full rebuild from a materialization of the then-current canonical GitHub head**: complete static gate, official rslib tests, real-APKG integration, ARMHF cross-build, ABI/GLIBC audit and package audit. Previous green binaries/package remain checkpoint evidence because their provenance predates current source.
+1. Materialize a complete clean copy of the latest canonical branch head in a network-capable build VM.
+2. Run the full static gate, now including shell portability and bounded audio supervision.
+3. Rerun official Anki tests and all five real APKG integrations from that exact source/Anki identity.
+4. Rebuild ARMHF and repeat ELF/ABI/GLIBC/export audit.
+5. Supply both exact private PW6 inputs:
+   - extracted checksum-verified rootfs;
+   - retained `pw6-rootfs.img` with SHA-256 `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`.
+6. Run image-derived exact-rootfs QEMU.
+7. Only then assemble and persist the final installer and complete reports on GitHub.
+8. Run physical PW6 HIL separately.
 
-The current isolated execution container still cannot resolve public `github.com`, so it cannot truthfully claim a fresh canonical checkout, pinned upstream build or full static-gate execution. An attempted package installation also confirmed that the container's configured APT metadata cannot currently locate the missing QEMU/Rust/protobuf packages. This is an environment limitation, not a request to move normal compilation onto the user's local host.
-
-Exact-rootfs dynamic QEMU is also open. The VM retains verified PW6 5.19.6 extraction/oracle reports and hashes, but the complete extracted rootfs bytes are absent. Reports are not accepted as a substitute for runtime input.
-
-In parallel, VM-side source review can continue for deterministic build, state-machine, process-lifecycle and collection-ownership defects that do not require Rust rebuilding or target hardware.
+The isolated execution container still cannot resolve `github.com` through normal DNS, does not contain the complete live branch worktree, and does not have the private rootfs/image pair. These limitations do not justify weakening the gates or moving ordinary compilation to the user's host.
 
 ## Persistence rule
 
-`HANDOFF.md` is the authoritative continuation point and `PROGRESS.md` is the phase matrix. Every material source/test/build change is synchronized to the `kindle-anki-port` branch. Temporary VM archives are checkpoint/transfer objects only and may not be called releases.
+`HANDOFF.md` is the authoritative continuation point; `PROGRESS.md` is the phase matrix. Every material source/test/build change is synchronized to the `kindle-anki-port` branch. Temporary VM files and historical ZIPs are checkpoints only, never releases.
 
 ## User involvement
 
-No user/local-host compilation action is requested. `CODEX_COORDINATION.md` contains a narrowly scoped private-input task for a networked worker if the exact PW6 rootfs needs to be transported into the VM. Physical PW6 work starts only after a final GitHub-persisted package and test-bundle checksum exist.
+No local-host compilation action is currently requested. `CODEX_COORDINATION.md` contains the narrow private-rootfs transport task. Physical PW6 work starts only after final software-release hashes exist.
