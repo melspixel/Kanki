@@ -1,0 +1,61 @@
+checkpoint=current-head-web-native
+source_commit=ece332e5de8ce6499e3603dcf6dd27c256819084
+node=v22.16.0
+cc=cc (Debian 14.2.0-19) 14.2.0
+python=Python 3.13.5
+
+[git-object-identity]
+web/audio_queue.js expected=dca58a469c0d32ca0726f8abcb5ede21069ee2ab actual=dca58a469c0d32ca0726f8abcb5ede21069ee2ab
+web/bridge.js expected=11479daca97f1c35a30116fadaf4ff6e7047eda0 actual=11479daca97f1c35a30116fadaf4ff6e7047eda0
+web/css_compat.js expected=289c98c482f7631efb5b621e5ee378e82ceebb70 actual=289c98c482f7631efb5b621e5ee378e82ceebb70
+web/decks.js expected=15fa1dfffc071286b9f945be23b6ae7ffb2fb280 actual=15fa1dfffc071286b9f945be23b6ae7ffb2fb280
+web/reviewer.js expected=cf18d8aa1f7b6c43b51ca220904019bd793a05a5 actual=cf18d8aa1f7b6c43b51ca220904019bd793a05a5
+web/reviewer.html expected=82a239eb503a951c45c80a61ae9cea02dcc612dc actual=82a239eb503a951c45c80a61ae9cea02dcc612dc
+web/platform.css expected=61e88bc7dfaadeac8b7da1cd5726cc1b4c88513a actual=61e88bc7dfaadeac8b7da1cd5726cc1b4c88513a
+tests/test_audio_queue.js expected=5982efa9c1a7faca3bc61de7e59f521cca5204d4 actual=5982efa9c1a7faca3bc61de7e59f521cca5204d4
+tests/test_css_compat_fixtures.js expected=664a3477078ad81182fb1c80eb7644ccd17c3aa7 actual=664a3477078ad81182fb1c80eb7644ccd17c3aa7
+tests/test_web_contract.js expected=525892adbf8abf2e5fca780407196e4533eedafe actual=525892adbf8abf2e5fca780407196e4533eedafe
+tests/test_reviewer_runtime_fixtures.js expected=557e094bd7969af8a367ecde6ce9f878c1ce6c2a actual=557e094bd7969af8a367ecde6ce9f878c1ce6c2a
+core/kap_core.h expected=3023e5c5350ee4adadbd84aeced14736867627f2 actual=3023e5c5350ee4adadbd84aeced14736867627f2
+native/app.c expected=70f2bbb42e782e787aae71e8ef912c67b49720f9 actual=70f2bbb42e782e787aae71e8ef912c67b49720f9
+native/app_part1.inc expected=02dd8e0e86720900fa7cce6345e828c8df1af2d9 actual=02dd8e0e86720900fa7cce6345e828c8df1af2d9
+native/app_part2.inc expected=6e2529c84c099f8c680c5db5790b90d992f2ab9b actual=6e2529c84c099f8c680c5db5790b90d992f2ab9b
+native/app_part3.inc expected=c8059bb96c7f161ff92f9c1815bb085358329a04 actual=c8059bb96c7f161ff92f9c1815bb085358329a04
+native/app_part4.inc expected=bc5a8ef1128f65e43272808c7cd1b325e123439f actual=bc5a8ef1128f65e43272808c7cd1b325e123439f
+native/audio.c expected=22e3f85e1f52cd1b55fbed33e323c352466ca433 actual=22e3f85e1f52cd1b55fbed33e323c352466ca433
+native/sync.c expected=ec6c109f8d331c31aae403b45f9ff09f83272fa8 actual=ec6c109f8d331c31aae403b45f9ff09f83272fa8
+
+[webkit1-js]
++ node --check web/audio_queue.js
++ node --check web/bridge.js
++ node --check web/css_compat.js
++ node --check web/decks.js
++ node --check web/reviewer.js
++ node --check tests/test_reviewer_runtime_fixtures.js
++ node tests/test_audio_queue.js
+test_audio_queue: ok
++ node tests/test_css_compat_fixtures.js
+test_css_compat_fixtures: ok (9 fixtures)
++ node tests/test_web_contract.js
+test_web_contract: ok
++ node tests/test_reviewer_runtime_fixtures.js
+test_reviewer_runtime_fixtures: ok (10 fixture groups)
+
+[native-c]
++ cc app
++ cc audio
++ cc sync
++ kap-app --self-test-audio-supervision
+2026-08-22 03:29:47 audio pid=3258 did not stop after 1000ms; forcing SIGKILL
+kap-app audio supervision self-test: ok elapsed_ms=1002
++ kap-audio --self-test
+kap-audio self-test: ok
++ kap-sync --self-test
+kap-sync self-test: ok
+
+[artifact-sha256]
+252dc9160dc4b8f3268d1e2b6f3067ddd3ce384ed5fbe240404d25c785720d30  build/static-gates/kap-app-host
+16d699b756fc94aa277f08588ee302482164864731152ac37aeb75ac6fea2656  build/static-gates/kap-audio-host
+2af78280ca03ccb9064530a7b0c47bee723b5b77f254984c65553f7a354ab689  build/static-gates/kap-sync-host
+
+result=PASS
