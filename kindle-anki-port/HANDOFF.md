@@ -10,6 +10,7 @@ Last updated: 2026-08-22 UTC
 - Official Anki pin: `e5a6fbe27fdd4d57d5f712191b4a753032e57853` (26.08.1)
 - Ordinary-source materialization milestone: `0cf4716d8f66af96d38233ec5f723151787278d7`
 - Latest current-head targeted test repair: `f0925bf767cf59708ef3ee72ebaaff046cdd6b1d`
+- Latest persisted WebKit/native checkpoint: `bd184766a66576c1dab6cdeba566107f34d179a0`
 - Always resolve the live branch HEAD before building; documentation/test-evidence commits advance HEAD too.
 
 Read before continuing:
@@ -25,6 +26,8 @@ VM_RUNBOOK.md
 Newest detailed report/evidence:
 
 ```text
+docs/VM_CURRENT_HEAD_WEB_NATIVE_20260822.md
+docs/logs/KAP_CURRENT_HEAD_WEB_NATIVE_20260822.log
 docs/VM_REVIEWER_FIXTURE_DEPENDENCY_20260822.md
 docs/VM_ANKI_OVERLAY_PROVENANCE_HARDENING_20260822.md
 docs/logs/KAP_ANKI_OVERLAY_TARGETED_20260822.log
@@ -80,7 +83,26 @@ CSS compatibility syntax/fixtures  PASS (9 fixtures)
 reviewer syntax/runtime fixtures    PASS (10 fixture groups)
 ```
 
-This is current-head evidence for those targeted groups only. It is not a complete `run-static-gates.sh` pass and does not upgrade any historical host/APKG/ARMHF/QEMU result to release provenance.
+The next current-head checkpoint recovered and object-verified the remaining WebKit1 assets plus all native C production sources from source commit `ece332e5de8ce6499e3603dcf6dd27c256819084`. Strict host compilation and self-tests passed:
+
+```text
+bridge/decks/reviewer/audio/CSS syntax and contracts  PASS
+WebKit1 web contract                                  PASS
+kap-app strict C build + audio supervision self-test  PASS, 1002 ms
+kap-audio strict C build + self-test                   PASS
+kap-sync strict C build + self-test                    PASS
+```
+
+Persisted checkpoint commit and evidence:
+
+```text
+bd184766a66576c1dab6cdeba566107f34d179a0
+docs/VM_CURRENT_HEAD_WEB_NATIVE_20260822.md
+docs/logs/KAP_CURRENT_HEAD_WEB_NATIVE_20260822.log
+log SHA-256 1ac58bfaad499b55d97b468b11c7ac5709ea7ba080a2f703a321cbbd4c4d1f2a
+```
+
+These are current-head targeted results only. They are not a complete `run-static-gates.sh` pass and do not upgrade historical host/APKG/ARMHF/QEMU results to release provenance.
 
 ## Historical green checkpoints — regression evidence only
 
@@ -202,7 +224,7 @@ The private checksum-matching PW6 rootfs tree **and retained image** are also ab
 
 1. Resolve the live branch head, then materialize that exact clean commit in a network-capable build VM with complete Git objects, exact pinned Anki, Cargo cache, protoc and KindleHF inputs.
 2. Install/verify `e2fsprogs/debugfs` in addition to the existing build/QEMU toolchain.
-3. Run complete static gates from the new head, including the repaired reviewer fixture dependency, deterministic Anki-overlay tests, missing-Git-object/non-Git package regressions and image-derived QEMU/package provenance tests.
+3. Continue the remaining current-head static gates: source/semantic contracts, lifecycle, sync-wrapper/worker, zombie-lock and package/rootfs/QEMU provenance regressions.
 4. From the same source/Anki identity, run the full official Anki backend gate. The hardened injector must report only the deterministic overlay, and Cargo target state must be freshly recreated.
 5. Run all five real APKG integrations including typed-answer coverage against that fresh host library.
 6. Run ARMHF cross-build plus ELF/ABI/GLIBC/export audit; the ARMHF gate independently re-verifies the exact Anki overlay and recreates Cargo target state.
