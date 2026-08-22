@@ -14,24 +14,29 @@ PINNED_ANKI_COMMIT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[
 ANKI_COMMIT=${ANKI_COMMIT:-$PINNED_ANKI_COMMIT}
 
 # Bind ARMHF outputs to the exact canonical source identities before any build
-# command runs.  Otherwise a dirty project tree can be compiled, later cleaned,
-# and then packaged under the unchanged HEAD; likewise a checkout of a different
-# Anki revision could previously be stamped with the pinned lock-file commit.
+# command runs. A rev name alone is insufficient: Git can print a ref whose
+# commit object is missing, while `git status` then fails. Treat both object
+# resolution and status failures as provenance failures instead of accidentally
+# interpreting an empty command-substitution result as a clean tree.
 if ! printf '%s\n' "$BUILD_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
   echo "BUILD_COMMIT must be a full lowercase 40-hex Git commit" >&2
   exit 65
 fi
-if ! PROJECT_HEAD=$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null); then
-  echo "PROJECT must be a Git checkout for an ARMHF release build" >&2
+if ! PROJECT_HEAD=$(git -C "$PROJECT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null); then
+  echo "PROJECT must have a resolvable Git HEAD commit for an ARMHF release build" >&2
   exit 66
 fi
 if [ "$PROJECT_HEAD" != "$BUILD_COMMIT" ]; then
   echo "BUILD_COMMIT does not match project HEAD: $BUILD_COMMIT != $PROJECT_HEAD" >&2
   exit 66
 fi
-if [ -n "$(git -C "$PROJECT" status --porcelain --untracked-files=all -- .)" ]; then
+if ! PROJECT_STATUS=$(git -C "$PROJECT" status --porcelain --untracked-files=all -- . 2>/dev/null); then
+  echo "unable to verify project source-tree cleanliness; refusing ARMHF release build" >&2
+  exit 66
+fi
+if [ -n "$PROJECT_STATUS" ]; then
   echo "project source tree is dirty; refusing ARMHF release build" >&2
-  git -C "$PROJECT" status --short --untracked-files=all -- . >&2 || true
+  printf '%s\n' "$PROJECT_STATUS" >&2
   exit 66
 fi
 if ! printf '%s\n' "$PINNED_ANKI_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
@@ -42,8 +47,8 @@ if [ "$ANKI_COMMIT" != "$PINNED_ANKI_COMMIT" ]; then
   echo "ANKI_COMMIT does not match upstream.lock.json: $ANKI_COMMIT != $PINNED_ANKI_COMMIT" >&2
   exit 67
 fi
-if ! ANKI_HEAD=$(git -C "$ANKI" rev-parse HEAD 2>/dev/null); then
-  echo "ANKI must be a Git checkout for an ARMHF release build" >&2
+if ! ANKI_HEAD=$(git -C "$ANKI" rev-parse --verify 'HEAD^{commit}' 2>/dev/null); then
+  echo "ANKI must have a resolvable Git HEAD commit for an ARMHF release build" >&2
   exit 67
 fi
 if [ "$ANKI_HEAD" != "$PINNED_ANKI_COMMIT" ]; then
@@ -71,7 +76,7 @@ export CXX_armv7_unknown_linux_gnueabihf="$TRIPLE-g++"
 export AR_armv7_unknown_linux_gnueabihf="$TRIPLE-ar"
 
 # The compatibility ceiling must come from the target sysroot, not from the
-# build host.  A stale hard-coded ceiling can silently accept a binary that
+# build host. A stale hard-coded ceiling can silently accept a binary that
 # links on the cross toolchain but will not load on the Kindle userspace.
 SYSROOT=${SYSROOT:-$("$TRIPLE-gcc" --print-sysroot)}
 if [ -z "${GLIBC_CEILING:-}" ]; then
