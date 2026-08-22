@@ -20,6 +20,13 @@ def write_executable(path: Path, text: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def remove_loose_object(path: Path, object_id: str) -> None:
+    obj = path / ".git" / "objects" / object_id[:2] / object_id[2:]
+    if not obj.is_file():
+        raise AssertionError(f"expected loose fixture Git object: {obj}")
+    obj.unlink()
+
+
 class QemuProvenanceTest(unittest.TestCase):
     def make_fixture(self) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, Path, dict[str, str]]:
         td = tempfile.TemporaryDirectory()
@@ -241,6 +248,15 @@ esac
         result = self.run_gate(env)
         self.assertEqual(result.returncode, 66, result.stderr + result.stdout)
         self.assertIn("project source tree is dirty", result.stderr)
+
+    def test_project_head_commit_object_must_exist(self) -> None:
+        td, project, armhf, rootfs, out, env = self.make_fixture()
+        self.addCleanup(td.cleanup)
+        remove_loose_object(project, env["BUILD_COMMIT"])
+        result = self.run_gate(env)
+        self.assertEqual(result.returncode, 66, result.stderr + result.stdout)
+        self.assertIn("resolvable Git HEAD commit", result.stderr)
+        self.assertFalse((out / "QEMU-SMOKE.txt").exists())
 
 
 if __name__ == "__main__":
