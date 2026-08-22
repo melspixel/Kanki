@@ -1,0 +1,137 @@
+/* Kanki reviewer compatibility shell.
+ * Deliberately mirrors the small, content-agnostic layer used by modern Anki:
+ * card templates remain responsible for their own typography and layout.
+ */
+html {
+    -webkit-text-size-adjust: 100%;
+    /* Anchor the root font size the way a desktop browser does.
+     *
+     * The shim turns on Lab126's W3C CSS-pixel mode, which makes WebKit derive
+     * its default font size from the panel's real pixel density instead of the
+     * conventional 96dpi. On PW6 that lands at roughly 49px rather than 16px.
+     * Absolute lengths are unaffected, so a deck written in px renders as
+     * authored, but every deck that sizes text in % or em - and every deck that
+     * declares no size at all - is inflated about threefold. That is what makes
+     * one card look ordinary and the next enormous.
+     *
+     * Restoring the conventional root restores desktop proportions for those
+     * decks without touching the ones that already render correctly. Physical
+     * legibility is the zoom's job: full-content zoom scales boxes and text
+     * together, so it stays uniform across every deck. */
+    font-size: 16px;
+}
+/* The panel is a reflective greyscale display. A dark or tinted page canvas
+ * throws away most of its contrast, and deck colours that separate cleanly on
+ * a backlit screen collapse into neighbouring greys. Force the page canvas to
+ * white and its default text to black; inner elements keep their own colours,
+ * so accents and small coloured chips still render as the deck intends. */
+/* Held back while the deck's own type size is measured; the script removes the
+ * class as soon as it has normalised, and on a timer if it never gets there. */
+html.kanki-measuring body {
+    visibility: hidden;
+}
+
+html,
+body,
+.card {
+    background-color: #fff !important;
+}
+html,
+body {
+    color: #000 !important;
+}
+
+body {
+    /* Desktop Anki's 20px is a comfortable frame on a monitor. Here it is 7%
+     * of the page in each direction, which is a line of text per screen given
+     * up to whitespace. */
+    margin: 8px;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+/* If a template provides its own inner .card container, do not apply the same
+ * deck-level card box to the reviewer body a second time. The adaptive script
+ * adds this class only after detecting a genuine nested card element. */
+body.kanki-has-inner-card {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+hr {
+    /* Not 1em: a separator's margin then grows with the type, and a card with
+     * four of them spent well over a third of the page on rules alone. A
+     * separator needs to read as a break, which takes a few pixels, not a
+     * full line of text at each end. */
+    margin: 6px 0;
+    border: none;
+    border-top: 1px solid #999;
+    height: 0;
+}
+img {
+    max-width: 100%;
+    /* No viewport-relative height here: this engine predates vh and drops the
+     * declaration, which leaves tall images free to push the rest of the card
+     * off the page. The compatibility script measures the viewport at load and
+     * installs the cap in pixels instead. */
+}
+li {
+    text-align: left;
+}
+pre {
+    text-align: left;
+}
+#typeans {
+    width: 100%;
+    box-sizing: border-box;
+    line-height: 1.75;
+}
+.replay-button,
+.kanki-replay-button {
+    text-decoration: none;
+    display: inline-block;
+    vertical-align: middle;
+    margin: 3px;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+}
+.replay-button svg,
+.kanki-replay-button svg {
+    display: block;
+    width: 40px;
+    height: 40px;
+    max-width: 40px;
+    max-height: 40px;
+}
+.replay-button svg circle,
+.kanki-replay-button svg circle {
+    fill: #fff;
+    stroke: #414141;
+}
+.replay-button svg path,
+.kanki-replay-button svg path {
+    fill: #414141;
+}
+/* Prevent a template from making our compatibility replay control enormous. */
+.kanki-replay-button {
+    font-size: 20px !important;
+    width: 40px !important;
+    height: 40px !important;
+    max-width: 40px !important;
+    max-height: 40px !important;
+}
+.kanki-replay-button svg {
+    width: 40px !important;
+    height: 40px !important;
+    max-width: 40px !important;
+    max-height: 40px !important;
+}
