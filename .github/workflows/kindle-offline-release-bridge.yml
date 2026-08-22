@@ -1,0 +1,85 @@
+name: One-shot offline bootstrap release bridge
+
+# One-time network transport for the isolated VM. This workflow only republishes
+# the already-built, pinned offline inputs from run 32561552846 as one public
+# prerelease asset with a deterministic URL. It is not a project build.
+on:
+  push:
+    branches: [kindle-anki-port]
+    paths:
+      - '.github/workflows/kindle-offline-release-bridge.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  SOURCE_RUN_ID: '32561552846'
+  SOURCE_COMMIT: '92bf3ee11fc2b868a483cb49bd2abc5786d82112'
+  TAG: 'kap-offline-bootstrap-92bf3ee11fc2b868a483cb49bd2abc5786d82112'
+  ASSET: 'KAP-offline-bootstrap-92bf3ee11fc2b868a483cb49bd2abc5786d82112.tar.zst'
+
+jobs:
+  bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install archive tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zstd
+
+      - name: Download completed pinned offline artifacts
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/kap-artifacts /tmp/kap-flat
+          mkdir -p /tmp/kap-artifacts /tmp/kap-flat
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --dir /tmp/kap-artifacts
+          find /tmp/kap-artifacts -type f -print -exec cp -n {} /tmp/kap-flat/ \;
+
+      - name: Verify expected inputs and published checksums
+        run: |
+          set -euo pipefail
+          cd /tmp/kap-flat
+          test -f anki-e5a6fbe27fdd4d57d5f712191b4a753032e57853.tar.zst
+          test -f rust-1.92.0-cargo-cache.tar.zst
+          test -f kindlehf-2025.05.tar.gz
+          test -f portable-host-tools-ubuntu2404.tar.zst
+          test -f anki-cargo-metadata.json
+          test -f anki-submodules.txt
+          test -f PROVENANCE.txt
+          test -f SHA256SUMS
+          grep -Fqx "source_sha=$SOURCE_COMMIT" PROVENANCE.txt
+          sha256sum -c SHA256SUMS
+
+      - name: Build deterministic combined transport asset
+        run: |
+          set -euo pipefail
+          cd /tmp/kap-flat
+          printf '%s\n' "$SOURCE_RUN_ID" > SOURCE_RUN_ID.txt
+          printf '%s\n' "$SOURCE_COMMIT" > SOURCE_COMMIT.txt
+          find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort > CONTENTS.txt
+          tar --sort=name --mtime='UTC 1970-01-01' \
+            --owner=0 --group=0 --numeric-owner \
+            --zstd -cf "/tmp/$ASSET" .
+          sha256sum "/tmp/$ASSET" > "/tmp/$ASSET.sha256"
+
+      - name: Publish transport prerelease
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" "/tmp/$ASSET" "/tmp/$ASSET.sha256" \
+              --repo "${{ github.repository }}" --clobber
+          else
+            gh release create "$TAG" "/tmp/$ASSET" "/tmp/$ASSET.sha256" \
+              --repo "${{ github.repository }}" \
+              --target "$GITHUB_SHA" \
+              --prerelease \
+              --title 'Temporary KAP offline bootstrap transport' \
+              --notes 'Pinned one-time transport copied from Actions run 32561552846. Google Drive remains the canonical working store.'
+          fi
