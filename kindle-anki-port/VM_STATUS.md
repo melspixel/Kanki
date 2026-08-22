@@ -4,176 +4,212 @@ Updated: 2026-08-22 UTC
 
 ## Current state
 
-VM-side continuation remains active. GitHub Actions quota exhaustion is not treated as a compiler blocker, and ordinary compilation is not delegated to the user's host.
+VM-side continuation remains active. Ordinary compilation is not delegated to
+the user's host. GitHub Actions is retained only as a manual reproducibility
+checkpoint because hosted-runner quota is exhausted.
 
-Persisted historical green checkpoints include:
+Latest authoritative files:
+
+```text
+HANDOFF.md
+PROGRESS.md
+docs/VM_PLATFORM_REFERENCE_20260822.md
+docs/logs/KAP_PLATFORM_REFERENCE_20260822.log
+docs/REFERENCE_IMPLEMENTATIONS.md
+```
+
+## VM capabilities
+
+Observed execution environment:
+
+```text
+OS             Debian 13 / x86-64
+CPU            5 vCPU
+RAM            about 5.9 GiB
+free disk      about 38 GiB at inspection
+privilege      root
+available      git, GCC 14, Clang 17, CMake, Ninja, Node 22, Python, binutils, zip
+missing        Rust/Cargo, protoc, qemu-arm, patchelf, debugfs, KindleHF
+```
+
+The resources are adequate for a controlled low-parallelism Anki/ARMHF build
+once the pinned inputs are transported into the VM.
+
+## Latest material advance
+
+A reference-first Kindle platform checkpoint was implemented from starting head:
+
+```text
+ae349e0126bc95d4350acc6885e4ee443a91c88e
+```
+
+The new platform layer uses behavior observed in pinned Ranki,
+KindlePuzzles/Gargoyle, em-dash and Kindle Explorer implementations, while
+keeping Ranki and all other projects out of the production dependency graph.
+Reference and license treatment is recorded in
+`docs/REFERENCE_IMPLEMENTATIONS.md`.
+
+Production additions:
+
+```text
+native/app_platform.inc
+web/ime.js
+tests/test_ime_runtime.js
+tests/test_platform_adapter.c
+tests/test_platform_reference_contract.py
+```
+
+Modified integration points:
+
+```text
+native/app.c
+web/reviewer.html
+testenv/scripts/run-static-gates.sh
+.github/workflows/kindle-anki-port.yml
+```
+
+Behavior now covered:
+
+- encoded Lab126/Awesome GTK application title;
+- typed-answer focus opens `com.lab126.keyboard`;
+- blur/reveal/back/close/non-question state closes it;
+- first deck load clears a keyboard left by a crashed former process;
+- duplicate focus events do not issue duplicate opens;
+- direct `execl()` argument-vector invocation, no shell;
+- bounded command child wait and reap;
+- cleanup composition around the existing reviewer/audio lifecycle.
+
+## Executed results
+
+```text
+node --check web/ime.js                                 PASS
+node tests/test_ime_runtime.js                          PASS
+gcc C99 -Wall -Wextra -Werror platform adapter test    PASS
+maintained platform adapter executable test             PASS
+startup close/open/duplicate/reveal-close argv audit    PASS
+native app composition harness                          PASS
+window-title preprocessing assertion                    PASS
+Python reference/source/workflow contract               PASS
+```
+
+Observed `lipc-set-prop` argument sequence:
+
+```text
+-s com.lab126.keyboard close com.melspixel.kindleankiport
+-s com.lab126.keyboard open  com.melspixel.kindleankiport:abc:1
+-s com.lab126.keyboard close com.melspixel.kindleankiport
+```
+
+Combined log:
+
+```text
+docs/logs/KAP_PLATFORM_REFERENCE_20260822.log
+SHA-256 42b0059bc09828ae077ab926cb9a23121dbcfff27720ffebf4767b67c413692a
+```
+
+This is targeted current-source evidence. It does not claim the complete
+`run-static-gates.sh` invocation from a complete clean checkout.
+
+## Existing evidence
+
+Current-source targeted checkpoints also cover reviewer/CSS/audio-queue/native
+host subsets and lifecycle/sync regressions. Historical broader checkpoints:
 
 ```text
 official Anki rslib             539/539
 five real APKG C-ABI flows      PASS
-reviewer runtime fixtures       PASS
-sync/lifecycle fixtures         PASS
+typed-answer and AV             observed in real APKG
 ARMHF hard-float build          PASS
 ABI/GLIBC audit                 PASS
 QEMU static ARM sanity          PASS
 ```
 
-Those checkpoints predate the current release-provenance and lifecycle hardening. A complete clean-current-head rerun remains mandatory before release.
+Historical broad evidence must be rerun from the final clean source identity
+because provenance gates were strengthened afterward.
 
-## Latest material advances
+## Active infrastructure blocker
 
-### 0. Current-head reviewer fixture dependency repaired
-
-A current-head targeted rerun reproduced a real canonical static-gate failure before the first reviewer fixture:
-
-```text
-TypeError: window.kapCreateAudioQueue is not a function
-```
-
-`web/reviewer.js` now depends on `web/audio_queue.js`, but `tests/test_reviewer_runtime_fixtures.js` evaluated only the reviewer source. The fixture now loads the real audio queue source in the same VM context immediately before the reviewer source. No audio behavior is stubbed or reimplemented.
-
-Executed current-head blob-verified results:
+Ordinary outbound networking is blocked in this VM. Independent attempts showed:
 
 ```text
-audio queue syntax/lifecycle       PASS
-CSS compatibility syntax/fixtures  PASS (9 fixtures)
-reviewer syntax/runtime fixtures    PASS (10 fixture groups)
+normal DNS lookup               failed
+git/curl to github.com          failed
+direct-IP GitHub probes         failed
+public DNS UDP probes           timed out
 ```
 
-Evidence:
+As a result, this VM cannot currently use `apt`, rustup, Cargo/crates.io or
+ordinary Git clone/download to obtain missing inputs. This condition has been
+reproduced enough to require user-visible notification; it is not being retried
+silently without a changed transport method.
+
+Recovery options, in priority order:
+
+1. restore normal VM egress;
+2. materialize a complete clean Git/source archive through an authenticated connector;
+3. import a checksum-pinned offline bundle containing Rust 1.92.0, Cargo cache,
+   protoc, QEMU/debugfs/patchelf and KindleHF 2025.05;
+4. persist the bundle and checkpoints under Google Drive
+   `GPT周转/Kindle-Anki-Port/`.
+
+## Missing release inputs
 
 ```text
-docs/VM_REVIEWER_FIXTURE_DEPENDENCY_20260822.md
+complete clean live Git checkout
+exact official Anki checkout plus Fluent submodules
+complete Cargo dependency cache
+Rust 1.92.0 and armv7 target
+protoc, qemu-user, debugfs, patchelf
+KindleHF 2025.05
+five real APKG private fixtures in the active VM
+PW6 5.19.6 extracted rootfs
+retained pw6-rootfs.img
 ```
 
-This is a targeted static checkpoint, not a full current-head release-chain pass.
+The rootfs/image pair remains private and must not be committed.
 
-### 1. Bounded audio-helper shutdown
+## Next exact commands after materialization
 
-A native lifecycle defect was found in the production host: `stop_audio()` sent SIGTERM and then used an unbounded blocking `waitpid()`. A GStreamer helper wedged during a Bluetooth/device-route transition could therefore pin application cleanup, delay collection close, and make a later launcher request appear to crash or remain a duplicate instance.
+From a complete clean project checkout and exact Anki checkout:
 
-The native host now:
+```sh
+git rev-parse --verify 'HEAD^{commit}'
+git status --porcelain
 
-```text
-clears audio_pid ownership
--> SIGTERM
--> bounded WNOHANG reap for 1000 ms
--> SIGKILL fallback
--> mandatory final reap
+testenv/scripts/run-static-gates.sh
+
+ANKI=<exact-anki> CARGO_HOME=<offline-cargo> PROTOC=<protoc> \
+  testenv/scripts/run-host-backend-gates.sh
+
+ANKI=<exact-anki> CARGO_HOME=<offline-cargo> PROTOC=<protoc> \
+TOOLCHAIN_BIN=<kindlehf-bin> OUT=<armhf-out> BUILD_COMMIT=<project-head> \
+  testenv/scripts/run-armhf-gates.sh
 ```
 
-The real native binary exposes:
+With both exact private target inputs:
 
-```text
-kap-app --self-test-audio-supervision
+```sh
+python3 testenv/scripts/verify-pw6-rootfs.py \
+  <rootfs> --rootfs-image <pw6-rootfs.img>
+
+ROOTFS=<rootfs> ROOTFS_IMAGE=<pw6-rootfs.img> \
+ARMHF=<armhf-out> OUT=<qemu-out> \
+  testenv/scripts/run-qemu-smoke.sh
+
+QEMU=<qemu-out> ARMHF=<armhf-out> OUT=<release-out> \
+  testenv/scripts/package-and-audit.sh
 ```
 
-The canonical static gate compiles the host and executes that regression. The self-test creates a child that deliberately ignores SIGTERM and verifies bounded forced cleanup.
+Packaging before exact-rootfs QEMU remains prohibited.
 
-Targeted strict-C and full translation-unit checkpoint evidence:
+## Persistence
 
-```text
-audio pid=<pid> did not stop after 1000ms; forcing SIGKILL
-kap-app audio supervision self-test: ok elapsed_ms=1002
-status=0
-```
+Every material source change and its test contract is committed immediately to
+`kindle-anki-port`. Logs/reports are committed and mirrored to the Google Drive
+project workspace when transport is available. Firmware, rootfs, private APKGs,
+collections, media and credentials are excluded.
 
-Commits:
+## Release state
 
-```text
-0acb54413bcddf3d16700f516dfaf213ebe31795  bound audio-helper shutdown
-7456f953296970a96d4bc2dd39e5fcd8e441bc28  expose native supervision self-test
-e1460fff9830cc19a1f6ce8e083cc5c248d74328  wire self-test into static gate
-1a4a1744ec7e50efaa212d170de549e71d671f23  lock source/static contract
-```
-
-Evidence:
-
-```text
-docs/VM_AUDIO_SUPERVISION_HARDENING_20260822.md
-docs/logs/KAP_AUDIO_SUPERVISION_TARGETED_20260822.log
-```
-
-This is targeted evidence only. Real Bluetooth route switching remains a physical PW6 gate.
-
-### 2. Clean-checkout shell-entrypoint portability
-
-Two shell regression fixtures were committed without the executable bit while the static gate invoked them directly. A developer worktree with repaired modes could pass while a clean archive failed before executing tests.
-
-The gate now uses:
-
-```text
-sh tests/test_sync_wrapper_signal.sh
-sh tests/test_sync_worker.sh
-```
-
-and `tests/test_build_entrypoints.py` locks that contract.
-
-Commits:
-
-```text
-9d68dd5bb72dfc16d3ab2f06e3c0b7405492f157
-163cc8575bf8952ecc0adbaf7201ce2bf1821ac0
-```
-
-Evidence: `docs/logs/KAP_SHELL_ENTRYPOINT_TARGETED_20260822.log`.
-
-### 3. Existing lifecycle and sync hardening
-
-The continuation previously reproduced and fixed:
-
-- concurrent-launch PID publication race;
-- reviewer/sync collection-open overlap;
-- sync-wrapper death leaving an unprotected worker;
-- zombie operation-lock owners;
-- stale-lock cleanup and ownership-aware release;
-- conflicting full-sync direction and sync error propagation;
-- packaging of transient/user state.
-
-Detailed evidence remains in:
-
-```text
-docs/VM_CONTINUATION_20260822.md
-docs/VM_LIFECYCLE_HARDENING_20260822.md
-docs/VM_ZOMBIE_LOCK_HARDENING_20260822.md
-docs/VM_PACKAGE_HARDENING_20260822.md
-```
-
-### 4. Source/build/runtime provenance hardening
-
-Current release gates require:
-
-```text
-resolvable clean project HEAD^{commit}
-+ exact pinned Anki HEAD^{commit}
-+ deterministic allowed Anki overlay only
-+ fresh gate-owned Cargo target
-+ fresh ARMHF output
-+ retained-image-bound exact PW6 QEMU
-+ QEMU-bound package audit
-```
-
-A stale binary, copied target directory, non-Git source tree, unrelated dirty Anki source, caller-supplied rootfs directory, or package-before-QEMU path cannot claim release provenance.
-
-## Active blockers / next execution targets
-
-1. Materialize a complete clean copy of the latest canonical branch head in a network-capable build VM.
-2. Run the full static gate, now including the reviewer dependency fix, shell portability, and bounded audio supervision.
-3. Rerun official Anki tests and all five real APKG integrations from that exact source/Anki identity.
-4. Rebuild ARMHF and repeat ELF/ABI/GLIBC/export audit.
-5. Supply both exact private PW6 inputs:
-   - extracted checksum-verified rootfs;
-   - retained `pw6-rootfs.img` with SHA-256 `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`.
-6. Run image-derived exact-rootfs QEMU.
-7. Only then assemble and persist the final installer and complete reports on GitHub.
-8. Run physical PW6 HIL separately.
-
-The isolated execution container still cannot resolve `github.com` through normal DNS, does not contain the complete live branch worktree, and does not have the private rootfs/image pair. GitHub Actions reruns for the current starting head failed before recording any job step or log. These limitations do not justify weakening the gates or moving ordinary compilation to the user's host.
-
-## Persistence rule
-
-`HANDOFF.md` is the authoritative continuation point; `PROGRESS.md` is the phase matrix. Every material source/test/build change is synchronized to the `kindle-anki-port` branch. Temporary VM files and historical ZIPs are checkpoints only, never releases.
-
-## User involvement
-
-No local-host compilation action is currently requested. `CODEX_COORDINATION.md` contains the narrow private-rootfs transport task. Physical PW6 work starts only after final software-release hashes exist.
+**Not released.** Physical PW6 testing has not started and cannot be inferred
+from host/QEMU results.
