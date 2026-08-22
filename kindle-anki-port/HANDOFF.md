@@ -8,12 +8,10 @@ Last updated: 2026-08-22 UTC
 - Branch: `kindle-anki-port`
 - Project root: `kindle-anki-port/`
 - Official Anki pin: `e5a6fbe27fdd4d57d5f712191b4a753032e57853` (26.08.1)
-- Ordinary-source materialization milestone: `0cf4716d8f66af96d38233ec5f723151787278d7`
-- Latest current-head targeted test repair: `f0925bf767cf59708ef3ee72ebaaff046cdd6b1d`
-- Latest persisted WebKit/native checkpoint: `bd184766a66576c1dab6cdeba566107f34d179a0`
-- Always resolve the live branch HEAD before building; documentation/test-evidence commits advance HEAD too.
+- Platform-reference report commit: `a4c9f0c83158fcfcdd71bddb31d5dad16dd69e4b`
+- Always resolve the live branch HEAD before building; documentation/evidence commits advance HEAD.
 
-Read before continuing:
+Read before continuing, in order:
 
 ```text
 HANDOFF.md
@@ -23,103 +21,161 @@ docs/TEST_ENVIRONMENT.md
 VM_RUNBOOK.md
 ```
 
-Newest detailed report/evidence:
+Newest detailed evidence:
 
 ```text
+docs/VM_PLATFORM_REFERENCE_20260822.md
+docs/logs/KAP_PLATFORM_REFERENCE_20260822.log
+docs/REFERENCE_IMPLEMENTATIONS.md
 docs/VM_CURRENT_HEAD_WEB_NATIVE_20260822.md
-docs/logs/KAP_CURRENT_HEAD_WEB_NATIVE_20260822.log
 docs/VM_REVIEWER_FIXTURE_DEPENDENCY_20260822.md
 docs/VM_ANKI_OVERLAY_PROVENANCE_HARDENING_20260822.md
-docs/logs/KAP_ANKI_OVERLAY_TARGETED_20260822.log
 docs/VM_GIT_IDENTITY_FAIL_CLOSED_20260822.md
-docs/logs/KAP_GIT_IDENTITY_TARGETED_20260822.log
 docs/VM_QEMU_IMAGE_RUNTIME_BINDING_20260822.md
-docs/logs/KAP_QEMU_IMAGE_RUNTIME_TARGETED_20260822.log
 ```
 
 ## Product boundary
 
-This is an independent Kindle port of desktop Anki, not a Ranki/rewrite patch set. Official Anki `rslib` owns collection, scheduler, renderer semantics, typed answers, media, sync and undo. Kindle code owns platform integration only. Production contains no Ranki, `rewrite-v1`, `LD_PRELOAD`, deck-name routing or note-type-specific CSS patches.
+This is an independent port of desktop Anki to Kindle PW6. It is not a Ranki
+patch set and not a continuation of `rewrite-v1`.
 
-The user's local host is not an ordinary compiler requirement. Physical PW6 acceptance is a separate final result and can never be inferred from VM/QEMU.
-
-## Completion rule
-
-Do **not** mark software delivered until one coherent current-head provenance chain is green and durably persisted:
+Official Anki owns:
 
 ```text
-complete ordinary source
--> complete static gates
--> official Anki 26.08.1 backend tests
--> five real APKG integrations including typed-answer coverage
--> ARMv7 hard-float build + ELF/ABI/GLIBC/export audit
--> exact PW6 5.19.6 L2 using BOTH:
-     checksum-verified extracted rootfs
-     retained rootfs image matching the canonical full-image SHA-256
-     QEMU runtime tree freshly rdump'ed from that verified retained image
--> QEMU-bound package/privacy/reproducibility audit
--> final ZIP + SHA-256 + internal manifest + contents + complete reports on GitHub
+collection, schema and transactions
+scheduler and FSRS
+queue construction and answer transitions
+template rendering and cloze
+typed-answer extraction and comparison
+AV extraction and media metadata
+sync, full sync, media sync and undo
 ```
 
-Only after those software artifacts/hashes exist may physical PW6 HIL begin; HIL is recorded separately.
-
-## Current-head targeted checkpoint
-
-The 2026-08-22 continuation materialized exact current-head blobs through the GitHub Git object API and independently verified each with `git hash-object`. It ran the audio queue, CSS compatibility and reviewer runtime fixture groups in the isolated VM.
-
-The first unpatched reviewer run failed before fixture 1:
+Kindle code owns only:
 
 ```text
-TypeError: window.kapCreateAudioQueue is not a function
+GTK2/WebKitGTK1 platform integration
+persistent reviewer shell and generic old-WebKit compatibility
+touch/page navigation and system keyboard focus
+native audio and sync workers
+process/collection ownership and lifecycle
+ARMHF build, exact-rootfs QEMU and packaging
 ```
 
-Root cause: `web/reviewer.js` has a production dependency on `web/audio_queue.js`, while the standalone fixture evaluated only the reviewer source. Commit `f0925bf767cf59708ef3ee72ebaaff046cdd6b1d` makes the fixture load the real audio queue source in the same VM context immediately before reviewer source.
+Production must not contain Ranki or `rewrite-v1` runtime code, `LD_PRELOAD`,
+deck-name routing, note-type patches, a local scheduler/renderer/sync
+reimplementation, firmware, proprietary rootfs libraries, user collection/media,
+credentials or device identifiers.
 
-Verified targeted results from the patched tree:
+## Reference-first platform policy
+
+Existing Kindle projects are now explicitly used as pinned behavior references
+instead of treating Lab126 as a blank slate:
 
 ```text
-audio queue syntax/lifecycle       PASS
-CSS compatibility syntax/fixtures  PASS (9 fixtures)
-reviewer syntax/runtime fixtures    PASS (10 fixture groups)
+crazy-electron/ranki       d671ee657f0c411474d2afff3bf9cbb49be2fb44
+kbarni/kindlepuzzles       9f67dd04634d16dfa2e8eeef13eb582b8225e49e
+emlyn-m/em-dash            f8c260636dc4fa811c7e470b8b4626985a188172
+anakod/kindle-explorer     134d04e20d4eaa83a51369eaa80fd3fa007a4d46
 ```
 
-The next current-head checkpoint recovered and object-verified the remaining WebKit1 assets plus all native C production sources from source commit `ece332e5de8ce6499e3603dcf6dd27c256819084`. Strict host compilation and self-tests passed:
+The exact reference, observed behavior, license status and clean-room/copying
+policy are recorded in `docs/REFERENCE_IMPLEMENTATIONS.md`. Ranki remains a
+platform-behavior reference, not a runtime/build dependency. Repositories whose
+license is not established are reference-only; compatible copied code must
+retain its required notice and exact origin.
+
+## Latest material checkpoint — Kindle window identity and typed-answer IME
+
+Starting source:
 
 ```text
-bridge/decks/reviewer/audio/CSS syntax and contracts  PASS
-WebKit1 web contract                                  PASS
-kap-app strict C build + audio supervision self-test  PASS, 1002 ms
-kap-audio strict C build + self-test                   PASS
-kap-sync strict C build + self-test                    PASS
+ae349e0126bc95d4350acc6885e4ee443a91c88e
 ```
 
-Persisted checkpoint commit and evidence:
+The checkpoint adds:
+
+- Lab126/Awesome-compatible GTK title:
+  `L:A_N:application_ID:com.melspixel.kindleankiport_PC:N`;
+- `ime/open` and `ime/close` operations on the existing `kap://v1` protocol;
+- typed-answer focus/blur integration in the persistent reviewer;
+- direct `/usr/bin/lipc-set-prop -s` execution with `execl()`, no shell;
+- bounded child waiting, forced reap and cleanup integration;
+- startup normalization when a crashed prior process may have left the keyboard visible;
+- duplicate open/close suppression after keyboard state becomes known;
+- closure before reveal, back, non-question state and application cleanup;
+- executable C, JavaScript and source/reference contract regressions;
+- manual-only GitHub Actions to stop exhausted-runner noise.
+
+Maintained tests now include:
 
 ```text
-bd184766a66576c1dab6cdeba566107f34d179a0
-docs/VM_CURRENT_HEAD_WEB_NATIVE_20260822.md
-docs/logs/KAP_CURRENT_HEAD_WEB_NATIVE_20260822.log
-log SHA-256 1ac58bfaad499b55d97b468b11c7ac5709ea7ba080a2f703a321cbbd4c4d1f2a
+tests/test_ime_runtime.js
+tests/test_platform_adapter.c
+tests/test_platform_reference_contract.py
 ```
 
-These are current-head targeted results only. They are not a complete `run-static-gates.sh` pass and do not upgrade historical host/APKG/ARMHF/QEMU results to release provenance.
+Verified targeted results:
+
+```text
+web/ime.js syntax                                      PASS
+focus/blur/reveal/state/back ordering                  PASS
+C99 -Wall -Wextra -Werror platform test                PASS
+startup stale-keyboard close                           PASS
+open value <app-id>:abc:1                              PASS
+duplicate open suppression                             PASS
+reveal-time close before semantic dispatch             PASS
+native app composition and title macro harness         PASS
+reference/license/independence contract                PASS
+manual-only workflow contract                          PASS
+```
+
+Persisted log:
+
+```text
+docs/logs/KAP_PLATFORM_REFERENCE_20260822.log
+SHA-256 42b0059bc09828ae077ab926cb9a23121dbcfff27720ffebf4767b67c413692a
+```
+
+This is current-source targeted evidence, not a complete `run-static-gates.sh`
+pass and not a Kindle release.
+
+## Previous current-source targeted checkpoints
+
+The branch also has current-source targeted evidence for:
+
+```text
+audio queue syntax/lifecycle                           PASS
+CSS compatibility                                      PASS (9 fixtures)
+reviewer runtime                                       PASS (10 groups)
+WebKit1 contracts                                      PASS
+kap-app strict host C build/audio supervision          PASS
+kap-audio strict host C build/self-test                PASS
+kap-sync strict host C build/self-test                 PASS
+launcher/sync wrapper/zombie-lock lifecycle paths      PASS
+```
+
+See `docs/VM_CURRENT_HEAD_WEB_NATIVE_20260822.md` and related reports. These
+remain targeted checkpoints until one complete clean-current-head invocation is
+persisted.
 
 ## Historical green checkpoints — regression evidence only
 
 ```text
-official Anki rslib: 539 passed; 0 failed
-five real APKG C-ABI reviewer integrations: PASS
-reviewer runtime fixture groups: 10 PASS
-test_sync_worker: PASS
-ARMHF checkpoint:
-  kap-app           ARM EABI5 hard-float, GLIBC_2.4
-  kap-audio         ARM EABI5 hard-float, GLIBC_2.4
-  kap-sync          ARM EABI5 hard-float, GLIBC_2.4
-  libanki-kindle.so ARM EABI5 hard-float, max GLIBC_2.18
-PW6 target libc oracle ceiling: GLIBC_2.35
+official Anki rslib                    539 passed, 0 failed
+five real APKG C-ABI reviewer flows    PASS
+real APKG typed-answer and AV observed PASS
+reviewer runtime fixture groups        10 PASS
+sync worker                             PASS
+kap-app                                ARM EABI5 hard-float, GLIBC_2.4
+kap-audio                              ARM EABI5 hard-float, GLIBC_2.4
+kap-sync                               ARM EABI5 hard-float, GLIBC_2.4
+libanki-kindle.so                      ARM EABI5 hard-float, max GLIBC_2.18
+PW6 target libc oracle ceiling         GLIBC_2.35
 ```
 
-These predate current release-provenance hardening and must be rerun from the eventual release head.
+These predate later source/overlay/Cargo/QEMU provenance hardening and must be
+rerun from the eventual final clean source identity.
 
 The old installer remains stale and must never be relabeled final:
 
@@ -128,11 +184,18 @@ Kindle-Anki-Port-PW6-armhf.zip
 SHA-256 9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225
 ```
 
-## Exact PW6 5.19.6 runtime identity
+## Exact PW6 5.19.6 identity
 
-Canonical manifest: `testenv/qemu/pw6-5.19.6-rootfs-manifest.json`.
+Canonical manifest:
 
 ```text
+testenv/qemu/pw6-5.19.6-rootfs-manifest.json
+```
+
+Pinned values:
+
+```text
+firmware version          5.19.6 / 4832160042
 firmware MD5              697aeb33c02f46b9b0911ab05c28b06d
 firmware SHA-256          72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c
 rootfs image SHA-256      b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa
@@ -142,97 +205,79 @@ WebKitGTK SHA-256         6bbe5a102d7500deb1ce109f3df22360b4b50f8d9d52da2fcf4627
 target GLIBC max          2.35
 ```
 
-The actual checksum-matching private rootfs tree/image pair is not currently mounted in the execution VM. Hash metadata alone is never accepted as a dynamic L2 run.
+Release L2 requires both the separately verified extracted rootfs and retained
+full `pw6-rootfs.img`. QEMU `-L` must point only at a temporary tree freshly
+`debugfs rdump`ed from the verified image. The proprietary bytes are private and
+never committed.
 
-## Release-provenance hardening
+## Release-provenance invariants
 
-### Deterministic official-Anki overlay — newest hardening
-
-A remaining source-provenance defect was found after the Git-identity work: proving that the Anki checkout `HEAD` equals the pinned 26.08.1 commit does **not** prove that Cargo compiles only those bytes. The host gate injected into an otherwise unconstrained Anki working tree, and the ARMHF gate trusted whatever working-tree overlay it inherited. Unrelated dirty Anki Rust/Cargo source could therefore theoretically participate in a build while provenance still named the correct official Anki commit.
-
-This is now fail-closed. `tools/inject_into_anki.py` derives the expected overlay from pinned `HEAD` blobs plus clean project sources, verifies every overlay-owned byte, and requires the Git dirty-path set to equal exactly that deterministic overlay. It rejects unrelated tracked, staged, submodule-visible or untracked changes. It also resolves `HEAD^{commit}` itself.
-
-Both release build paths enforce this independently:
+A valid non-hardware release is one coherent chain:
 
 ```text
-run-host-backend-gates.sh
-  -> exact project/Anki identity checks
-  -> deterministic injector + overlay verification
-  -> force CARGO_TARGET_DIR=$ANKI/target
-  -> delete target before official cargo check/test/build
-
-run-armhf-gates.sh
-  -> exact project/Anki identity checks
-  -> rerun deterministic injector + overlay verification
-  -> force CARGO_TARGET_DIR=$ANKI/target
-  -> delete target before ARMHF cargo build
+resolvable clean project HEAD^{commit}
++ exact pinned Anki HEAD^{commit}
++ deterministic allowed Anki overlay only
++ fresh gate-owned Cargo target
++ complete static gates
++ official Anki cargo check/test/release build
++ five real APKG integrations including typed answer
++ fresh KindleHF ARMHF build and ELF/ABI/GLIBC/export audit
++ exact retained-image-derived PW6 QEMU for backend/audio/sync
++ QEMU-bound reproducible/privacy-audited package
++ final ZIP, SHA-256, internal manifest, contents and reports persisted durably
 ```
 
-This also prevents a caller-supplied or copied ignored Cargo target directory from being reused as release evidence.
-
-Current blobs:
-
-```text
-tools/inject_into_anki.py                     b7cf140e742c219ca0fe7acc675a08fe075e9c17
-testenv/scripts/run-host-backend-gates.sh     3e2e463385713d096efab5a1f3c5ba5b065941ec
-testenv/scripts/run-armhf-gates.sh            197054ebfd84b6b24d7f5237a79149f4ad7ccacb
-tests/test_armhf_provenance.py                bc8fcfddde7657ad2df3646d541a9963ef887707
-tests/test_injector.py                        9f8da713f59cf46ecfb42a49402426ff7a1ab858
-```
-
-Targeted local-Git reproducer: 7/7 PASS. It covered clean/idempotent injection, untracked/tracked/staged rejection, overlay-byte tamper rejection, and fresh gate-owned Cargo target recreation. Persisted log SHA-256:
-
-```text
-d3240f300e6b5605ead549f780d93907abfd8b38005d8536ad2d1c3db79040e8
-```
-
-Exact commands/defect model/commit chain: `docs/VM_ANKI_OVERLAY_PROVENANCE_HARDENING_20260822.md`.
-
-### Rootfs/QEMU binding
-
-`ROOTFS_IMAGE` is mandatory and must match the canonical full-image SHA-256. `run-qemu-smoke.sh` verifies the supplied extracted tree and retained image, invalidates old dynamic PASS evidence, requires `debugfs`, freshly `rdump`s the verified image to a private temporary tree, verifies that tree, and runs every QEMU `-L` check only against the image-derived runtime. Provenance records `rootfs_input_verified=true`, `rootfs_verified=true`, and `rootfs_runtime_source=verified-image-rdump`. `package-and-audit.sh` rejects all older image-hash-only/caller-tree QEMU evidence.
-
-Previous targeted regression: 9/9 PASS; `docs/logs/KAP_QEMU_IMAGE_RUNTIME_TARGETED_20260822.log` SHA-256 `985e150dbe7390582d8daad57d6cc0f244c296c60e0434d496e95b3e24f461ac`.
-
-### Git object/source identity
-
-Host/ARMHF/QEMU require `git rev-parse --verify 'HEAD^{commit}'`, explicit successful source-status queries, matching `BUILD_COMMIT`, and clean maintained project source. Packaging requires a real resolvable clean Git project checkout unconditionally, so a copied/non-Git project tree or missing commit object cannot claim release provenance.
-
-Targeted Git failure-mode reproducer log SHA-256: `649526115118aa93996b3e66f75fff77111e0d0abee506bff167cb6cc0da13d7`. Details: `docs/VM_GIT_IDENTITY_FAIL_CLOSED_20260822.md`.
-
-Lifecycle hardening also rejects stale zombie operation-lock owners and protects wrapper-death/sync collection ownership; see the earlier `docs/VM_*_20260822.md` reports.
+Synthetic fixtures, old ZIPs, copied targets, non-Git trees, selected rootfs
+files or historical results cannot become final provenance.
 
 ## Current environment limitation
 
-No fresh **complete current-head** build is claimed. Normal network access in the execution container still fails DNS resolution. This run reconfirmed:
+The current isolated Linux VM has sufficient CPU/RAM/disk and root access, but
+ordinary outbound networking remains blocked:
+
+- normal DNS/Git/curl cannot resolve or connect to GitHub;
+- direct-IP probes also failed;
+- Rust 1.92.0, Cargo dependencies, protoc, qemu-user, debugfs and KindleHF are
+  not yet bootstrapped into this VM;
+- a complete clean live worktree is not currently materialized locally;
+- the private PW6 rootfs tree/image pair is absent.
+
+The same network condition has been reproduced through multiple independent
+probes and is now a declared infrastructure blocker, not a source-test result.
+It does not justify weakening gates or delegating ordinary compilation to the
+user's host.
+
+Intermediate status/logs are also stored under Google Drive:
 
 ```text
-git ls-remote https://github.com/melspixel/Kanki.git
-fatal: unable to access 'https://github.com/melspixel/Kanki.git/': Could not resolve host: github.com
-rc=128
+GPT周转/Kindle-Anki-Port/
 ```
-
-GitHub Actions was retried for the starting head, but the replacement job again completed with zero recorded steps and no downloadable log/artifact. That is infrastructure failure, not source-test evidence.
-
-The private checksum-matching PW6 rootfs tree **and retained image** are also absent. Historical/synthetic evidence must not be promoted to final provenance.
-
-## Local/Codex boundary
-
-`CODEX_COORDINATION.md` Task B remains the only useful pre-release local task: transport the checksum-verified private PW6 rootfs tree **plus retained `pw6-rootfs.img`** into the VM/private channel. It must use `--keep-image`, verify the full image SHA-256 above, and persist only a sanitized verification report. Compilation, official Anki testing, ARMHF build, image-derived QEMU execution and packaging remain VM-owned.
 
 ## Ordered next actions
 
-1. Resolve the live branch head, then materialize that exact clean commit in a network-capable build VM with complete Git objects, exact pinned Anki, Cargo cache, protoc and KindleHF inputs.
-2. Install/verify `e2fsprogs/debugfs` in addition to the existing build/QEMU toolchain.
-3. Continue the remaining current-head static gates: source/semantic contracts, lifecycle, sync-wrapper/worker, zombie-lock and package/rootfs/QEMU provenance regressions.
-4. From the same source/Anki identity, run the full official Anki backend gate. The hardened injector must report only the deterministic overlay, and Cargo target state must be freshly recreated.
-5. Run all five real APKG integrations including typed-answer coverage against that fresh host library.
-6. Run ARMHF cross-build plus ELF/ABI/GLIBC/export audit; the ARMHF gate independently re-verifies the exact Anki overlay and recreates Cargo target state.
-7. Supply both private PW6 inputs: extracted 5.19.6 rootfs and retained `pw6-rootfs.img` with SHA-256 `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`.
-8. Run exact-rootfs QEMU against a temporary runtime tree freshly `rdump`ed from that exact image and persist new provenance/evidence.
-9. Only then run package audit/reproducibility/privacy/content checks and persist final ZIP/SHA-256/manifest/contents/full reports on GitHub.
-10. Begin separate physical PW6 HIL only after software-delivery hashes exist.
+1. Resolve the live branch HEAD again.
+2. Materialize a complete clean Git checkout of that exact commit in the VM.
+3. Import/install an offline pinned bundle containing Rust 1.92.0, Cargo cache,
+   protoc, QEMU/debugfs and KindleHF 2025.05, or restore normal VM networking.
+4. Run complete `testenv/scripts/run-static-gates.sh`, including the new
+   platform-reference tests and full real `native/app.c` host build.
+5. From the same identity run official Anki `cargo check`, all 539 rslib tests,
+   release build and record `libanki.so` SHA-256.
+6. Run all five real APKG integrations including typed answer.
+7. Rebuild `libanki-kindle.so`, `kap-app`, `kap-audio`, `kap-sync` for ARMHF and
+   repeat file/readelf/nm/GLIBC/RPATH/dependency/export audit.
+8. Supply and verify both exact private PW6 inputs.
+9. Run image-derived QEMU backend/audio/sync.
+10. Only after QEMU passes, package, audit reproducibility/privacy/content and
+    persist the final release assets.
+11. Begin physical PW6 HIL separately: e-ink, touch, IME, audible Bluetooth,
+    fullscreen re-entry, suspend/resume, USB, Wi-Fi, sync and 50 launch/exit cycles.
 
-## Release record
+## Completion rule
 
 **Not released.**
+
+The latest platform checkpoint substantially lowers the Kindle keyboard/window
+integration risk, but it does not replace the clean-current-head Anki, ARMHF,
+exact-rootfs QEMU, package and physical-device gates.
