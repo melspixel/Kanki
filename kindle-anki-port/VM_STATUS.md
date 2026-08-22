@@ -12,6 +12,36 @@ The canonical branch has since advanced through build-entrypoint, reproducibilit
 
 ## Latest material advances
 
+### Clean-checkout shell-entrypoint portability
+
+A fresh source audit found that two shell regression fixtures were committed without the executable bit while `run-static-gates.sh` invoked them directly. A developer worktree with locally repaired modes could pass, while a clean GitHub archive/checkout could fail with `Permission denied` before reaching the tests.
+
+The static gate now invokes those fixtures explicitly through `sh`:
+
+```text
+run sh "$ROOT/tests/test_sync_wrapper_signal.sh"
+run sh "$ROOT/tests/test_sync_worker.sh"
+```
+
+`tests/test_build_entrypoints.py` now locks this contract and rejects regression to direct invocation. Targeted evidence:
+
+```text
+run-static-gates.sh shell syntax: PASS
+required sh-mediated invocations: PASS
+forbidden direct invocations: ABSENT
+run-static-gates.sh raw SHA-256:
+  d54df65d13e59308b191620efca68871ba4f6ca1f69d70e16f2f3d8206528e4e
+```
+
+Commits:
+
+```text
+9d68dd5bb72dfc16d3ab2f06e3c0b7405492f157  test: make static shell gates independent of executable bits
+163cc8575bf8952ecc0adbaf7201ce2bf1821ac0  test: lock clean-checkout shell invocation portability
+```
+
+Persisted targeted log: `docs/logs/KAP_SHELL_ENTRYPOINT_TARGETED_20260822.log`. This is a focused check only; it does not replace the pending complete current-head static gate.
+
 ### Lifecycle and reviewer/sync hardening
 
 The 2026-08-22 continuation added exact-source deterministic sync and reviewer runtime fixtures and then found/repaired a real lifecycle race.
@@ -60,7 +90,7 @@ Detailed evidence: `docs/VM_PACKAGE_PROVENANCE_REGRESSION_20260822.md`.
 
 The next build target is a **full rebuild from a materialization of the then-current canonical GitHub head**: complete static gate, official rslib tests, real-APKG integration, ARMHF cross-build, ABI/GLIBC audit and package audit. Previous green binaries/package remain checkpoint evidence because their provenance predates current source.
 
-The current isolated execution container still cannot resolve public `github.com`, so it cannot truthfully claim a fresh canonical checkout, pinned upstream build or full static-gate execution. This is an environment limitation, not a request to move normal compilation onto the user's local host.
+The current isolated execution container still cannot resolve public `github.com`, so it cannot truthfully claim a fresh canonical checkout, pinned upstream build or full static-gate execution. An attempted package installation also confirmed that the container's configured APT metadata cannot currently locate the missing QEMU/Rust/protobuf packages. This is an environment limitation, not a request to move normal compilation onto the user's local host.
 
 Exact-rootfs dynamic QEMU is also open. The VM retains verified PW6 5.19.6 extraction/oracle reports and hashes, but the complete extracted rootfs bytes are absent. Reports are not accepted as a substitute for runtime input.
 
