@@ -24,6 +24,8 @@ VM_RUNBOOK.md
 Newest detailed report/evidence:
 
 ```text
+docs/VM_ANKI_OVERLAY_PROVENANCE_HARDENING_20260822.md
+docs/logs/KAP_ANKI_OVERLAY_TARGETED_20260822.log
 docs/VM_GIT_IDENTITY_FAIL_CLOSED_20260822.md
 docs/logs/KAP_GIT_IDENTITY_TARGETED_20260822.log
 docs/VM_QEMU_IMAGE_RUNTIME_BINDING_20260822.md
@@ -98,95 +100,90 @@ The actual checksum-matching private rootfs tree/image pair is not currently mou
 
 ## Release-provenance hardening
 
+### Deterministic official-Anki overlay — newest hardening
+
+A remaining source-provenance defect was found after the Git-identity work: proving that the Anki checkout `HEAD` equals the pinned 26.08.1 commit does **not** prove that Cargo compiles only those bytes. The host gate injected into an otherwise unconstrained Anki working tree, and the ARMHF gate trusted whatever working-tree overlay it inherited. Unrelated dirty Anki Rust/Cargo source could therefore theoretically participate in a build while provenance still named the correct official Anki commit.
+
+This is now fail-closed. `tools/inject_into_anki.py` derives the expected overlay from pinned `HEAD` blobs plus clean project sources, verifies every overlay-owned byte, and requires the Git dirty-path set to equal exactly that deterministic overlay. It rejects unrelated tracked, staged, submodule-visible or untracked changes. It also resolves `HEAD^{commit}` itself.
+
+Both release build paths enforce this independently:
+
+```text
+run-host-backend-gates.sh
+  -> exact project/Anki identity checks
+  -> deterministic injector + overlay verification
+  -> force CARGO_TARGET_DIR=$ANKI/target
+  -> delete target before official cargo check/test/build
+
+run-armhf-gates.sh
+  -> exact project/Anki identity checks
+  -> rerun deterministic injector + overlay verification
+  -> force CARGO_TARGET_DIR=$ANKI/target
+  -> delete target before ARMHF cargo build
+```
+
+This also prevents a caller-supplied or copied ignored Cargo target directory from being reused as release evidence.
+
+Current blobs:
+
+```text
+tools/inject_into_anki.py                     b7cf140e742c219ca0fe7acc675a08fe075e9c17
+testenv/scripts/run-host-backend-gates.sh     3e2e463385713d096efab5a1f3c5ba5b065941ec
+testenv/scripts/run-armhf-gates.sh            197054ebfd84b6b24d7f5237a79149f4ad7ccacb
+tests/test_armhf_provenance.py                bc8fcfddde7657ad2df3646d541a9963ef887707
+tests/test_injector.py                        9f8da713f59cf46ecfb42a49402426ff7a1ab858
+```
+
+Targeted local-Git reproducer: 7/7 PASS. It covered clean/idempotent injection, untracked/tracked/staged rejection, overlay-byte tamper rejection, and fresh gate-owned Cargo target recreation. Persisted log SHA-256:
+
+```text
+d3240f300e6b5605ead549f780d93907abfd8b38005d8536ad2d1c3db79040e8
+```
+
+Exact commands/defect model/commit chain: `docs/VM_ANKI_OVERLAY_PROVENANCE_HARDENING_20260822.md`.
+
 ### Rootfs/QEMU binding
 
 `ROOTFS_IMAGE` is mandatory and must match the canonical full-image SHA-256. `run-qemu-smoke.sh` verifies the supplied extracted tree and retained image, invalidates old dynamic PASS evidence, requires `debugfs`, freshly `rdump`s the verified image to a private temporary tree, verifies that tree, and runs every QEMU `-L` check only against the image-derived runtime. Provenance records `rootfs_input_verified=true`, `rootfs_verified=true`, and `rootfs_runtime_source=verified-image-rdump`. `package-and-audit.sh` rejects all older image-hash-only/caller-tree QEMU evidence.
 
 Previous targeted regression: 9/9 PASS; `docs/logs/KAP_QEMU_IMAGE_RUNTIME_TARGETED_20260822.log` SHA-256 `985e150dbe7390582d8daad57d6cc0f244c296c60e0434d496e95b3e24f461ac`.
 
-### Git object/source identity — newest hardening
+### Git object/source identity
 
-A deeper audit found that the source identity checks were still not completely fail-closed. Plain `git rev-parse HEAD` can print a ref value even when the referenced commit object cannot be resolved; then `git status` fails. A failed `git status` nested inside `[ -n "$(...)" ]` can be interpreted as an empty clean result under Bash `set -e` contexts. Packaging had a stronger gap: its Git checkout check was optional, so a copied non-Git project tree could theoretically package modified maintained `web/`, `scripts/`, config or document launcher bytes while declaring an arbitrary syntactically valid `BUILD_COMMIT`.
+Host/ARMHF/QEMU require `git rev-parse --verify 'HEAD^{commit}'`, explicit successful source-status queries, matching `BUILD_COMMIT`, and clean maintained project source. Packaging requires a real resolvable clean Git project checkout unconditionally, so a copied/non-Git project tree or missing commit object cannot claim release provenance.
 
-This is now closed:
-
-```text
-run-host-backend-gates.sh
-run-armhf-gates.sh
-run-qemu-smoke.sh
-  -> require git rev-parse --verify 'HEAD^{commit}'
-  -> explicitly require git status itself to succeed
-  -> reject dirty source
-  -> host/ARMHF also require pinned Anki HEAD^{commit} to resolve
-
-package-and-audit.sh
-  -> now requires a real resolvable Git project checkout unconditionally
-  -> requires HEAD == BUILD_COMMIT
-  -> explicitly fails if source-tree cleanliness cannot be established
-  -> therefore cannot create final ZIP bytes from a copied/non-Git or broken-object source tree
-```
-
-Current production/test blobs:
-
-```text
-testenv/scripts/run-armhf-gates.sh          aeee9ba7f5759ce44b161c8669111f527a3dc0b2
-testenv/scripts/run-host-backend-gates.sh   1efcdd18b017deed1b76871e1d598715eb298e56
-testenv/scripts/run-qemu-smoke.sh           1bd183e72a1d6490eac36cb5a165c75074efd62a
-testenv/scripts/package-and-audit.sh        9d41690315b8dcaa8333d2a6fe0cd2bc3b10f4b0
-tests/test_armhf_provenance.py              9208c15a1ac243a413057abab5c550f0400a006c
-tests/test_host_backend_provenance.py       9137193089492ba5834cd35613ceddae0a09e271
-tests/test_qemu_provenance.py               6ff2672ac10772437f73e1cd35e8fa6b38867a87
-tests/test_package_reproducibility.py       dfd005fa252f9f9211a6def7a2873439df77d527
-```
-
-Targeted Git failure-mode reproducer:
-
-```text
-clean resolvable commit: PASS
-dirty tree detection: PASS
-plain rev-parse with missing HEAD object reproduced old unsafe prerequisite
-old status-command-substitution failure reproduced as survivable
-HEAD^{commit} missing-object rejection: PASS
-non-Git package-source rejection: PASS
-log SHA-256 649526115118aa93996b3e66f75fff77111e0d0abee506bff167cb6cc0da13d7
-```
-
-Exact defect model, commands, commits and evidence are in `docs/VM_GIT_IDENTITY_FAIL_CLOSED_20260822.md`.
+Targeted Git failure-mode reproducer log SHA-256: `649526115118aa93996b3e66f75fff77111e0d0abee506bff167cb6cc0da13d7`. Details: `docs/VM_GIT_IDENTITY_FAIL_CLOSED_20260822.md`.
 
 Lifecycle hardening also rejects stale zombie operation-lock owners and protects wrapper-death/sync collection ownership; see the earlier `docs/VM_*_20260822.md` reports.
 
 ## Current environment limitation
 
-No fresh **complete current-head** build is claimed. Normal network access in the execution container still fails DNS resolution, including both GitHub and the official Amazon S3 firmware host:
+No fresh **complete current-head** build is claimed. Normal network access in the execution container still fails DNS resolution. This run reconfirmed:
 
 ```text
-git clone ... https://github.com/melspixel/Kanki.git
-fatal: Could not resolve host: github.com
+git ls-remote https://github.com/melspixel/Kanki.git
+fatal: unable to access 'https://github.com/melspixel/Kanki.git/': Could not resolve host: github.com
 rc=128
-
-curl ... https://s3.amazonaws.com/firmwaredownloads/...
-curl: (6) Could not resolve host: s3.amazonaws.com
 ```
 
-The latest observed GitHub Actions checkpoint for the code-hardening head also failed before any recorded workflow step (run `32539353539`, job `96946124261`; steps list empty), so it is infrastructure evidence, not a test result.
-
-The private checksum-matching PW6 rootfs tree **and retained image** are absent. Historical/synthetic evidence must not be promoted to final provenance.
+The private checksum-matching PW6 rootfs tree **and retained image** are also absent. Historical/synthetic evidence must not be promoted to final provenance.
 
 ## Local/Codex boundary
 
-`CODEX_COORDINATION.md` Task B remains the only useful pre-release local task: transport the checksum-verified private PW6 rootfs tree **plus retained `pw6-rootfs.img`** into the VM/private channel. It must use `--keep-image`, verify the full image SHA-256 above, and persist only a sanitized verification report. Compilation, image-derived QEMU execution and packaging remain VM-owned.
+`CODEX_COORDINATION.md` Task B remains the only useful pre-release local task: transport the checksum-verified private PW6 rootfs tree **plus retained `pw6-rootfs.img`** into the VM/private channel. It must use `--keep-image`, verify the full image SHA-256 above, and persist only a sanitized verification report. Compilation, official Anki testing, ARMHF build, image-derived QEMU execution and packaging remain VM-owned.
 
 ## Ordered next actions
 
-1. Materialize the then-current clean branch head in a network-capable build VM with complete Git objects, exact pinned Anki, Cargo cache, protoc and KindleHF inputs.
+1. Resolve the live branch head, then materialize that exact clean commit in a network-capable build VM with complete Git objects, exact pinned Anki, Cargo cache, protoc and KindleHF inputs.
 2. Install/verify `e2fsprogs/debugfs` in addition to the existing build/QEMU toolchain.
-3. Run complete static gates, including the new missing-Git-object/non-Git-package regressions plus image-derived QEMU/package provenance tests.
-4. From the same source/Anki identity, run full official backend tests and all five real APKG integrations including typed-answer coverage.
-5. Run ARMHF cross-build plus ELF/ABI/GLIBC/export audit.
-6. Supply both private PW6 inputs: extracted 5.19.6 rootfs and retained `pw6-rootfs.img` with SHA-256 `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`.
-7. Run exact-rootfs QEMU against a temporary runtime tree freshly `rdump`ed from that exact image and persist new provenance/evidence.
-8. Only then run package audit/reproducibility/privacy/content checks and persist final ZIP/SHA-256/manifest/contents/full reports on GitHub.
-9. Begin separate physical PW6 HIL only after software-delivery hashes exist.
+3. Run complete static gates, including deterministic Anki-overlay tests, missing-Git-object/non-Git package regressions and image-derived QEMU/package provenance tests.
+4. From the same source/Anki identity, run the full official Anki backend gate. The hardened injector must report only the deterministic overlay, and Cargo target state must be freshly recreated.
+5. Run all five real APKG integrations including typed-answer coverage against that fresh host library.
+6. Run ARMHF cross-build plus ELF/ABI/GLIBC/export audit; the ARMHF gate independently re-verifies the exact Anki overlay and recreates Cargo target state.
+7. Supply both private PW6 inputs: extracted 5.19.6 rootfs and retained `pw6-rootfs.img` with SHA-256 `b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa`.
+8. Run exact-rootfs QEMU against a temporary runtime tree freshly `rdump`ed from that exact image and persist new provenance/evidence.
+9. Only then run package audit/reproducibility/privacy/content checks and persist final ZIP/SHA-256/manifest/contents/full reports on GitHub.
+10. Begin separate physical PW6 HIL only after software-delivery hashes exist.
 
 ## Release record
 
