@@ -1,0 +1,178 @@
+name: Materialize RankiRefresh 2026-08-22 release
+
+on:
+  push:
+    branches: [rankirefresh-release-20260822]
+    paths:
+      - 'kindle-anki-port/RankiRefresh/releases/2026-08-22/.materialize-request'
+      - '.github/workflows/rankirefresh-release-20260822.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DRIVE_FILE_ID: 1PnR04NSFrTWNQL_-WwzP_srWDS_OJD0g
+      EXPECTED_SHA256: a91dfe8b95d55469b567307951c4981aa5492d9ea763926f4557cd6f9dd7d002
+      RELEASE_ROOT: kindle-anki-port/RankiRefresh/releases/2026-08-22
+      BASELINE_ROOT: kindle-anki-port/RankiRefresh/dist/unpacked/ranki
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rankirefresh-release-20260822
+          fetch-depth: 0
+
+      - name: Install audit/download tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip file binutils python3-pip
+          python3 -m pip install --disable-pip-version-check gdown pyelftools
+
+      - name: Download exact user release from Google Drive
+        run: |
+          mkdir -p /tmp/rankirefresh-release
+          gdown --id "$DRIVE_FILE_ID" -O /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip
+          test -s /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip
+          printf '%s  %s\n' "$EXPECTED_SHA256" /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip \
+            | sha256sum -c -
+
+      - name: Materialize exact package and unpacked runtime
+        run: |
+          DIST="$RELEASE_ROOT/dist"
+          rm -rf "$DIST" "$RELEASE_ROOT/recovered-source"
+          mkdir -p "$DIST/unpacked" "$RELEASE_ROOT/recovered-source/package" "$RELEASE_ROOT/recovered-source/embedded"
+          cp /tmp/rankirefresh-release/Kanki-release-2026-08-22.zip "$DIST/"
+          printf '%s  Kanki-release-2026-08-22.zip\n' "$EXPECTED_SHA256" > "$DIST/Kanki-release-2026-08-22.zip.sha256"
+          unzip -q "$DIST/Kanki-release-2026-08-22.zip" -d "$DIST/unpacked"
+          test -d "$DIST/unpacked/ranki"
+
+          cp "$DIST/unpacked/ranki/ranki.sh" "$RELEASE_ROOT/recovered-source/package/ranki.sh"
+          cp "$DIST/unpacked/ranki/kindle-system-fingerprint.sh" "$RELEASE_ROOT/recovered-source/package/kindle-system-fingerprint.sh"
+          cp "$DIST/unpacked/ranki/config.ini.default" "$RELEASE_ROOT/recovered-source/package/config.ini.default"
+          cp "$DIST/unpacked/ranki/KANKI_BUILD.txt" "$RELEASE_ROOT/recovered-source/package/KANKI_BUILD.txt"
+
+      - name: Recover exact embedded reviewer CSS/JS from WebKit shim
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from elftools.elf.elffile import ELFFile
+
+          release = Path('kindle-anki-port/RankiRefresh/releases/2026-08-22')
+          so = release / 'dist/unpacked/ranki/libkanki-webkit-armhf.so'
+          out = release / 'recovered-source/embedded'
+          out.mkdir(parents=True, exist_ok=True)
+
+          wanted = {
+              'KANKI_REVIEWER_CSS': 'KANKI_REVIEWER_CSS.recovered.css',
+              'KANKI_COMPAT_JS': 'KANKI_COMPAT_JS.recovered.js',
+              'SCALE_NATIVE': 'SCALE_NATIVE.recovered.html',
+              'SCALE_FALLBACK': 'SCALE_FALLBACK.recovered.html',
+          }
+
+          with so.open('rb') as fh:
+              elf = ELFFile(fh)
+              symtab = elf.get_section_by_name('.symtab')
+              if symtab is None:
+                  raise SystemExit('missing .symtab; cannot recover embedded source payloads')
+              for symbol_name, filename in wanted.items():
+                  syms = symtab.get_symbol_by_name(symbol_name) or []
+                  if len(syms) != 1:
+                      raise SystemExit(f'{symbol_name}: expected one symbol, got {len(syms)}')
+                  sym = syms[0]
+                  section = elf.get_section(sym['st_shndx'])
+                  start = sym['st_value'] - section['sh_addr']
+                  data = section.data()[start:start + sym['st_size']]
+                  if data.endswith(b'\0'):
+                      data = data[:-1]
+                  (out / filename).write_bytes(data)
+          PY
+
+          node --check "$RELEASE_ROOT/recovered-source/embedded/KANKI_COMPAT_JS.recovered.js"
+
+      - name: Generate manifests and Diagnostic 1 binary diff
+        run: |
+          DIST="$RELEASE_ROOT/dist"
+          NEW="$DIST/unpacked/ranki"
+          (
+            cd "$NEW"
+            sha256sum * | sort > ../FILE_SHA256.txt
+          )
+          {
+            echo 'RankiRefresh 2026-08-22 artifact audit'
+            echo "expected_sha256=$EXPECTED_SHA256"
+            echo "archive_size=$(stat -c '%s' "$DIST/Kanki-release-2026-08-22.zip")"
+            echo
+            echo '== KANKI_BUILD.txt =='
+            cat "$NEW/KANKI_BUILD.txt"
+            echo
+            echo '== file(1) =='
+            file "$NEW"/*
+            echo
+            echo '== libanki version requirements =='
+            readelf --version-info "$NEW/libanki-26.08-armhf.so" 2>/dev/null \
+              | grep -oE '(GLIBC|GCC)_[0-9.]+' | sort -Vu || true
+            echo
+            echo '== WebKit shim exported symbols =='
+            readelf -Ws "$NEW/libkanki-webkit-armhf.so" 2>/dev/null \
+              | grep -E 'webkit_web_view_new|webkit_web_view_load_html_string|webkit_web_view_set_zoom_level|gtk_builder_get_object|gtk_button_set_label|gtk_tree_view_expand_all' || true
+          } > "$DIST/ARTIFACT_AUDIT.txt"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          release = Path('kindle-anki-port/RankiRefresh/releases/2026-08-22')
+          new = release / 'dist/unpacked/ranki'
+          old = Path('kindle-anki-port/RankiRefresh/dist/unpacked/ranki')
+          out = release / 'dist/BINARY_DIFF_VS_DIAGNOSTIC1.tsv'
+
+          def digest(p):
+              h = hashlib.sha256()
+              with p.open('rb') as f:
+                  for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          names = sorted({p.name for p in new.iterdir() if p.is_file()} |
+                         ({p.name for p in old.iterdir() if p.is_file()} if old.is_dir() else set()))
+          rows = ['file\told_size\tnew_size\told_sha256\tnew_sha256\tstatus']
+          for name in names:
+              a, b = old / name, new / name
+              ah = digest(a) if a.is_file() else '-'
+              bh = digest(b) if b.is_file() else '-'
+              status = 'same' if ah == bh else ('added' if not a.is_file() else ('removed' if not b.is_file() else 'changed'))
+              rows.append('\t'.join([
+                  name,
+                  str(a.stat().st_size) if a.is_file() else '-',
+                  str(b.stat().st_size) if b.is_file() else '-',
+                  ah, bh, status
+              ]))
+          out.write_text('\n'.join(rows) + '\n')
+          PY
+
+          cat > "$RELEASE_ROOT/recovered-source/README.md" <<'EOF'
+          # Recovered source-readable payloads
+
+          These files are copied/extracted from the exact user-supplied release.
+
+          - `package/` contains source-readable package files verbatim.
+          - `embedded/` contains the exact CSS/JavaScript/string payloads recovered from local ELF symbols in `libkanki-webkit-armhf.so`.
+
+          This is not presented as the missing original C source tree for `build=93be8aa`; see `../SOURCE_STATUS.md`.
+          EOF
+          sed -i 's/^          //' "$RELEASE_ROOT/recovered-source/README.md"
+
+      - name: Commit materialized release
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$RELEASE_ROOT/dist" "$RELEASE_ROOT/recovered-source"
+          if git diff --cached --quiet; then
+            echo 'Release already materialized.'
+            exit 0
+          fi
+          git commit -m 'RankiRefresh: materialize 2026-08-22 release artifact'
+          git push origin HEAD:rankirefresh-release-20260822

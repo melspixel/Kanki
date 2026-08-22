@@ -1,0 +1,182 @@
+name: Build Anki 26.08 backend
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [anki-26.08-backend]
+    paths:
+      - 'vendor/anki26/**'
+      - 'src/backend_redirect_shim.c'
+      - '.github/workflows/build-anki26-backend.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'vendor/anki26/**'
+      - 'src/backend_redirect_shim.c'
+      - '.github/workflows/build-anki26-backend.yml'
+
+jobs:
+  backend-kindlehf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      ANKI_REF: '26.08'
+      RUSTUP_TOOLCHAIN: '1.92.0'
+      TARGET: armv7-unknown-linux-gnueabihf
+      PROTOC: /usr/bin/protoc
+      KHF_TRIPLE: arm-kindlehf-linux-gnueabihf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config protobuf-compiler \
+            python3 perl make git curl wget file binutils
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          rustup target add --toolchain "$RUSTUP_TOOLCHAIN" "$TARGET"
+          rustc --version
+          cargo --version
+          "$PROTOC" --version
+
+      - name: Install KindleHF cross toolchain
+        run: |
+          wget -q https://github.com/KindleModding/koxtoolchain/releases/latest/download/kindlehf.tar.gz \
+            -O /tmp/kindlehf.tar.gz
+          tar -xzf /tmp/kindlehf.tar.gz -C "$HOME"
+
+          TC="$HOME/x-tools/$KHF_TRIPLE"
+          SYSROOT="$TC/$KHF_TRIPLE/sysroot"
+          CC="$TC/bin/$KHF_TRIPLE-gcc"
+          CXX="$TC/bin/$KHF_TRIPLE-g++"
+          AR="$TC/bin/$KHF_TRIPLE-ar"
+          test -x "$CC"
+          test -d "$SYSROOT"
+
+          echo "$TC/bin" >> "$GITHUB_PATH"
+          echo "KHF_TC=$TC" >> "$GITHUB_ENV"
+          echo "KHF_SYSROOT=$SYSROOT" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=$CC" >> "$GITHUB_ENV"
+          echo "CC_armv7_unknown_linux_gnueabihf=$CC" >> "$GITHUB_ENV"
+          echo "CXX_armv7_unknown_linux_gnueabihf=$CXX" >> "$GITHUB_ENV"
+          echo "AR_armv7_unknown_linux_gnueabihf=$AR" >> "$GITHUB_ENV"
+          echo "CFLAGS_armv7_unknown_linux_gnueabihf=-march=armv7-a -mtune=cortex-a7 -mfpu=neon -mfloat-abi=hard -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0" >> "$GITHUB_ENV"
+          echo "CXXFLAGS_armv7_unknown_linux_gnueabihf=-march=armv7-a -mtune=cortex-a7 -mfpu=neon -mfloat-abi=hard -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0" >> "$GITHUB_ENV"
+          echo "RUSTFLAGS=-C target-cpu=cortex-a7 -C link-arg=-Wl,--as-needed" >> "$GITHUB_ENV"
+
+          {
+            echo "toolchain=$KHF_TRIPLE"
+            "$CC" -dumpmachine
+            "$CC" -dumpversion
+            echo "sysroot=$SYSROOT"
+            "$CC" --print-sysroot
+            echo "libc candidates:"
+            find "$SYSROOT" -name 'libc.so.6' -o -name 'libpthread.so.0' -o -name 'libm.so.6' | sort
+            LIBC=$(find "$SYSROOT" -name 'libc.so.6' | head -n 1)
+            echo "libc=$LIBC"
+            file "$LIBC"
+            strings "$LIBC" | grep -m1 -E 'GNU C Library|release version' || true
+            echo "available GLIBC versions:"
+            readelf --version-info "$LIBC" 2>/dev/null | grep -oE 'GLIBC_[0-9.]+' | sort -Vu || true
+          } | tee toolchain.report.txt
+
+      - name: Fetch Anki 26.08 and required translations
+        run: |
+          git clone --depth 1 --branch "$ANKI_REF" https://github.com/ankitects/anki.git /tmp/anki
+          git -C /tmp/anki submodule update --init --depth 1 ftl/core-repo ftl/qt-repo
+          git -C /tmp/anki rev-parse HEAD | tee anki26.commit
+          test -d /tmp/anki/ftl/core-repo/core
+          test -d /tmp/anki/ftl/qt-repo/desktop
+          mkdir -p /tmp/anki/out/rslib/proto
+
+      - name: Add Kanki C FFI and shared-library crate type
+        run: |
+          cp vendor/anki26/ffi.rs /tmp/anki/rslib/src/kanki_ffi.rs
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/anki/rslib/src/lib.rs')
+          s=p.read_text()
+          needle='pub mod version;'
+          assert needle in s
+          s=s.replace(needle, needle+'\npub mod kanki_ffi;', 1)
+          p.write_text(s)
+
+          p=Path('/tmp/anki/rslib/Cargo.toml')
+          s=p.read_text()
+          if '[lib]' not in s:
+              s += '\n[lib]\ncrate-type = ["cdylib"]\n'
+          p.write_text(s)
+          PY
+          tail -8 /tmp/anki/rslib/Cargo.toml
+          grep -n 'kanki_ffi' /tmp/anki/rslib/src/lib.rs
+
+      - name: Build Anki 26.08 backend for KindleHF
+        working-directory: /tmp/anki
+        run: |
+          cargo build -p anki --release --target "$TARGET" --features rustls
+
+      - name: Inspect Kindle ABI
+        run: |
+          LIB=/tmp/anki/target/$TARGET/release/libanki.so
+          test -f "$LIB"
+          cp "$LIB" libanki-26.08-kindlehf.so
+          file libanki-26.08-kindlehf.so
+          readelf -h libanki-26.08-kindlehf.so | tee backend.elf.txt
+          readelf -d libanki-26.08-kindlehf.so | tee backend.dynamic.txt
+          nm -D libanki-26.08-kindlehf.so | grep ' anki_backend_' | tee backend.exports.txt
+          readelf --version-info libanki-26.08-kindlehf.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee backend.glibc.txt
+          objdump -T libanki-26.08-kindlehf.so | grep -E 'UND.*GLIBC_' | tee backend.glibc-symbols.txt || true
+
+          LIBC=$(find "$KHF_SYSROOT" -name 'libc.so.6' | head -n 1)
+          readelf --version-info "$LIBC" | grep -oE 'GLIBC_[0-9.]+' | sort -Vu > sysroot.glibc.txt
+          REQ=$(tail -n 1 backend.glibc.txt | sed 's/GLIBC_//')
+          HAVE=$(tail -n 1 sysroot.glibc.txt | sed 's/GLIBC_//')
+          python3 - "$REQ" "$HAVE" <<'PY'
+          import sys
+          def ver(s):
+              return tuple(int(x) for x in s.split('.'))
+          req, have = sys.argv[1], sys.argv[2]
+          print(f"required_glibc={req}")
+          print(f"sysroot_glibc={have}")
+          if ver(req) > ver(have):
+              raise SystemExit(f"backend requires GLIBC_{req}, newer than KindleHF sysroot GLIBC_{have}")
+          PY
+
+          {
+            echo "required_glibc=$REQ"
+            echo "sysroot_glibc=$HAVE"
+            echo "needed_libraries:"
+            readelf -d libanki-26.08-kindlehf.so | grep NEEDED || true
+            echo "exports:"
+            cat backend.exports.txt
+          } | tee backend.report.txt
+
+          find /tmp/anki/target/$TARGET/release/build -path '*/out/backend.rs' -print -exec cp {} generated-backend.rs \; -quit
+          test -f generated-backend.rs
+
+      - name: Build backend redirect shim
+        run: |
+          clang --target=arm-linux-gnueabihf -fuse-ld=lld -O2 -fPIC -fno-builtin \
+            -shared -nostdlib src/backend_redirect_shim.c -o libkanki-backend-redirect-armhf.so
+          file libkanki-backend-redirect-armhf.so
+          readelf -d libkanki-backend-redirect-armhf.so | grep NEEDED && exit 1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: anki-26.08-backend-kindlehf
+          path: |
+            libanki-26.08-kindlehf.so
+            libkanki-backend-redirect-armhf.so
+            anki26.commit
+            toolchain.report.txt
+            backend.elf.txt
+            backend.dynamic.txt
+            backend.exports.txt
+            backend.glibc.txt
+            backend.glibc-symbols.txt
+            sysroot.glibc.txt
+            backend.report.txt
+            generated-backend.rs
+          if-no-files-found: warn
