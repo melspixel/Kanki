@@ -10,8 +10,8 @@ Updated: 2026-08-22 UTC
 | Ordinary GitHub source | complete | maintained source under `kindle-anki-port/` |
 | Official Anki semantic bridge | hardened + green historical checkpoint | deterministic overlay now verified against pinned HEAD + clean project; prior full `rslib`: `539 passed; 0 failed`; final clean-head rerun required |
 | Five real APKG integration | green historical checkpoint | C-ABI reviewer lifecycle passed; typed-answer/AV observed; final clean-head rerun required |
-| Reviewer/native host | targeted current-head fixtures green | commit `f0925bf767cf59708ef3ee72ebaaff046cdd6b1d` repaired missing audio-queue fixture dependency; audio/CSS/reviewer groups pass; full static gate still pending |
-| Sync/collection ownership | hardened | wrapper-death/zombie-owner races reproduced and fixed |
+| Reviewer/native host | targeted current-head WebKit/native subset green | repair commit `f0925bf7`; persisted strict C + WebKit checkpoint `bd184766`; complete static gate still pending |
+| Sync/collection ownership | hardened | wrapper-death/zombie-owner races reproduced and fixed; current-head shell/runtime rerun pending |
 | Git source identity | hardened | host/ARMHF/QEMU require resolvable `HEAD^{commit}` + successful clean-status query; package requires real Git checkout |
 | Anki working-tree provenance | hardened newest | injector requires exact deterministic overlay only; unrelated tracked/staged/untracked Anki changes rejected |
 | Cargo build-state provenance | hardened newest | host/ARMHF force `$ANKI/target` and recreate it before Cargo; caller/stale target state not reused |
@@ -25,37 +25,51 @@ Updated: 2026-08-22 UTC
 | Final ZIP persistence | incomplete | old ZIP stale; fresh current-head installer absent |
 | PW6 hardware acceptance | not started | separate physical final result after software-delivery hashes exist |
 
-## Current-head targeted reviewer checkpoint
+## Current-head WebKit/native checkpoint
 
-Exact current-head blobs were materialized through the GitHub Git object API and verified with `git hash-object` before execution. The unpatched reviewer fixture failed immediately because `reviewer.js` now constructs its audio queue at load time while the fixture had not loaded `audio_queue.js`.
+Exact current-head files were materialized through the GitHub Git object API and verified with `git hash-object` before execution. Source under test:
 
-Reproduced first failure:
+```text
+ece332e5de8ce6499e3603dcf6dd27c256819084
+```
+
+The earlier first failure was the reviewer fixture omitting its production audio queue dependency:
 
 ```text
 TypeError: window.kapCreateAudioQueue is not a function
 ```
 
-Repair committed at:
+Repair committed at `f0925bf767cf59708ef3ee72ebaaff046cdd6b1d`. The expanded checkpoint then passed:
 
 ```text
-f0925bf767cf59708ef3ee72ebaaff046cdd6b1d
+node syntax: audio queue, bridge, CSS compatibility, decks, reviewer  PASS
+audio queue lifecycle                                                PASS
+CSS compatibility                                                    PASS (9 fixtures)
+WebKit1 web contract                                                  PASS
+reviewer runtime                                                     PASS (10 fixture groups)
+kap-app strict C build + supervision self-test                       PASS, 1002 ms
+kap-audio strict C build + self-test                                  PASS
+kap-sync strict C build + self-test                                   PASS
 ```
 
-The fixture now evaluates the real `web/audio_queue.js` in the same VM context before `web/reviewer.js`. Targeted VM results:
+Persisted evidence:
 
 ```text
-node --check web/audio_queue.js                         PASS
-node tests/test_audio_queue.js                          PASS
-node --check web/css_compat.js                          PASS
-node tests/test_css_compat_fixtures.js                  PASS (9 fixtures)
-node --check web/reviewer.js                            PASS
-node --check tests/test_reviewer_runtime_fixtures.js    PASS
-node tests/test_reviewer_runtime_fixtures.js            PASS (10 fixture groups)
+bd184766a66576c1dab6cdeba566107f34d179a0
+docs/VM_CURRENT_HEAD_WEB_NATIVE_20260822.md
+docs/logs/KAP_CURRENT_HEAD_WEB_NATIVE_20260822.log
+SHA-256 1ac58bfaad499b55d97b468b11c7ac5709ea7ba080a2f703a321cbbd4c4d1f2a
 ```
 
-Evidence: `docs/VM_REVIEWER_FIXTURE_DEPENDENCY_20260822.md`.
+Transient host binary hashes:
 
-This checkpoint is not a complete `run-static-gates.sh` result and does not replace the required clean-current-head host/APKG/ARMHF/QEMU chain.
+```text
+kap-app-host    252dc9160dc4b8f3268d1e2b6f3067ddd3ce384ed5fbe240404d25c785720d30
+kap-audio-host  16d699b756fc94aa277f08588ee302482164864731152ac37aeb75ac6fea2656
+kap-sync-host   2af78280ca03ccb9064530a7b0c47bee723b5b77f254984c65553f7a354ab689
+```
+
+This remains a targeted subset, not a complete `run-static-gates.sh` result or release provenance.
 
 ## Historical checkpoints — not final provenance
 
@@ -204,7 +218,7 @@ It remains stale and must not be published as final.
 
 1. Resolve and materialize the live clean branch head with complete Git objects in a network-capable build VM with exact pinned Anki/Cargo/protoc/KindleHF inputs.
 2. Install/verify `e2fsprogs/debugfs` plus existing host/QEMU/toolchain dependencies.
-3. Run complete static gates from the new head, including the repaired reviewer fixture dependency and deterministic-overlay/target-state regressions plus existing Git/QEMU/package provenance suites.
+3. Continue current-head source/semantic, lifecycle, sync-wrapper/worker, zombie-lock, package, rootfs and QEMU provenance static regressions.
 4. Run full official Anki backend from the verified deterministic overlay and persist fresh results/library hash.
 5. Run all five real APKG integrations, including typed-answer coverage.
 6. Run fresh ARMHF cross-build and ABI/GLIBC/export audit; ARMHF must independently verify the same overlay and start from a recreated Cargo target.
