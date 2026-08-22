@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+renderer_assets = [
+    ROOT / "assets/reviewer/reviewer.css",
+    ROOT / "assets/reviewer/reviewer.js",
+    ROOT / "assets/reviewer/css_compat.js",
+    ROOT / "assets/reviewer/css_runtime.js",
+    ROOT / "assets/reviewer/mathjax_runtime.js",
+    ROOT / "assets/reviewer/diagnostics.js",
+    ROOT / "assets/device/reviewer-shell.html",
+]
+renderer_rs = (ROOT / "crates/kanki-renderer/src/lib.rs").read_text(encoding="utf-8")
+production_renderer_rs = renderer_rs.split("#[cfg(test)]", 1)[0]
+text = (
+    "\n".join(path.read_text(encoding="utf-8") for path in renderer_assets)
+    + "\n"
+    + production_renderer_rs
+).lower()
+
+errors: list[str] = []
+
+# One-shot source migration helpers are removed once their behavior is owned by
+# canonical source. Reintroducing either file would create a second mutable
+# source path outside the package recipe.
+for obsolete_migration in ["patch_sync_ui.py", "patch_type_answer_ui.py"]:
+    if (ROOT / "tools" / obsolete_migration).exists():
+        errors.append(f"obsolete one-shot source migration returned: {obsolete_migration}")
+
+# A generic reviewer must never accumulate one-deck fixes. If a deck needs a
+# selector here, the compatibility boundary is wrong and must be redesigned.
+forbidden_deck_tokens = [
+    "coca-english",
+    "dictionary-logo",
+    ".pos-badge",
+    ".word {",
+    "merriam-webster",
+]
+for item in forbidden_deck_tokens:
+    if item in text:
+        errors.append(f"deck-specific token in generic renderer: {item}")
+
+# The rewrite uses Kindle/Lab126 CSS pixels rather than re-creating the legacy
+# 420px/media-query patch stack.
+forbidden_layout_tokens = ["logical_viewport_px", "media_rewritten", "9999px"]
+for item in forbidden_layout_tokens:
+    if item in text:
+        errors.append(f"legacy viewport/media rewrite token in renderer: {item}")
+if re.search(r"(?i)(viewport|logical|breakpoint)[^\n]{0,80}420px", text):
+    errors.append("hard-coded 420px logical viewport/breakpoint is forbidden")
+
+css = (ROOT / "assets/reviewer/reviewer.css").read_text(encoding="utf-8")
+if re.search(r"(?m)^\s*svg\s*\{", css):
+    errors.append("generic SVG sizing rule is forbidden")
+if re.search(r"(?m)^\s*img\s*\{[^}]*\b(width|height)\s*:", css, re.S):
+    errors.append("generic fixed image sizing rule is forbidden")
+
+shell = (ROOT / "assets/device/reviewer-shell.html").read_text(encoding="utf-8")
+if 'id="qa"' not in shell:
+    errors.append("persistent #qa root is missing from device reviewer shell")
+for required in [
+    "css_compat.js",
+    "css_runtime.js",
+    "MathJax.js?config=TeX-AMS_SVG-full",
+    "mathjax_runtime.js",
+    "diagnostics.js",
+    "reviewer.js",
+]:
+    if required not in shell:
+        errors.append(f"device reviewer shell does not load required runtime: {required}")
+
+# Keep the host fixture aligned with the persistent reviewer contract as well.
+host_reviewer = (ROOT / "assets/reviewer/reviewer.html").read_text(encoding="utf-8")
+if 'id="qa"' not in host_reviewer:
+    errors.append("persistent #qa root is missing from host reviewer fixture")
+
+# Default renderer diagnostics are metadata-only. Raw source is explicit opt-in
+# and bounded; the privacy-safe runtime must not scrape element text.
+diagnostics = (ROOT / "assets/reviewer/diagnostics.js").read_text(encoding="utf-8")
+if "textContent" in diagnostics or "innerText" in diagnostics:
+    errors.append("privacy-safe renderer diagnostics must not scrape element text")
+for required in ["RAW_RENDER_LIMIT = 12", "METRIC_RENDER_LIMIT = 200", "ELEMENT_LIMIT = 40"]:
+    if required not in diagnostics:
+        errors.append(f"renderer diagnostic bound missing: {required}")
+if "rawCaptureEnabled" not in diagnostics:
+    errors.append("raw renderer capture must remain an explicit runtime policy")
+
+launch = (ROOT / "scripts/kanki-launch.sh").read_text(encoding="utf-8")
+for required in ["render-debug", "enable-render-capture", "kanki-diag", "MANIFEST.sha256"]:
+    if required not in launch:
+        errors.append(f"launcher observability/integrity contract missing: {required}")
+install_verifier = (ROOT / "scripts/kanki-verify.sh").read_text(encoding="utf-8")
+for required in [
+    "sha256sum -c MANIFEST.sha256",
+    "find . -type l",
+    "unexpected file outside package manifest",
+    "./render-debug/*",
+    "./render-debug.previous/*",
+]:
+    if required not in install_verifier:
+        errors.append(f"install verifier contract missing: {required}")
+for caller_name in ["kanki-launch.sh", "kanki-sync.sh", "kanki-report.sh"]:
+    caller = (ROOT / "scripts" / caller_name).read_text(encoding="utf-8")
+    if "kanki-verify.sh" not in caller or "sha256sum -c -" not in caller:
+        errors.append(f"{caller_name} must authenticate and call the shared install verifier")
+if "scripts/kanki-verify.sh" not in (ROOT / "tools/build_kindle_package.sh").read_text(encoding="utf-8"):
+    errors.append("canonical package recipe must install the shared install verifier")
+
+# Reviewer and sync collection ownership is one kernel lock on the fixed PW6
+# flock implementation. Path-existence checks and PID-directed stale deletion
+# are not mutual exclusion and must not return.
+operation_lock = (ROOT / "scripts/kanki-operation-lock.sh").read_text(
+    encoding="utf-8"
+)
+for required in [
+    'exec 9<>"$KANKI_OPERATION_LOCK_FILE"',
+    '"${KANKI_FLOCK:-/usr/bin/flock}" -n -E 74 9',
+    "kanki_operation_lock_validate_inherited",
+]:
+    if required not in operation_lock:
+        errors.append(f"collection operation lock contract missing: {required}")
+sync_script = (ROOT / "scripts/kanki-sync.sh").read_text(encoding="utf-8")
+if 'if [ -d "$LOCK" ]' in sync_script:
+    errors.append("standalone sync must acquire the collection lock, not inspect its path")
+if "kanki_operation_lock_acquire sync" not in sync_script:
+    errors.append("standalone sync does not acquire the shared collection lock")
+if "kanki_operation_lock_acquire launch" not in launch:
+    errors.append("launcher does not acquire the shared collection lock")
+
+# Release reproducibility: KindleHF is checksum pinned and no workflow may
+# silently float to a new 'latest' cross toolchain.
+toolchain = (ROOT / "tools/install_kindlehf_toolchain.sh").read_text(encoding="utf-8")
+if "KOX_VERSION=2026.08" not in toolchain:
+    errors.append("KindleHF koxtoolchain release is not pinned")
+if "8cc7dfbd71abd78f9e947d6b2e20670288a4402edc7b07176bca791f7eaf87d0" not in toolchain:
+    errors.append("KindleHF koxtoolchain checksum is not pinned")
+
+# Formula rendering is a source-owned, checksum-pinned part of the persistent
+# reviewer. It must not silently float to another npm release or disappear
+# from the canonical Kindle package recipe.
+mathjax_installer = (ROOT / "tools/install_mathjax.sh").read_text(encoding="utf-8")
+if "VERSION=2.7.9" not in mathjax_installer:
+    errors.append("MathJax renderer release is not pinned")
+if "7131e739848edc14aa661a5516995866b81a477fab8b039d7cc324930e71f786" not in mathjax_installer:
+    errors.append("MathJax renderer checksum is not pinned")
+package_recipe = (ROOT / "tools/build_kindle_package.sh").read_text(encoding="utf-8")
+for required in [
+    "scripts/kanki-operation-lock.sh",
+    'packaging/kanki.operation.lock "$EXT/.kanki.operation.lock"',
+]:
+    if required not in package_recipe:
+        errors.append(f"canonical package recipe lacks collection lock input: {required}")
+for required in [
+    "sh tools/install_mathjax.sh",
+    "assets/vendor/mathjax-$MATHJAX_VERSION",
+    '"mathjax_version": "$MATHJAX_VERSION"',
+    '"mathjax_sha256": "$MATHJAX_SHA256"',
+]:
+    if required not in package_recipe:
+        errors.append(f"canonical package recipe lacks MathJax identity/runtime: {required}")
+for required in [
+    'BUILD_EPOCH=$(git show -s --format=%ct "$BUILD_COMMIT")',
+    "python3 tools/create_reproducible_zip.py",
+    '"source_date_epoch": $BUILD_EPOCH',
+    "python3 tools/normalize_anki_i18n.py",
+    '"anki_i18n_normalization": "$ANKI_I18N_NORMALIZATION"',
+    '"anki_i18n_upstream_sha256": "$ANKI_I18N_UPSTREAM_SHA256"',
+    '"anki_i18n_normalized_sha256": "$ANKI_I18N_NORMALIZED_SHA256"',
+]:
+    if required not in package_recipe:
+        errors.append(f"canonical package recipe lacks deterministic archive input: {required}")
+workflow_dir = ROOT / ".github/workflows"
+workflows = {
+    path.name: path.read_text(encoding="utf-8")
+    for path in workflow_dir.glob("*.yml")
+}
+expected_workflows = {"actions-probe.yml", "ci.yml", "package.yml"}
+if set(workflows) != expected_workflows:
+    errors.append(
+        "workflow set must stay consolidated: expected "
+        f"{sorted(expected_workflows)}, found {sorted(workflows)}"
+    )
+
+for workflow_name, workflow_text in workflows.items():
+    if "releases/latest/download/kindlehf" in workflow_text:
+        errors.append(f"floating KindleHF toolchain URL in .github/workflows/{workflow_name}")
+
+# Workflows own runner selection, prerequisites and evidence upload only. All
+# product compilation and behavioral gates remain callable repository scripts.
+required_workflow_calls = {
+    "ci.yml": [
+        "sh tools/run_host_gates.sh",
+        "sh tools/local_anki_bridge_docker.sh",
+    ],
+    "package.yml": ["bash tools/build_kindle_package.sh"],
+}
+for workflow_name, required_calls in required_workflow_calls.items():
+    workflow_text = workflows.get(workflow_name, "")
+    for required_call in required_calls:
+        if workflow_text.count(required_call) != 1:
+            errors.append(
+                f"{workflow_name} must call canonical entry point exactly once: "
+                f"{required_call}"
+            )
+
+duplicated_workflow_logic = [
+    "cargo build ",
+    "cargo test ",
+    "cargo run ",
+    "cargo fmt ",
+    "cargo clippy ",
+    "npm install ",
+    "node tests/",
+    "python3 tests/",
+    "cp bridge/",
+    "arm-kindlehf-linux-gnueabihf-gcc",
+    "tools/install_kindlehf_toolchain.sh",
+]
+for workflow_name, workflow_text in workflows.items():
+    for duplicated in duplicated_workflow_logic:
+        if duplicated in workflow_text:
+            errors.append(
+                f"{workflow_name} duplicates canonical script logic: {duplicated.strip()}"
+            )
+
+if errors:
+    print("\n".join(errors), file=sys.stderr)
+    raise SystemExit(1)
+print("renderer/reproducibility policy: pass")

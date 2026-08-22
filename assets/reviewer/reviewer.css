@@ -1,0 +1,36 @@
+/* Reviewer chrome only. Note-type CSS owns all card typography and layout. */
+html, body {
+  min-height: 100%;
+  background: #fff;
+  color: #000;
+}
+body {
+  margin: 20px;
+  padding: 0;
+  overflow-x: hidden;
+}
+#qa {
+  display: block;
+  min-height: 1px;
+}
+.replay-button,
+[data-kanki-audio] {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  vertical-align: middle;
+  text-decoration: none;
+}
+.replay-button > svg,
+[data-kanki-audio] > svg {
+  display: block;
+  width: 40px;
+  height: 40px;
+}
+.kanki-render-error {
+  border: 1px solid #000;
+  padding: 8px;
+  font-family: sans-serif;
+  font-size: 16px;
+}

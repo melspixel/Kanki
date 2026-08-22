@@ -1,0 +1,35 @@
+<!doctype html>
+<html class="kindle" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Kanki Sync</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #fff; color: #111; font-family: sans-serif; }
+    main { padding: 28px 32px 40px; }
+    h1 { margin: 0 0 18px; font-size: 32px; }
+    p { font-size: 20px; line-height: 1.45; margin: 0 0 18px; }
+    #status { padding: 12px 14px; border: 1px solid #777; margin-bottom: 22px; display: none; }
+    button { display: block; width: 100%; min-height: 72px; margin: 14px 0; font-size: 22px; }
+    .danger { border: 2px solid #222; }
+    small { display: block; margin-top: 24px; font-size: 17px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Anki Sync</h1>
+  <div id="status"></div>
+  <p>Use Normal Sync first. Full Upload and Full Download replace one side of the collection and are never selected automatically.</p>
+  <button onclick="location.href='kanki://sync/run?mode=normal'">Normal Sync</button>
+  <button class="danger" onclick="location.href='kanki://sync/run?mode=upload'">Full Upload — Kindle to server</button>
+  <button class="danger" onclick="location.href='kanki://sync/run?mode=download'">Full Download — server to Kindle</button>
+  <button onclick="location.href='kanki://app/back'">Cancel</button>
+  <small>Kanki closes the reviewer collection before starting the separate sync process, then reopens the application after the sync process exits.</small>
+</main>
+<script>
+(function () {
+  location.href = 'kanki://ready?view=sync';
+}());
+</script>
+</body>
+</html>

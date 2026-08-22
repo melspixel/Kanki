@@ -1,0 +1,12 @@
+[submodule "third_party/anki"]
+	path = third_party/anki
+	url = https://github.com/ankitects/anki.git
+[submodule "third_party/ranki-reference"]
+	path = third_party/ranki-reference
+	url = https://github.com/crazy-electron/ranki.git
+[submodule "third_party/kindle-sdk"]
+	path = third_party/kindle-sdk
+	url = https://github.com/KindleModding/kindle-sdk.git
+[submodule "third_party/audiobook-koplugin"]
+	path = third_party/audiobook-koplugin
+	url = https://github.com/stradichenko/audiobook.koplugin.git

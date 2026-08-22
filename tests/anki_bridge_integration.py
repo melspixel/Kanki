@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""Exercise the production semantic C ABI against a disposable Anki collection."""
+
+import ctypes
+import json
+import re
+import sqlite3
+import sys
+from pathlib import Path
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+if len(sys.argv) != 5:
+    raise SystemExit(f"usage: {sys.argv[0]} LIB COLLECTION MEDIA MEDIA_DB")
+
+library_path, collection_path, media_path, media_db_path = map(Path, sys.argv[1:])
+library = ctypes.CDLL(str(library_path.resolve()))
+library.kanki_string_free.argtypes = [ctypes.c_void_p]
+library.kanki_string_free.restype = None
+library.kanki_core_new.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+library.kanki_core_new.restype = ctypes.c_void_p
+library.kanki_core_free.argtypes = [ctypes.c_void_p]
+library.kanki_core_free.restype = None
+
+SIGNATURES = {
+    "kanki_open_collection_json": [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p],
+    "kanki_close_collection_json": [ctypes.c_void_p],
+    "kanki_deck_tree_json": [ctypes.c_void_p],
+    "kanki_health_json": [ctypes.c_void_p],
+    "kanki_set_current_deck_json": [ctypes.c_void_p, ctypes.c_int64],
+    "kanki_next_card_json": [ctypes.c_void_p],
+    "kanki_prepare_answer_json": [ctypes.c_void_p, ctypes.c_char_p],
+    "kanki_answer_json": [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32],
+    "kanki_bury_current_json": [ctypes.c_void_p],
+}
+for function_name, argument_types in SIGNATURES.items():
+    function = getattr(library, function_name)
+    function.argtypes = argument_types
+    function.restype = ctypes.c_void_p
+
+
+def owned_json(label: str, function_name: str, *arguments):
+    pointer = getattr(library, function_name)(*arguments)
+    require(bool(pointer), f"{label} returned NULL")
+    try:
+        text = ctypes.string_at(pointer).decode("utf-8")
+    finally:
+        library.kanki_string_free(pointer)
+    envelope = json.loads(text)
+    require(envelope.get("ok") is True, f"{label} failed: {envelope.get('error')}")
+    print(f"{label}={json.dumps(envelope, ensure_ascii=True, separators=(',', ':'))}")
+    return envelope.get("data")
+
+
+def new_core() -> int:
+    error_pointer = ctypes.c_void_p()
+    core = library.kanki_core_new(ctypes.byref(error_pointer))
+    if not core:
+        message = "unknown core initialization failure"
+        if error_pointer.value:
+            try:
+                message = ctypes.string_at(error_pointer.value).decode("utf-8")
+            finally:
+                library.kanki_string_free(error_pointer.value)
+        raise AssertionError(message)
+    return core
+
+
+def open_collection(core: int, label: str = "integration_open"):
+    return owned_json(
+        label,
+        "kanki_open_collection_json",
+        core,
+        str(collection_path).encode(),
+        str(media_path).encode(),
+        str(media_db_path).encode(),
+    )
+
+
+def sound_sources(tags):
+    return [tag.get("source") for tag in tags if tag.get("kind") == "sound"]
+
+
+def find_deck(node, *, deck_id=None, name=None):
+    if (deck_id is None or int(node.get("id", -1)) == deck_id) and (
+        name is None or node.get("name") == name
+    ):
+        return node
+    for child in node.get("children", []):
+        match = find_deck(child, deck_id=deck_id, name=name)
+        if match is not None:
+            return match
+    return None
+
+
+core = new_core()
+answered = {}
+buried_card_id = None
+try:
+    open_collection(core)
+    tree = owned_json("integration_decks", "kanki_deck_tree_json", core)
+    default_deck = find_deck(tree, deck_id=1)
+    filtered_deck = find_deck(tree, name="Kanki filtered playback")
+    require(default_deck is not None, "fixture default deck missing")
+    require(filtered_deck is not None, "fixture filtered deck missing")
+    require(default_deck["counts"]["new"] == 5, "default fixture must expose five new cards")
+    require(filtered_deck["counts"]["new"] == 1, "filtered fixture must expose one new card")
+    owned_json("select_default", "kanki_set_current_deck_json", core, 1)
+
+    for rating in range(1, 5):
+        card = owned_json(f"queue_{rating}", "kanki_next_card_json", core)
+        require(card.get("finished") is False, f"rating {rating} had no queued card")
+        card_id = int(card["card_id"])
+        require(card_id not in answered, "scheduler returned an already answered fixture card")
+        require(card.get("type_answer") is True, "typed-answer semantic was not prepared")
+        require(card.get("autoplay") is True, "default deck autoplay semantic was lost")
+        require(
+            card.get("replay_question_audio_on_answer_side") is True,
+            "default answer-side question replay semantic was lost",
+        )
+        require(len(card.get("intervals", [])) == 4, "backend must provide four rating intervals")
+        require("id=\"typeans\"" in card.get("question_html", ""), "question input missing")
+        require("[anki:play:q:0]" in card.get("question_html", ""), "question AV marker missing")
+        question_sources = sound_sources(card.get("question_audio", []))
+        answer_sources = sound_sources(card.get("answer_audio", []))
+        require(len(question_sources) == 1 and len(answer_sources) == 1, "sound AV extraction failed")
+        require(
+            any(tag.get("kind") == "tts" for tag in card.get("question_audio", [])),
+            "question TTS extraction failed",
+        )
+        require(
+            any(tag.get("kind") == "tts" for tag in card.get("answer_audio", [])),
+            "answer TTS extraction failed",
+        )
+        match = re.fullmatch(r"q([1-5])\.mp3", question_sources[0])
+        require(match is not None, f"unexpected question source: {question_sources[0]}")
+        fixture_index = int(match.group(1))
+        require(answer_sources == [f"a{fixture_index}.mp3"], "question/answer AV pairing changed")
+
+        prepared = owned_json(
+            f"prepare_{rating}",
+            "kanki_prepare_answer_json",
+            core,
+            f"Answer {fixture_index}".encode(),
+        )
+        require("<hr id=answer>" in prepared["html"], "answer separator placement changed")
+        require("class=typeGood" in prepared["html"], "typed answer did not compare as correct")
+        require("[anki:play:q:0]" in prepared["html"], "FrontSide question AV marker changed")
+        require("[anki:play:a:0]" in prepared["html"], "answer AV marker missing")
+        require(sound_sources(prepared["question_audio"]) == question_sources, "question AV lost")
+        require(sound_sources(prepared["audio"]) == answer_sources, "answer AV lost")
+        require(prepared.get("autoplay") is True, "prepared answer autoplay semantic changed")
+        require(
+            prepared.get("replay_question_audio_on_answer_side") is True,
+            "prepared answer replay semantic changed",
+        )
+
+        result = owned_json(
+            f"answer_{rating}", "kanki_answer_json", core, rating, 1234 + rating
+        )
+        require(int(result["card_id"]) == card_id, "answer targeted the wrong card")
+        require(int(result["rating"]) == rating, "answer rating changed across the bridge")
+        answered[card_id] = rating
+
+    card = owned_json("queue_bury", "kanki_next_card_json", core)
+    require(card.get("finished") is False, "fixture had no card left to bury")
+    buried_card_id = int(card["card_id"])
+    buried = owned_json("bury", "kanki_bury_current_json", core)
+    require(buried.get("buried") is True, "bury semantic did not report success")
+    require(int(buried["card_id"]) == buried_card_id, "bury targeted the wrong card")
+    owned_json("integration_close", "kanki_close_collection_json", core)
+finally:
+    library.kanki_core_free(core)
+
+with sqlite3.connect(collection_path) as database:
+    revlog = database.execute("select cid, ease from revlog order by id").fetchall()
+    buried_count = database.execute(
+        # Pinned Anki distinguishes sibling/scheduler burial (-2) from the
+        # explicit user burial requested by Kanki (-3).
+        "select count(*) from cards where id = ? and queue = -3", (buried_card_id,)
+    ).fetchone()[0]
+require(len(revlog) == 4, f"expected four revlog entries, found {len(revlog)}")
+require({int(card_id): int(ease) for card_id, ease in revlog} == answered, "revlog ratings differ")
+require(buried_count == 1, "buried card was not persisted with the user-buried queue")
+print(f"persistence={json.dumps({'revlog': len(revlog), 'buried': buried_count}, separators=(',', ':'))}")
+
+reopen_core = new_core()
+filtered_card_id = None
+try:
+    open_collection(reopen_core, "reopen")
+    owned_json("reopen_health", "kanki_health_json", reopen_core)
+    reopen_tree = owned_json("reopen_decks", "kanki_deck_tree_json", reopen_core)
+    filtered_deck = find_deck(reopen_tree, name="Kanki filtered playback")
+    require(filtered_deck is not None, "filtered deck was not persisted")
+    owned_json(
+        "select_filtered",
+        "kanki_set_current_deck_json",
+        reopen_core,
+        int(filtered_deck["id"]),
+    )
+    filtered_card = owned_json("queue_filtered", "kanki_next_card_json", reopen_core)
+    require(filtered_card.get("finished") is False, "filtered deck returned no card")
+    filtered_card_id = int(filtered_card["card_id"])
+    require(
+        sound_sources(filtered_card.get("question_audio", [])) == ["q6.mp3"],
+        "filtered deck returned the wrong source card",
+    )
+    require(filtered_card.get("autoplay") is False, "disabled autoplay was not inherited")
+    require(
+        filtered_card.get("replay_question_audio_on_answer_side") is False,
+        "disabled question replay was not inherited",
+    )
+    filtered_answer = owned_json(
+        "prepare_filtered",
+        "kanki_prepare_answer_json",
+        reopen_core,
+        b"Answer 6",
+    )
+    require(filtered_answer.get("autoplay") is False, "prepared autoplay changed")
+    require(
+        filtered_answer.get("replay_question_audio_on_answer_side") is False,
+        "prepared question replay changed",
+    )
+    owned_json("reopen_close", "kanki_close_collection_json", reopen_core)
+finally:
+    library.kanki_core_free(reopen_core)
+
+require(filtered_card_id is not None, "filtered fixture card was not observed")
+with sqlite3.connect(collection_path) as database:
+    filtered_deck_id, original_deck_id = database.execute(
+        "select did, odid from cards where id = ?", (filtered_card_id,)
+    ).fetchone()
+require(original_deck_id > 0, "filtered fixture card lost its original deck")
+require(filtered_deck_id != original_deck_id, "filtered fixture card did not move decks")
+print(
+    "filtered_playback="
+    + json.dumps(
+        {
+            "autoplay": False,
+            "replay_question": False,
+            "original_deck": original_deck_id,
+            "filtered_deck": filtered_deck_id,
+        },
+        separators=(",", ":"),
+    )
+)
+
+edge_core = new_core()
+observed_edges = set()
+try:
+    open_collection(edge_core, "edge_open")
+    edge_tree = owned_json("edge_decks", "kanki_deck_tree_json", edge_core)
+    edge_deck = find_deck(edge_tree, name="Kanki typed answer edge cases")
+    require(edge_deck is not None, "typed-answer edge deck was not persisted")
+    require(edge_deck["counts"]["new"] == 3, "typed-answer edge deck must expose three cards")
+    owned_json(
+        "select_type_edges",
+        "kanki_set_current_deck_json",
+        edge_core,
+        int(edge_deck["id"]),
+    )
+
+    for edge_index in range(3):
+        card = owned_json(f"edge_queue_{edge_index}", "kanki_next_card_json", edge_core)
+        require(card.get("finished") is False, "typed-answer edge fixture returned no card")
+        question = card.get("question_html", "")
+        raw_answer = card.get("answer_html", "")
+        require("[[type:" in raw_answer, "typed-answer edge answer marker is missing")
+
+        if "data-kanki-fixture=cloze" in question:
+            fixture = "cloze"
+            require(card.get("type_answer") is True, "cloze type state was not prepared")
+            require('id="typeans"' in question, "cloze type input is missing")
+            require("[[type:" not in question, "cloze type marker was not replaced")
+            prepared = owned_json(
+                "edge_prepare_cloze",
+                "kanki_prepare_answer_json",
+                edge_core,
+                b"capital",
+            )
+            require("class=typeGood" in prepared["html"], "cloze answer did not compare correctly")
+            require("[[type:" not in prepared["html"], "cloze answer marker remained")
+        elif "data-kanki-fixture=empty" in question:
+            fixture = "empty"
+            require(card.get("type_answer") is False, "empty field created a type state")
+            require('id="typeans"' not in question, "empty field created an input")
+            require("kanki-type-warning" not in question, "empty field emitted a warning")
+            require("[[type:" not in question, "empty-field type marker remained")
+            prepared = owned_json(
+                "edge_prepare_empty",
+                "kanki_prepare_answer_json",
+                edge_core,
+                b"ignored",
+            )
+            require("data-kanki-answer=empty" in prepared["html"], "empty answer content changed")
+            require("class=typeGood" not in prepared["html"], "empty field was compared")
+            require("[[type:" not in prepared["html"], "empty answer marker remained")
+        elif "data-kanki-fixture=unknown" in question:
+            fixture = "unknown"
+            require(card.get("type_answer") is False, "unknown field created a type state")
+            require('id="typeans"' not in question, "unknown field created an input")
+            require("kanki-type-warning" in question, "unknown field warning is missing")
+            require("MissingField" in question, "unknown field warning lost its field name")
+            require("[[type:" not in question, "unknown-field type marker remained")
+            prepared = owned_json(
+                "edge_prepare_unknown",
+                "kanki_prepare_answer_json",
+                edge_core,
+                b"ignored",
+            )
+            require("data-kanki-answer=unknown" in prepared["html"], "unknown answer content changed")
+            require("class=typeGood" not in prepared["html"], "unknown field was compared")
+            require("[[type:" not in prepared["html"], "unknown answer marker remained")
+        else:
+            raise AssertionError(f"unrecognized typed-answer edge fixture: {question}")
+
+        require(fixture not in observed_edges, f"duplicate typed-answer edge fixture: {fixture}")
+        observed_edges.add(fixture)
+        result = owned_json(
+            f"edge_answer_{fixture}", "kanki_answer_json", edge_core, 3, 1500 + edge_index
+        )
+        require(int(result["rating"]) == 3, f"{fixture} fixture rating changed")
+
+    require(
+        observed_edges == {"cloze", "empty", "unknown"},
+        f"typed-answer edge coverage changed: {sorted(observed_edges)}",
+    )
+    owned_json("edge_close", "kanki_close_collection_json", edge_core)
+finally:
+    library.kanki_core_free(edge_core)
+
+print(
+    "typed_answer_edges="
+    + json.dumps(
+        {"cloze": True, "empty": True, "unknown": True},
+        separators=(",", ":"),
+    )
+)
+
+print("anki bridge integration: pass")

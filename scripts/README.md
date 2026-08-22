@@ -1,0 +1,19 @@
+# Installed Kindle runtime scripts
+
+Scripts here are copied into `/mnt/us/extensions/kanki` and execute on the Kindle after installation.
+
+- `kanki-launch.sh` — package identity/manifest checks and component lifecycle startup.
+- `kanki-sync.sh` — collection-exclusive sync lifecycle.
+- `kanki-operation-lock.sh` — shared PW6 `flock` ownership helper; the
+  reviewer or sync worker inherits the locked descriptor while audio and
+  diagnostics explicitly do not.
+- `kanki-report.sh` — redacted diagnostic bundle creation.
+- `kanki-verify.sh` — read-only manifest, symlink and mixed-install verifier
+  shared by launch, sync and diagnostic reporting.
+
+Developer/build scripts belong in `tools/` instead.
+
+Runtime scripts must preserve the `/mnt/us/anki_data` safety boundary, fail explicitly on missing required components/diagnostics, and refuse mixed package identities rather than silently continuing.
+They must complete verifier preflight before opening runtime logs, inspecting
+locks or copying diagnostic inputs; preflight failures use stderr because the
+runtime paths are not trusted yet.

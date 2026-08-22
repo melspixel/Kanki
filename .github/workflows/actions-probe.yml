@@ -1,0 +1,26 @@
+name: Actions runner probe
+
+on:
+  push:
+    branches: [rewrite-v1]
+    paths:
+      - '.github/workflows/actions-probe.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Runner started
+        run: |
+          echo 'kanki-actions-probe=started'
+          date -u
+          uname -a
+          echo "runner_os=$RUNNER_OS"
+          echo "runner_arch=$RUNNER_ARCH"
