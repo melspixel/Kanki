@@ -1,9 +1,118 @@
-static void stop_audio(App *app) {
-    if (app->audio_pid > 0) {
-        kill(app->audio_pid, SIGTERM);
-        (void)waitpid(app->audio_pid, NULL, 0);
-        app->audio_pid = 0;
+#define AUDIO_STOP_GRACE_MS 1000L
+#define AUDIO_STOP_POLL_MS 50L
+
+static int reap_child_until(pid_t pid, long timeout_ms) {
+    long waited_ms = 0;
+    for (;;) {
+        pid_t result = waitpid(pid, NULL, WNOHANG);
+        if (result == pid) return 1;
+        if (result < 0) {
+            if (errno == ECHILD) return 1;
+            if (errno != EINTR) return 0;
+        }
+        if (waited_ms >= timeout_ms) return 0;
+        {
+            struct timespec delay;
+            delay.tv_sec = 0;
+            delay.tv_nsec = AUDIO_STOP_POLL_MS * 1000000L;
+            while (nanosleep(&delay, &delay) < 0 && errno == EINTR) {}
+        }
+        waited_ms += AUDIO_STOP_POLL_MS;
     }
+}
+
+static void stop_audio(App *app) {
+    pid_t pid;
+    if (!app || app->audio_pid <= 0) return;
+    pid = app->audio_pid;
+    /* Clear ownership before signaling so nested cleanup cannot target a PID
+     * that has already been handed to the reaper below. */
+    app->audio_pid = 0;
+    if (kill(pid, SIGTERM) < 0 && errno != ESRCH) {
+        log_line(app, "audio SIGTERM failed pid=%ld: %s", (long)pid, strerror(errno));
+    }
+    if (reap_child_until(pid, AUDIO_STOP_GRACE_MS)) return;
+
+    /* GStreamer can block in a device/route transition. Never let a wedged
+     * audio helper pin collection shutdown and make a later launcher request
+     * look like a duplicate or crashed instance. */
+    log_line(app, "audio pid=%ld did not stop after %ldms; forcing SIGKILL",
+             (long)pid, AUDIO_STOP_GRACE_MS);
+    if (kill(pid, SIGKILL) < 0 && errno != ESRCH) {
+        log_line(app, "audio SIGKILL failed pid=%ld: %s", (long)pid, strerror(errno));
+    }
+    while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) {}
+}
+
+static int audio_supervision_self_test(void) {
+    App app;
+    int ready_pipe[2];
+    pid_t child;
+    char marker = 0;
+    ssize_t count;
+    struct timespec started;
+    struct timespec finished;
+    long elapsed_ms;
+
+    memset(&app, 0, sizeof(app));
+    app.log = stderr;
+    if (pipe(ready_pipe) != 0) {
+        fprintf(stderr, "audio supervision self-test: pipe failed: %s\n", strerror(errno));
+        return 1;
+    }
+    child = fork();
+    if (child < 0) {
+        fprintf(stderr, "audio supervision self-test: fork failed: %s\n", strerror(errno));
+        close(ready_pipe[0]);
+        close(ready_pipe[1]);
+        return 1;
+    }
+    if (child == 0) {
+        struct sigaction ignore;
+        close(ready_pipe[0]);
+        memset(&ignore, 0, sizeof(ignore));
+        ignore.sa_handler = SIG_IGN;
+        sigemptyset(&ignore.sa_mask);
+        sigaction(SIGTERM, &ignore, NULL);
+        if (write(ready_pipe[1], "R", 1) != 1) _exit(2);
+        close(ready_pipe[1]);
+        for (;;) pause();
+    }
+
+    close(ready_pipe[1]);
+    do {
+        count = read(ready_pipe[0], &marker, 1);
+    } while (count < 0 && errno == EINTR);
+    close(ready_pipe[0]);
+    if (count != 1 || marker != 'R') {
+        kill(child, SIGKILL);
+        while (waitpid(child, NULL, 0) < 0 && errno == EINTR) {}
+        fprintf(stderr, "audio supervision self-test: child readiness failed\n");
+        return 1;
+    }
+
+    app.audio_pid = child;
+    clock_gettime(CLOCK_MONOTONIC, &started);
+    stop_audio(&app);
+    clock_gettime(CLOCK_MONOTONIC, &finished);
+    elapsed_ms = (finished.tv_sec - started.tv_sec) * 1000L +
+                 (finished.tv_nsec - started.tv_nsec) / 1000000L;
+
+    if (app.audio_pid != 0) {
+        fprintf(stderr, "audio supervision self-test: ownership not cleared\n");
+        return 1;
+    }
+    errno = 0;
+    if (waitpid(child, NULL, WNOHANG) != -1 || errno != ECHILD) {
+        fprintf(stderr, "audio supervision self-test: child was not reaped\n");
+        return 1;
+    }
+    if (elapsed_ms < AUDIO_STOP_GRACE_MS || elapsed_ms > 3000L) {
+        fprintf(stderr, "audio supervision self-test: unexpected elapsed=%ldms\n", elapsed_ms);
+        return 1;
+    }
+    printf("kap-app audio supervision self-test: ok elapsed_ms=%ld\n", elapsed_ms);
+    return 0;
 }
 
 static int safe_media_name(const char *name) {
