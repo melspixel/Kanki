@@ -1,0 +1,1 @@
+Disposable one-shot trigger for corrected PW6 5.19.6 firmware transport.
