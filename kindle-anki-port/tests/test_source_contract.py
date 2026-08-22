@@ -50,6 +50,7 @@ def main() -> int:
     reviewer_html = (ROOT / "web" / "reviewer.html").read_text(encoding="utf-8")
     reviewer_js = (ROOT / "web" / "reviewer.js").read_text(encoding="utf-8")
     armhf_gates = (ROOT / "testenv" / "scripts" / "run-armhf-gates.sh").read_text(encoding="utf-8")
+    static_gates = (ROOT / "testenv" / "scripts" / "run-static-gates.sh").read_text(encoding="utf-8")
 
     declared = exported_c_functions(header)
     implemented = rust_exports(port)
@@ -106,6 +107,23 @@ def main() -> int:
             "native host does not require full-content zoom")
     require("prepare_webkit_global(app);" in app,
             "W3C CSS pixels must be enabled before WebView creation")
+
+    # A blocked GStreamer/device-route helper must never keep the reviewer open
+    # indefinitely during cleanup. The production host must bound SIGTERM,
+    # force-kill a wedged helper, reap it, and expose the same path as a host
+    # regression self-test that is wired into the canonical static gate.
+    require("#define AUDIO_STOP_GRACE_MS" in app,
+            "native host has no bounded audio shutdown grace period")
+    require("reap_child_until" in app,
+            "native host has no bounded audio child reaper")
+    require("kill(pid, SIGKILL)" in app,
+            "native host cannot force-stop a wedged audio helper")
+    require("--self-test-audio-supervision" in app,
+            "native host does not expose the audio supervision regression path")
+    require(
+        'run "$BUILD/kap-app-host" --self-test-audio-supervision' in static_gates,
+        "static gates do not execute the audio supervision regression",
+    )
 
     require("--print-sysroot" in armhf_gates,
             "ARMHF gate must derive compatibility from the target sysroot")
