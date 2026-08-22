@@ -1,20 +1,35 @@
 # RankiRefresh
 
-RankiRefresh is a preserved, buildable subproject snapshot of the Kanki/RAnki refresh line used for the Anki 26.08 + Kindle renderer diagnostics experiment.
+RankiRefresh is the maintained Kanki/RAnki refresh subproject for Kindle. It preserves both complete source lineage and the exact compiled packages that were actually tested/shipped.
 
-This directory is intentionally self-contained at the project level rather than a collection of patch fragments.
+## Current preserved release
 
-## Layout
+Latest artifact-backed release:
 
-- `source/` — the complete source tree for the Diagnostic 1 snapshot, preserving its original repository structure (`.github/`, `src/`, `scripts/`, `tools/`, `vendor/`, docs, README, etc.).
-- `dist/` — compiled/installable output materialized from the exact retained GitHub Actions artifacts. It contains both the install ZIP and the unpacked `ranki/` runtime tree.
-- `PROVENANCE.md` — immutable source/build/artifact identities and the Google Drive turnover copies.
-- `scripts/materialize-dist.sh` — reproducible materializer for the compiled Diagnostic 1 result.
+- date: `2026-08-22`
+- embedded build identifier: `93be8aa`
+- package: `releases/2026-08-22/dist/Kanki-release-2026-08-22.zip`
+- SHA-256: `a91dfe8b95d55469b567307951c4981aa5492d9ea763926f4557cd6f9dd7d002`
 
-## Preserved baseline
+See `releases/2026-08-22/` for release notes, the build/process reconstruction, exact binaries, unpacked runtime, recovered embedded renderer source, and provenance boundaries.
 
-The source snapshot is the exact CI merge tree at commit `f178e5e59e001bbf4964760d722fd6b9b10a28f1` (tree `8fb4d25339660e1b82a984f666b2e54d7a45defa`).
+## Project layout
 
-The Anki backend is the KindleHF build from the `anki-26.08-backend` line at commit `b872a164c58aa5955975169944a647fdd678e99e`, with official Anki backend ref `26.08` / commit `666c2c64d4a1772c03948f5b667438da63ddaa76`.
+- `source/` — the complete frozen Diagnostic 1 source tree (`f178e5e...`, tree `8fb4d253...`). This remains the last fully preserved exact Git source lineage.
+- `dist/` — the fully materialized Diagnostic 1 compiled result, including the install ZIP and unpacked runtime.
+- `releases/2026-08-22/` — versioned record of the newer user-built release. It includes a complete `source-base/` tree, artifact-backed recovered source, exact compiled output and engineering notes.
+- `PROVENANCE.md` — Diagnostic 1 provenance.
+- `scripts/` — materializers/reproducibility helpers for preserved artifacts.
 
-Do not treat `source/` as a patch queue. It is a full frozen source snapshot for this baseline. Future RankiRefresh development should branch from this preserved state or add new versioned directories/commits without rewriting provenance.
+## Source provenance policy
+
+Do not rewrite old release history and do not invent source commits.
+
+The 2026-08-22 package reports `build=93be8aa`, but that identifier is not currently resolvable in `melspixel/Kanki` and the uploaded package does not carry the original C source tree. For that release:
+
+- the compiled package is preserved byte-for-byte;
+- `source-base/` carries the complete known source lineage;
+- readable scripts plus embedded renderer CSS/JavaScript are recovered exactly into `recovered-source/`;
+- `SOURCE_STATUS.md` records what is and is not exact.
+
+If the missing original source becomes available later, add it as a new exact-source record rather than replacing the artifact-backed release history.
