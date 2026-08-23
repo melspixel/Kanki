@@ -10,7 +10,7 @@ BRIDGE = (ROOT / "core/src/services_bridge.rs").read_text(encoding="utf-8")
 HEADER = (ROOT / "core/kap_core.h").read_text(encoding="utf-8")
 
 EXPECTED_BRIDGE = {
-    "open_collection", "close_collection", "latest_progress", "deck_tree",
+    "open_collection", "close_collection", "upgrade_scheduler", "latest_progress", "deck_tree",
     "set_current_deck", "set_deck_collapsed", "get_note", "get_notetype",
     "extract_av_tags", "render_existing_card",
     "compare_answer", "extract_cloze_for_typing", "get_queued_cards",

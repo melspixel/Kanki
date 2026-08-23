@@ -8,7 +8,7 @@
 
 use crate::backend::Backend;
 use crate::error::Result;
-use crate::services::{BackendCollectionService, BackendSyncService};
+use crate::services::{BackendCollectionService, BackendSchedulerService, BackendSyncService};
 
 pub(crate) fn open_collection(
     backend: &Backend,
@@ -22,6 +22,10 @@ pub(crate) fn close_collection(
     input: anki_proto::collection::CloseCollectionRequest,
 ) -> Result<()> {
     backend.close_collection(input)
+}
+
+pub(crate) fn upgrade_scheduler(backend: &Backend) -> Result<()> {
+    backend.upgrade_scheduler()
 }
 
 pub(crate) fn latest_progress(

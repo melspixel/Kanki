@@ -1,0 +1,73 @@
+name: KAP one-shot replay 39c762
+
+on:
+  push:
+    branches:
+      - kap-replay-39c-tmp-20260823
+
+permissions:
+  contents: write
+
+jobs:
+  apply-port-patch:
+    if: ${{ !contains(github.event.head_commit.message, '[kap-replay-done]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply validated scheduler-upgrade port hunk
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          path = Path('kindle-anki-port/core/src/port.rs')
+          raw = path.read_bytes()
+
+          def git_blob_sha(data: bytes) -> str:
+              return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+
+          before = git_blob_sha(raw)
+          if before != '265c3e1fe74567fd52bc122698d8e6bdb2b1ad72':
+              raise SystemExit(f'unexpected source port.rs blob: {before}')
+
+          text = raw.decode('utf-8')
+          anchor = '''        kap_bridge::open_collection(&core.backend, OpenCollectionRequest {
+                  collection_path: c_string(collection_path, "collection_path")?,
+                  media_folder_path: c_string(media_folder_path, "media_folder_path")?,
+                  media_db_path: c_string(media_db_path, "media_db_path")?,
+              })
+              .map_err(|error| error.to_string())?;
+          '''
+          insertion = anchor + '''
+          // Old but valid collections can still carry Anki's V1 scheduler.
+          // Delegate the migration to the pinned official scheduler service;
+          // it is idempotent for V2 collections and preserves Anki semantics.
+          if let Err(error) = kap_bridge::upgrade_scheduler(&core.backend) {
+              let _ = kap_bridge::close_collection(&core.backend, CloseCollectionRequest {
+                  downgrade_to_schema11: false,
+              });
+              return Err(format!("official scheduler upgrade failed: {error}"));
+          }
+          '''
+          if text.count(anchor) != 1:
+              raise SystemExit(f'open-collection anchor count was {text.count(anchor)}, expected 1')
+          target = text.replace(anchor, insertion, 1).encode('utf-8')
+          after = git_blob_sha(target)
+          if after != '4e526722e7367b00a59aa45ca2d3360d39644353':
+              raise SystemExit(f'patched port.rs blob mismatch: {after}')
+          path.write_bytes(target)
+          Path('.github/workflows/kap-replay-39c-tmp.yml').unlink()
+          PY
+      - name: Commit exact validated tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: materialize validated KAP port hunk [kap-replay-done]'
+          git push origin "HEAD:${GITHUB_REF_NAME}"

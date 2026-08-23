@@ -7,7 +7,7 @@ import json
 import subprocess
 import tempfile
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -73,17 +73,70 @@ class KapLibrary:
         return int(core)
 
 
+def safe_media_filename(value: str) -> bool:
+    path = PurePosixPath(value)
+    return bool(value) and not path.is_absolute() and ".." not in path.parts and "\\" not in value
+
+
 def prepare_collection(apkg: Path, destination: Path) -> tuple[Path, Path, Path]:
+    """Extract a real APKG into the collection/media layout expected by rslib.
+
+    Current Anki packages store a zstd-compressed ``collection.anki21b`` while
+    older, still-valid packages contain a plain ``collection.anki2``.  Release
+    integration coverage deliberately accepts both formats so it can exercise
+    real-world decks instead of only packages exported by the newest desktop.
+    """
     media = destination / "collection.media"
     media.mkdir(parents=True)
     compressed = destination / "collection.anki21b"
     collection = destination / "collection.anki2"
     with zipfile.ZipFile(apkg) as archive:
-        compressed.write_bytes(archive.read("collection.anki21b"))
-    subprocess.run(
-        ["zstd", "-q", "-d", "-f", str(compressed), "-o", str(collection)],
-        check=True,
-    )
+        names = set(archive.namelist())
+        if "collection.anki21b" in names:
+            compressed.write_bytes(archive.read("collection.anki21b"))
+            subprocess.run(
+                ["zstd", "-q", "-d", "-f", str(compressed), "-o", str(collection)],
+                check=True,
+            )
+        elif "collection.anki2" in names:
+            collection.write_bytes(archive.read("collection.anki2"))
+        elif "collection.anki21" in names:
+            collection.write_bytes(archive.read("collection.anki21"))
+        else:
+            raise AssertionError(f"APKG has no supported collection payload: {apkg.name}")
+
+        if "media" in names:
+            media_manifest = archive.read("media")
+            modern_binary_manifest = media_manifest.startswith(b"\x28\xb5\x2f\xfd")
+            if modern_binary_manifest:
+                media_manifest = subprocess.run(
+                    ["zstd", "-q", "-d", "-c"],
+                    input=media_manifest,
+                    check=True,
+                    capture_output=True,
+                ).stdout
+            # Legacy APKGs use a JSON index mapping numeric members to media
+            # names. Current packages may use Anki's zstd-compressed protobuf
+            # media manifest instead; rslib owns that format, and this reviewer
+            # lifecycle test does not need to duplicate its parser. Extract
+            # media when the manifest is JSON, otherwise leave the temporary
+            # media directory empty while still exercising the real AV tags.
+            try:
+                mapping = json.loads(media_manifest.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                if not modern_binary_manifest:
+                    raise AssertionError(f"invalid legacy APKG media map: {apkg.name}")
+                mapping = {}
+            if not isinstance(mapping, dict):
+                raise AssertionError(f"APKG media map is not an object: {apkg.name}")
+            for member, filename in mapping.items():
+                if member not in names:
+                    continue
+                if not isinstance(filename, str) or not safe_media_filename(filename):
+                    raise AssertionError(f"unsafe APKG media filename: {filename!r}")
+                target = media / filename
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(archive.read(member))
     return collection, media, destination / "media.db2"
 
 

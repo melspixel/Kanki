@@ -64,6 +64,7 @@ def main() -> int:
     required_bridge = {
         "open_collection",
         "close_collection",
+        "upgrade_scheduler",
         "latest_progress",
         "deck_tree",
         "set_current_deck",
@@ -87,6 +88,11 @@ def main() -> int:
     bridge_functions = set(re.findall(r"pub\(crate\)\s+fn\s+([a-z0-9_]+)\s*\(", bridge))
     require(required_bridge <= bridge_functions, f"semantic bridge missing {sorted(required_bridge - bridge_functions)}")
     require("BackendCollectionService" in bridge, "generated collection trait is not imported in bridge")
+    require("BackendSchedulerService" in bridge, "generated scheduler trait is not imported in bridge")
+    require("kap_bridge::upgrade_scheduler(&core.backend)" in port,
+            "collection open must delegate V1 scheduler migration to official Anki")
+    require("official scheduler upgrade failed" in port,
+            "scheduler-upgrade failure must be surfaced explicitly")
 
     require("crate::services::kap_bridge" in port, "semantic port bypasses the bridge module")
     require("run_backend_" not in port, "port must not call generated numeric dispatch")
