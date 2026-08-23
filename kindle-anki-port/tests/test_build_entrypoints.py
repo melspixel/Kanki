@@ -63,6 +63,17 @@ def main() -> int:
     # worktree with locally repaired modes.
     require(
         static_gates,
+        'run env PROJECT_ROOT="$ROOT" CC="$CC" sh "$ROOT/testenv/tests/audio/test-audio.sh"',
+        "static gate audio fixture environment",
+    )
+    forbid(
+        static_gates,
+        'run sh "$ROOT/testenv/tests/audio/test-audio.sh"',
+        "static gate audio fixture environment",
+    )
+
+    require(
+        static_gates,
         'run sh "$ROOT/tests/test_sync_wrapper_signal.sh"',
         "static gate shell portability",
     )

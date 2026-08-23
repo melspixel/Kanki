@@ -98,7 +98,7 @@ run "$CC" -O2 -std=c99 -Wall -Wextra -Werror -I"$ROOT/core" \
 run "$BUILD/kap-app-host" --self-test-audio-supervision
 run "$BUILD/kap-audio-host" --self-test
 run "$BUILD/kap-sync-host" --self-test
-run sh "$ROOT/testenv/tests/audio/test-audio.sh"
+run env PROJECT_ROOT="$ROOT" CC="$CC" sh "$ROOT/testenv/tests/audio/test-audio.sh"
 run env PROJECT_ROOT="$ROOT" CC="$CC" sh "$ROOT/testenv/tests/lifecycle/test-launcher-integration.sh"
 run "$ROOT/tests/test_lifecycle.sh"
 run sh "$ROOT/tests/test_sync_wrapper_signal.sh"
