@@ -1,56 +1,29 @@
-# Kanki
+# Kanki — independent Kindle Anki port branch
 
-Kindle-oriented compatibility layer for [crazy-electron/ranki](https://github.com/crazy-electron/ranki).
+This branch contains two code histories because it was created from the original Kanki repository without deleting the existing main-branch project. The **active independent desktop-Anki → Kindle PW6 port** lives under:
 
-Kanki keeps Ranki's real Anki backend and scheduling/sync behavior, but replaces the fragile Kindle-specific browser assumptions around it. The goal is that an ordinary Anki deck should render acceptably on Kindle without adding a deck-specific `.kindle` stylesheet.
+```text
+kindle-anki-port/
+```
 
-## Architecture
+Start here:
 
-The upstream Ranki ARM binaries are left unchanged. Kanki adds three compatibility layers:
+- `kindle-anki-port/HANDOFF.md` — authoritative continuation and release state;
+- `kindle-anki-port/PROGRESS.md` — current gate matrix;
+- `kindle-anki-port/docs/VM_BUILD_20260821.md` — validated VM build evidence;
+- `kindle-anki-port/docs/TEST_ENVIRONMENT.md` — host/ARMHF/QEMU/device test design;
+- `kindle-anki-port/CODEX_COORDINATION.md` — local-host / hardware collaboration boundary.
 
-1. `libkanki-webkit-<arch>.so`: an `LD_PRELOAD` WebKit/GTK shim. It injects a small reviewer shell and ES5 compatibility runtime, caps Ranki's excessive WebView zoom, and suppresses Ranki's unconditional deck-tree `expand_all()` call.
-2. `kanki-audio-<arch>`: a loopback-only helper that receives audio requests, resolves local or supported remote media, decodes it with miniaudio, and invokes the Kindle-native GStreamer player.
-3. `kanki-gst-play-armhf`: a Kindle-native GStreamer/mixersink bridge that routes PCM through Amazon's audio stack to Bluetooth headphones.
+## Independent-port architecture
 
-The launcher redirects Ranki's stdout/stderr to `ranki.log` instead of letting GTK/GLib/WebKit diagnostics leak onto the e-ink display.
+The port pins official Anki 26.08.1 (`e5a6fbe27fdd4d57d5f712191b4a753032e57853`) and keeps Anki's Rust backend authoritative for collection, scheduling, rendering, typed-answer comparison, media and sync. A narrow named `kap_*` C ABI connects that backend to a Kindle GTK2/WebKitGTK1 host, persistent ES5 reviewer, native audio worker and native sync worker.
 
-## Reviewer compatibility
+The independent port **does not use Ranki, `rewrite-v1`, `LD_PRELOAD`, or historical card-template patch runtimes as production dependencies**.
 
-The generic reviewer layer is modeled on current desktop Anki rather than on any particular vocabulary deck. In particular it:
+The root-level `src/`, `scripts/`, `tools/`, `docs/` and legacy `Build Kanki package` workflow belong to the older compatibility-layer project retained from the repository's main history. They are not inputs to `Kindle-Anki-Port-PW6-armhf.zip`. On this branch the legacy workflow is excluded from pushes so it cannot be mistaken for the independent-port release build.
 
-- preserves the deck's own font families, relative font sizes, colors, margins, and semantic hierarchy;
-- mirrors Anki's minimal reviewer defaults for body margins, image bounds, lists, preformatted text, and 40 px replay controls;
-- exposes `mobile`, `linux`, and `kindle` platform classes on the document root, so existing mobile-specific deck CSS can be reused;
-- applies the `card`, `isLin`, and `kindle` classes to the body and removes Ranki's extra `.card.kindle` wrapper to make the DOM closer to Anki's reviewer structure;
-- resolves common CSS custom properties (`var(--x)`) before Kindle's old WebKit parses the card, including simple `calc()` expressions used for sizes and spacing;
-- avoids very-wide desktop-only `min-width` media rules on Kindle;
-- provides a small flex-gap fallback for old WebKit;
-- converts raw `[sound:file]` references into Anki-style replay buttons and provides a `window.Audio` fallback for templates that call `new Audio(...).play()`.
+## Build entry point
 
-This is a compatibility layer, not a full Chromium replacement. Modern JavaScript-heavy templates can still contain features too new for Kindle's WebKit, but their core HTML/CSS should degrade much more cleanly.
+The independent port is built from ordinary source files in `kindle-anki-port/`. `.github/workflows/kindle-anki-port.yml` is the reproducibility definition; iterative development builds run in the VM while GitHub Actions quota is unavailable.
 
-## Deck tree
-
-Upstream Ranki currently calls `view.expand_all()` every time the deck list is populated. Kanki suppresses that blanket expansion, so nested decks start collapsed and can be expanded manually. This keeps large hierarchical collections usable on a 7-inch e-ink screen.
-
-## Audio
-
-Local MP3/FLAC/WAV media is supported. Remote pronunciation URLs can be fetched when the Kindle firmware provides `curl`, `wget`, or BusyBox `wget`. Audio is decoded to a standard PCM WAV and handed to the native GStreamer/mixersink bridge. Only one pronunciation is allowed to play at a time.
-
-## Installation
-
-1. Back up `/mnt/us/anki_data` if desired. Kanki does not intentionally replace that directory.
-2. Remove the old `/mnt/us/extensions/ranki/` directory and `/mnt/us/documents/shortcut_ranki.sh` shortcut.
-3. Extract the built `kanki.zip` so that its `ranki/` directory becomes `/mnt/us/extensions/ranki/`.
-4. Optionally copy `/mnt/us/extensions/ranki/shortcut_ranki.sh` to `/mnt/us/documents/` for a library shortcut. KUAL can also launch the extension directly.
-5. Connect Bluetooth headphones in the stock Kindle UI before launching Ranki.
-
-If something fails, inspect `/mnt/us/extensions/ranki/ranki.log`.
-
-## Safety
-
-The audio server listens only on `127.0.0.1`; local media access remains constrained to the configured collection media directory. Release packages are assembled from a fresh upstream Ranki release, so a local AnkiWeb token is never baked into the build artifact.
-
-## Build
-
-GitHub Actions validates the ES5 compatibility runtime, embeds the reviewer CSS/JS into a libc-independent ARM preload library, cross-compiles the audio helpers, builds the Kindle-native GStreamer bridge with koxtoolchain, downloads the latest upstream `ranki.zip`, and emits a ready-to-test package plus SHA-256 checksum.
+Do not treat a locally produced ZIP as a release. Release completion is recorded only in `kindle-anki-port/HANDOFF.md` after canonical-source rebuild, ARMHF/ABI/package gates, exact-rootfs QEMU smoke, durable GitHub artifact persistence, and separate PW6 hardware acceptance.

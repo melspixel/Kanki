@@ -1,0 +1,11 @@
+test_alternate_manifest_bytes_are_rejected (__main__.QemuProvenanceTest.test_alternate_manifest_bytes_are_rejected) ... ok
+test_dirty_project_tree_is_rejected (__main__.QemuProvenanceTest.test_dirty_project_tree_is_rejected) ... ok
+test_matching_release_provenance_passes_and_is_recorded (__main__.QemuProvenanceTest.test_matching_release_provenance_passes_and_is_recorded) ... ok
+test_nonpassing_armhf_gate_is_rejected (__main__.QemuProvenanceTest.test_nonpassing_armhf_gate_is_rejected) ... ok
+test_stale_armhf_source_commit_is_rejected (__main__.QemuProvenanceTest.test_stale_armhf_source_commit_is_rejected) ... ok
+test_wrong_armhf_anki_commit_is_rejected (__main__.QemuProvenanceTest.test_wrong_armhf_anki_commit_is_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 4.899s
+
+OK

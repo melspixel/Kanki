@@ -1,0 +1,32 @@
+Kindle Anki Port package/QEMU binding targeted evidence — 2026-08-22 UTC
+
+syntax/package-test compile:
+  bash -n /tmp/qemu-new.sh -> PASS
+  bash -n /tmp/package-new.sh -> PASS
+  python3 -m py_compile /tmp/test_package_reproducibility_new.py -> PASS
+
+synthetic package fixture:
+  matching ARMHF + matching QEMU provenance -> rc=0
+  archive SHA-256 = 1d518583b1bae606885be4873bc3fa1528f826ac0ab77fd9453d8b676e5fa067
+  release sidecars include QEMU-SMOKE.txt, QEMU-PROVENANCE.txt,
+  rootfs-verification.txt, backend-smoke.txt, audio-self-test.txt,
+  sync-self-test.txt, PACKAGE-PROVENANCE.txt
+
+negative package provenance fixtures:
+  stale QEMU source_commit -> rc=66
+    QEMU source_commit mismatch: ffffffffffffffffffffffffffffffffffffffff != 0123456789abcdef0123456789abcdef01234567
+  stale QEMU kap-app hash -> rc=66
+    QEMU artifact hash mismatch for kap-app: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff != 5c499fbf6a6c435a18b19b8fe4756193299c88fa290b657078e6d58a50490228
+  QEMU-SMOKE.txt = FAIL -> rc=66
+    QEMU-SMOKE.txt does not record PASS
+
+synthetic QEMU fixture:
+  matching clean source + ARMHF + canonical manifest -> rc=0
+  provenance contains rootfs_manifest_id and rootfs_verified=true
+  provenance contains no rootfs absolute path -> PASS
+  QEMU-PROVENANCE.txt SHA-256 = 20d2980edd56c20f0763532e1f4b26ab4afc5a6fe7827b17a9fdc1a79625a84f
+
+network materialization probe:
+  git clone --branch kindle-anki-port --single-branch https://github.com/melspixel/Kanki.git /tmp/Kanki
+  rc=128
+  fatal: unable to access 'https://github.com/melspixel/Kanki.git/': Could not resolve host: github.com

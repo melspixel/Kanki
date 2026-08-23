@@ -1,0 +1,47 @@
+Kindle Anki Port release-policy documentation alignment — 2026-08-22 UTC
+
+Follow-on audit after QEMU-bound packaging found two documentation contracts still
+encoding the obsolete package-before-QEMU order:
+
+1. docs/TEST_ENVIRONMENT.md
+   old L1 text included "unpack and audit the installation archive" while L2 was
+   exact-rootfs QEMU. That implied release packaging could occur before L2.
+
+2. testenv/README.md
+   old numbered order was:
+     3 run-armhf-gates.sh
+     4 package-and-audit.sh
+     5 run-qemu-smoke.sh
+   This directly contradicted the production package gate.
+
+Corrections:
+  docs/TEST_ENVIRONMENT.md now defines:
+    L0 host/deterministic
+    L1 ARMHF/ABI
+    L2 exact PW6 rootfs QEMU
+    L2.5 QEMU-bound package/privacy/reproducibility
+    L5 physical PW6 hardware acceptance
+
+  testenv/README.md now documents:
+    static -> host backend -> five real APKGs -> ARMHF -> exact-rootfs QEMU
+    -> package -> durable GitHub artifacts -> separate PW6 HIL
+
+  tests/test_build_entrypoints.py now locks both documentation contracts to the
+  executable QEMU-before-package ordering so future policy drift is caught by
+  run-static-gates.sh.
+
+Current blobs:
+  docs/TEST_ENVIRONMENT.md          86bf0ce922844fcbb74c9af4996d7dbf61635e80
+  testenv/README.md                 979e45d878a3255f7ea429b17dec0dd36050f2d9
+  tests/test_build_entrypoints.py   2f562fe953202736bb75a870cc6d7d188a5ab6d5
+
+Commits:
+  226a91a4432f9209cc201358a1cd59f9d963528a docs: enforce QEMU-before-package test layering
+  e47a4493b2360f0eb6eb4973eee902a25330175d test: lock QEMU-before-package test layering
+  79a92947096b9488003f9eb3016fd40c2bf8b2bd docs: fix testenv gate order to QEMU before package
+  d6587acd129c0af9b10eec64d4353fd3b10bd9c7 test: keep testenv docs on QEMU-before-package order
+
+Validation caveat:
+  This is a source-policy audit checkpoint. A full current-head run-static-gates
+  execution is not claimed because the direct execution container still cannot
+  materialize the complete current GitHub source tree through normal Git DNS.

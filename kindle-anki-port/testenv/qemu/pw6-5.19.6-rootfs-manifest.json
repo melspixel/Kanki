@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "device": "Kindle PaperWhite 6 (2024)",
+  "platform": "Bellatrix4",
+  "firmware": {
+    "version": "5.19.6",
+    "version_code": "4832160042",
+    "public_url": "https://s3.amazonaws.com/firmwaredownloads/update_kindle_all_new_paperwhite_12th_5.19.6.bin",
+    "md5": "697aeb33c02f46b9b0911ab05c28b06d",
+    "sha256": "72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c"
+  },
+  "rootfs_image": {
+    "sha256": "b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa"
+  },
+  "runtime": {
+    "glibc_max_symbol_version": "2.35",
+    "files": {
+      "/lib/ld-linux-armhf.so.3": "a089ca56fba8e33fb8d87b791ac9f81c9065d0ae9d9d0ffb899037f7ed284701",
+      "/lib/libc.so.6": "5a34d04c0392bf6b69b361ffab68b8c2a064b444a4c6c58891a3607bd4593431",
+      "/usr/lib/libwebkitgtk-1.0.so.0.7.2": "6bbe5a102d7500deb1ce109f3df22360b4b50f8d9d52da2fcf462700655a6810"
+    }
+  },
+  "provenance": {
+    "oracle_generated_at_utc": "2026-08-20T18:53:30Z",
+    "oracle_firmware_package": "SP01/FB03 Recovery V2, Target OTA 4832160042",
+    "notes": "Firmware/rootfs bytes are external build inputs and are not committed. Hashes were recorded from the checksum-verified extraction oracle. Public URL/MD5 are independently catalogued by FTVDB."
+  }
+}

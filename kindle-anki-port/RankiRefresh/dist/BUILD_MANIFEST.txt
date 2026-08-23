@@ -1,0 +1,27 @@
+RankiRefresh Diagnostic 1 compiled-materialization manifest
+generated_utc=2026-08-22T07:14:56Z
+source_ci_merge=f178e5e59e001bbf4964760d722fd6b9b10a28f1
+source_tree=8fb4d25339660e1b82a984f666b2e54d7a45defa
+renderer_artifact_id=9419164966
+backend_artifact_id=9418086875
+anki_ref=26.08
+anki_commit=666c2c64d4a1772c03948f5b667438da63ddaa76
+
+134990892363334066f9919d9d4f89f2c30de6bca65bafdfe230fc274da9ae1c  /home/runner/work/Kanki/Kanki/kindle-anki-port/RankiRefresh/dist/Kanki-Anki26-diagnostics1.zip
+
+DIAGNOSTICS1_PROVENANCE.txt	465 bytes
+KANKI_BUILD.txt	96 bytes
+config.ini	71 bytes
+config.xml	282 bytes
+kanki-audio-armel	927352 bytes
+kanki-audio-armhf	669312 bytes
+kanki-gst-play-armhf	22632 bytes
+libanki-26.08-armhf.so	34965132 bytes
+libkanki-backend-redirect-armhf.so	4320 bytes
+libkanki-webkit-armel.so	38012 bytes
+libkanki-webkit-armhf.so	36800 bytes
+menu.json	334 bytes
+ranki-armel	27349404 bytes
+ranki-armhf	25913540 bytes
+ranki.sh	5369 bytes
+shortcut_ranki.sh	10915 bytes

@@ -1,0 +1,7 @@
+{
+  "project": "Kindle Anki Port",
+  "upstream": "https://github.com/ankitects/anki",
+  "commit": "e5a6fbe27fdd4d57d5f712191b4a753032e57853",
+  "selection": "official desktop Anki source baseline",
+  "policy": "Reviewer semantics are traced to this source; no prior Kindle implementation is imported."
+}

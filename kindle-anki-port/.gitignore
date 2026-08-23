@@ -1,0 +1,10 @@
+/build/
+/dist/
+/release/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.pid
+*.status
+.DS_Store

@@ -1,0 +1,17 @@
+{
+  "espeak_ng": {
+    "repository": "https://github.com/espeak-ng/espeak-ng",
+    "tag": "1.52.0",
+    "purpose": "offline TTS fallback for Anki TTS tags"
+  },
+  "kindle_toolchain": {
+    "repository": "https://github.com/KindleModding/koxtoolchain",
+    "release": "2025.05",
+    "archive": "kindlehf.tar.gz"
+  },
+  "audio_runtime": {
+    "backend": "Kindle GStreamer 0.10 via dynamic loading",
+    "sink": "mixersink",
+    "policy": "no bundled miniaudio runtime"
+  }
+}

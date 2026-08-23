@@ -1,0 +1,71 @@
+Kindle Anki Port release-entrypoint audit — 2026-08-22 UTC
+
+Starting release-policy state:
+  package-and-audit.sh requires QEMU=<fresh run-qemu-smoke output>
+  exact-rootfs QEMU must match source commit, Anki pin, canonical PW6 manifest,
+  and the exact four ARMHF binary hashes.
+
+Stale entrypoints found after package/QEMU binding was introduced:
+
+1. kindle-anki-port/Makefile
+   old package target passed PROJECT/ARMHF/VERSION/BUILD_COMMIT only.
+   It did not pass QEMU and therefore no longer matched the production package contract.
+
+2. .github/workflows/kindle-anki-port.yml
+   old workflow ran package-and-audit.sh immediately after ARMHF and QEMU host sanity.
+   It had no checksum-verified PW6 rootfs and no exact-rootfs QEMU evidence.
+
+3. kindle-anki-port/testenv/scripts/vm-advance.py
+   old driver ran package-audit before its optional qemu-exact-rootfs step.
+   With --rootfs absent it could still construct a final-looking installer checkpoint.
+
+Corrections persisted:
+
+  Makefile
+    QEMU defaults to build/qemu.
+    qemu-smoke writes OUT=$QEMU and receives BUILD_COMMIT.
+    package requires QEMU directory and passes QEMU to package-and-audit.sh.
+
+  GitHub workflow
+    public CI no longer runs exact-rootfs QEMU or package-and-audit.sh.
+    it emits an explicit NOT-A-RELEASE host/ARMHF checkpoint only.
+    final ZIP is intentionally absent because proprietary PW6 rootfs bytes are not in GitHub.
+
+  vm-advance.py
+    no rootfs -> armhf-checkpoint-passed, final package withheld.
+    rootfs present -> exact-rootfs QEMU executes before package.
+    fewer than five real APKGs or no typed-APKG -> qemu-checkpoint-passed,
+      final package withheld.
+    only after semantic + ARMHF + exact-rootfs QEMU gates pass does the driver
+      invoke package-and-audit.sh with QEMU=<qemu-exact-rootfs>.
+
+  Contract tests
+    test_build_entrypoints.py checks Makefile QEMU wiring and forbids a public-CI
+      package invocation while requiring NOT-A-RELEASE checkpoint text.
+    test_vm_advance_contract.py checks exact qemu-exact-rootfs gate ordering,
+      rootfs-absent ARMHF checkpoint behavior, semantic guard, and QEMU handoff.
+
+Current blobs at this audit checkpoint:
+  Makefile                                      cd6c77d55f3f1cda1f5edcaeeaf3a854e1d1ec68
+  .github/workflows/kindle-anki-port.yml       a3f80ec5b598c4a8de43e68d85b31fcc6622eaba
+  tests/test_build_entrypoints.py              3d827b50e280d3cfc2b78e4c1880d8e79513f90f
+  testenv/scripts/vm-advance.py                0bce7c09adf5d65df33bd4f48163dcb645224b48
+  tests/test_vm_advance_contract.py            3c52f8de67cbbc267ab59fd70a2d837b6adb39d3
+  VM_RUNBOOK.md                                 b00d067e33245ab971c46378d6a81760a0225202
+
+GitHub Actions observation for head 68d0541d5ff2653f393bdbfe0ac8e451db817fea:
+  workflow run 32531916780 (Kindle Anki Port build checkpoint)
+  conclusion=failure
+  job 96925457873 had zero recorded steps
+  decoded job logs were unavailable (BlobNotFound)
+  This is not counted as a code/test failure or a green validation result.
+
+Direct execution-container limitation remains:
+  ordinary git clone/fetch of github.com fails at DNS resolution (rc=128).
+  Therefore a complete current-head run-static-gates/official-Anki/ARMHF build
+  is NOT claimed by this audit.
+
+Release implication:
+  The old ZIP SHA-256
+    9449bdcfadd961827af3527bb05e2a8069afe4f44a15081c9316e78be7443225
+  remains stale and cannot satisfy the current QEMU-bound release chain.

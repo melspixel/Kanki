@@ -1,0 +1,82 @@
+checkpoint=current-head-lifecycle-sync
+source_commit=0ad4c67e8e814a01bb9bd0acb28cabc3cf931784
+cc=cc (Debian 14.2.0-19) 14.2.0
+python=Python 3.13.5
+shell=/bin/sh
+
+[git-object-identity]
+scripts/launch.sh                    blob=34ee8d5f106e31eb5e78509e1e6054c993bf9711 mode=100755
+scripts/sync.sh                      blob=7381fca8bdef86c57c580a367f5647173f76c892 mode=100755
+core/kap_core.h                      blob=3023e5c5350ee4adadbd84aeced14736867627f2 mode=100644
+native/sync.c                        blob=ec6c109f8d331c31aae403b45f9ff09f83272fa8 mode=100644
+tests/fake_app.c                     blob=3964cbfbe639ea218fe8b538bc734ebbeb32167b mode=100644
+tests/fake_sync_backend.c            blob=4ea347196aaa6ead68283867fded7fec21dc536c mode=100644
+tests/test_lifecycle.sh              blob=37496146959fbcacaed220f9e36624bf1994c592
+tests/test_sync_wrapper_signal.sh    blob=70d07fe4ad479336941c913463c55ff22e15ddc1
+tests/test_zombie_operation_lock.sh  blob=54e3a7c899a69c2fb558b711439b6cb98083284f
+tests/test_sync_worker.sh             blob=17d4874a12a758f1fac1977a8e3ac20fb41fc95d
+
+[materialization-audit]
+The first partial-tree run stopped before sync-wrapper logic because scripts/sync.sh
+had been materialized without its Git mode=100755 executable bit:
+  tests/test_sync_wrapper_signal.sh: .../scripts/sync.sh: Permission denied
+The repository tree was queried and confirmed launch.sh and sync.sh are both 100755.
+Restoring those exact modes made lifecycle, wrapper-signal and zombie-lock pass.
+
+The next partial-tree run stopped before sync-worker logic because core/kap_core.h,
+then native/sync.c, were absent from the transient local subset. Both were restored
+from their exact Git blobs and independently verified with git hash-object. No source
+or test expectation was changed to address either materialization defect.
+
+[final-execution]
+===== sh_syntax =====
++ sh -n scripts/launch.sh scripts/sync.sh tests/test_lifecycle.sh tests/test_sync_wrapper_signal.sh tests/test_zombie_operation_lock.sh tests/test_sync_worker.sh
+exit=0
+
+===== lifecycle =====
++ sh tests/test_lifecycle.sh
+test_lifecycle: ok
+exit=0
+
+===== sync_wrapper_signal =====
++ sh tests/test_sync_wrapper_signal.sh
+Killed
+Killed
+test_sync_wrapper_signal: ok
+exit=0
+
+===== zombie_operation_lock =====
++ sh tests/test_zombie_operation_lock.sh
+test_zombie_operation_lock: ok
+exit=0
+
+===== sync_worker =====
++ sh tests/test_sync_worker.sh
+test_sync_worker: ok
+exit=0
+
+combined_exit=0
+
+[coverage]
+- duplicate launcher PID-publication race
+- existing-instance raise path
+- launch refusal while sync owns collection lock
+- stale/dead lock recovery
+- launcher TERM forwarding and PID/lock cleanup
+- sync wrapper TERM forwarding
+- sync wrapper SIGKILL with worker lock ownership retained
+- pre-exec publication-window SIGKILL: worker must not touch collection
+- zombie operation-lock owner detection via /proc state
+- sync required/full-sync/error/timeout/status mappings
+- media polling and abort -> close -> core_free shutdown order
+- missing/empty hkey and credential non-disclosure
+- conflicting full-sync direction rejection
+
+[final-log-sha256]
+683ee3028487200a648dfdd9f7213531b5bcdf7603d9675262804da4268d8be9  build/current-head-lifecycle-final/run.log
+1c4878b616faf4715b4d75ed8a7efc95ef4bad37db01f57e52cd92d5c4d23aec  lifecycle.log
+f14fdb3e66e6cd8886e4176fb940361e4aa922382e12b018f1bb941faaa7a4ff  sync_wrapper_signal.log
+e4cf1024e81756ccb83ef2ed283adc1ffcf349dd834b2738ec7c6b8c99e1b813  zombie_operation_lock.log
+aee2db51914391614f1175eace58eb3cd731f2f620094c27194c36477b671dea  sync_worker.log
+
+result=PASS

@@ -1,0 +1,1 @@
+Software VM gates and physical PW6 acceptance are separate. This RC must remain marked hardware-pending until e-ink, touch, IME, framework leave/re-enter, Bluetooth audio, suspend/resume and repeated relaunch tests are recorded from the actual device.

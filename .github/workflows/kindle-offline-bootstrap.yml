@@ -1,0 +1,225 @@
+name: One-shot Kindle Anki Port offline bootstrap
+
+# Network transport only. The persistent VM remains the primary compiler.
+# This workflow runs when this file changes in the existing draft PR, emits
+# pinned offline inputs, and then remains dormant.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/kindle-offline-bootstrap.yml'
+
+permissions:
+  contents: read
+
+env:
+  ANKI_COMMIT: e5a6fbe27fdd4d57d5f712191b4a753032e57853
+  RUST_TOOLCHAIN: '1.92.0'
+  RUST_TARGET: armv7-unknown-linux-gnueabihf
+  KOX_TAG: '2025.05'
+  KOX_TRIPLE: arm-kindlehf-linux-gnueabihf
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install acquisition and portable runtime tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler qemu-user-static patchelf e2fsprogs zstd jq curl
+
+      - name: Fetch exact official Anki source and Fluent repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/anki
+          git init /tmp/anki
+          git -C /tmp/anki remote add origin https://github.com/ankitects/anki.git
+          git -C /tmp/anki fetch --depth 1 origin "$ANKI_COMMIT"
+          git -C /tmp/anki checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/anki rev-parse HEAD)" = "$ANKI_COMMIT"
+          git -C /tmp/anki submodule update --init --depth 1 ftl/core-repo ftl/qt-repo
+          test -z "$(git -C /tmp/anki status --porcelain --untracked-files=all)"
+
+      - name: Install pinned Rust toolchain and fetch Cargo dependencies
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+          targets: armv7-unknown-linux-gnueabihf
+
+      - name: Prime and verify offline Cargo cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(rustc --version | awk '{print $2}')" = "$RUST_TOOLCHAIN"
+          rustup target list --installed | grep -Fqx "$RUST_TARGET"
+          cargo fetch --manifest-path /tmp/anki/Cargo.toml --locked
+          CARGO_NET_OFFLINE=true cargo metadata \
+            --manifest-path /tmp/anki/Cargo.toml --locked --offline \
+            --format-version 1 >/tmp/anki-cargo-metadata.json
+
+      - name: Fetch pinned KindleHF toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 \
+            "https://github.com/koreader/koxtoolchain/releases/download/${KOX_TAG}/kindlehf.tar.gz" \
+            -o /tmp/kindlehf.tar.gz
+          rm -rf /tmp/kindlehf-check
+          mkdir -p /tmp/kindlehf-check
+          tar -xzf /tmp/kindlehf.tar.gz -C /tmp/kindlehf-check
+          test -x "/tmp/kindlehf-check/x-tools/$KOX_TRIPLE/bin/$KOX_TRIPLE-gcc"
+          "/tmp/kindlehf-check/x-tools/$KOX_TRIPLE/bin/$KOX_TRIPLE-gcc" --version | head -1
+
+      - name: Build portable host-tools directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/kap-portable-tools
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT/bin" "$ROOT/libexec" "$ROOT/lib" "$ROOT/reports"
+
+          copy_binary() {
+            src=$1
+            name=$2
+            cp -L "$src" "$ROOT/libexec/$name"
+            chmod 755 "$ROOT/libexec/$name"
+            if ldd "$src" >"$ROOT/reports/$name.ldd.txt" 2>&1; then
+              awk '
+                /=> \// { print $3 }
+                /^\// { print $1 }
+              ' "$ROOT/reports/$name.ldd.txt" | sort -u | while read -r lib; do
+                case "$(basename "$lib")" in
+                  libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|ld-linux-*.so.*) continue ;;
+                esac
+                cp -L "$lib" "$ROOT/lib/$(basename "$lib")"
+              done
+            fi
+          }
+
+          copy_binary /usr/bin/protoc protoc.real
+          copy_binary /usr/bin/patchelf patchelf.real
+          copy_binary /usr/sbin/debugfs debugfs.real
+          copy_binary /usr/bin/qemu-arm-static qemu-arm-static.real
+
+          make_wrapper() {
+            name=$1
+            real=$2
+            cat >"$ROOT/bin/$name" <<WRAPPER
+          #!/bin/sh
+          set -eu
+          ROOT=\$(CDPATH= cd -- "\$(dirname -- "\$0")/.." && pwd)
+          export LD_LIBRARY_PATH="\$ROOT/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+          exec "\$ROOT/libexec/$real" "\$@"
+          WRAPPER
+            chmod 755 "$ROOT/bin/$name"
+          }
+
+          make_wrapper protoc protoc.real
+          make_wrapper patchelf patchelf.real
+          make_wrapper debugfs debugfs.real
+          make_wrapper qemu-arm qemu-arm-static.real
+          make_wrapper qemu-arm-static qemu-arm-static.real
+
+          "$ROOT/bin/protoc" --version
+          "$ROOT/bin/patchelf" --version
+          "$ROOT/bin/debugfs" -V 2>&1 | head -1
+          "$ROOT/bin/qemu-arm" --version | head -1
+
+      - name: Pack pinned offline inputs and manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=/tmp/kap-offline
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+
+          tar --zstd -cf "$OUT/anki-${ANKI_COMMIT}.tar.zst" -C /tmp anki
+          tar --zstd -cf "$OUT/rust-${RUST_TOOLCHAIN}-cargo-cache.tar.zst" \
+            -C "$HOME" .cargo .rustup
+          tar --zstd -cf "$OUT/portable-host-tools-ubuntu2404.tar.zst" \
+            -C /tmp kap-portable-tools
+          cp /tmp/kindlehf.tar.gz "$OUT/kindlehf-${KOX_TAG}.tar.gz"
+          cp /tmp/anki-cargo-metadata.json "$OUT/anki-cargo-metadata.json"
+
+          git -C /tmp/anki submodule status --recursive > "$OUT/anki-submodules.txt"
+          {
+            printf 'source_sha=%s\n' "$SOURCE_SHA"
+            printf 'anki_commit=%s\n' "$(git -C /tmp/anki rev-parse HEAD)"
+            printf 'rustc=%s\n' "$(rustc --version)"
+            printf 'cargo=%s\n' "$(cargo --version)"
+            printf 'rust_target=%s\n' "$RUST_TARGET"
+            printf 'protoc=%s\n' "$(/tmp/kap-portable-tools/bin/protoc --version)"
+            printf 'kindlehf_tag=%s\n' "$KOX_TAG"
+            printf 'kindlehf_triple=%s\n' "$KOX_TRIPLE"
+            printf 'runner=%s\n' "$(. /etc/os-release; printf '%s %s' "$PRETTY_NAME" "$(uname -m)")"
+          } > "$OUT/PROVENANCE.txt"
+          (cd "$OUT" && sha256sum \
+            anki-*.tar.zst rust-*.tar.zst portable-host-tools-*.tar.zst \
+            kindlehf-*.tar.gz anki-cargo-metadata.json anki-submodules.txt \
+            PROVENANCE.txt > SHA256SUMS)
+
+          cat "$OUT/PROVENANCE.txt"
+          cat "$OUT/SHA256SUMS"
+          du -h "$OUT"/*
+
+      - name: Upload exact Anki source
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-offline-anki-${{ env.ANKI_COMMIT }}
+          path: |
+            /tmp/kap-offline/anki-${{ env.ANKI_COMMIT }}.tar.zst
+            /tmp/kap-offline/anki-submodules.txt
+            /tmp/kap-offline/anki-cargo-metadata.json
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload Rust and Cargo cache
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-offline-rust-${{ env.RUST_TOOLCHAIN }}-${{ github.event.pull_request.head.sha }}
+          path: /tmp/kap-offline/rust-${{ env.RUST_TOOLCHAIN }}-cargo-cache.tar.zst
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload KindleHF
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-offline-kindlehf-${{ env.KOX_TAG }}
+          path: /tmp/kap-offline/kindlehf-${{ env.KOX_TAG }}.tar.gz
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload portable host tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-offline-host-tools-${{ github.event.pull_request.head.sha }}
+          path: /tmp/kap-offline/portable-host-tools-ubuntu2404.tar.zst
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload shared provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-offline-provenance-${{ github.event.pull_request.head.sha }}
+          path: |
+            /tmp/kap-offline/PROVENANCE.txt
+            /tmp/kap-offline/SHA256SUMS
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error

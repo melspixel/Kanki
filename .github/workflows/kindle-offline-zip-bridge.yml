@@ -1,0 +1,123 @@
+name: KAP one-shot Rust split transport
+
+on:
+  push:
+    branches: [kindle-anki-port]
+    paths:
+      - '.github/workflows/kindle-offline-zip-bridge.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  SOURCE_RUN_ID: '32561552846'
+  SOURCE_ARTIFACT: 'KAP-offline-rust-1.92.0-92bf3ee11fc2b868a483cb49bd2abc5786d82112'
+  SOURCE_FILE: 'rust-1.92.0-cargo-cache.tar.zst'
+  SOURCE_SHA256: '1477ddf9f0660ac680493d60aaa070fb620ac352b1f0d687366053d815dff374'
+  MARKER: 'kindle-anki-port/docs/RUST_SPLIT_TRANSPORT_RUN_20260823.txt'
+
+jobs:
+  split:
+    if: ${{ !contains(github.event.head_commit.message, '[kap-rust-split-done]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download and split pinned Rust/Cargo input
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/kap-rust-source /tmp/kap-rust-parts
+          mkdir -p /tmp/kap-rust-source /tmp/kap-rust-parts
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --name "$SOURCE_ARTIFACT" \
+            --dir /tmp/kap-rust-source
+          source_file=$(find /tmp/kap-rust-source -type f -name "$SOURCE_FILE" -print -quit)
+          test -n "$source_file"
+          printf '%s  %s\n' "$SOURCE_SHA256" "$source_file" | sha256sum -c -
+          split -b 160M -d -a 2 "$source_file" \
+            "/tmp/kap-rust-parts/$SOURCE_FILE.part."
+          test "$(find /tmp/kap-rust-parts -maxdepth 1 -type f -name '*.part.*' | wc -l)" -eq 4
+          (cd /tmp/kap-rust-parts && sha256sum *.part.* > PARTS.sha256)
+          cat > /tmp/kap-rust-parts/REASSEMBLE.txt <<EOF
+          cat $SOURCE_FILE.part.00 \\
+              $SOURCE_FILE.part.01 \\
+              $SOURCE_FILE.part.02 \\
+              $SOURCE_FILE.part.03 \\
+              > $SOURCE_FILE
+          sha256sum $SOURCE_FILE
+          expected: $SOURCE_SHA256
+          EOF
+          cat /tmp/kap-rust-parts/PARTS.sha256
+
+      - name: Upload part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-1.92.0-part-00-20260823
+          path: /tmp/kap-rust-parts/rust-1.92.0-cargo-cache.tar.zst.part.00
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-1.92.0-part-01-20260823
+          path: /tmp/kap-rust-parts/rust-1.92.0-cargo-cache.tar.zst.part.01
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-1.92.0-part-02-20260823
+          path: /tmp/kap-rust-parts/rust-1.92.0-cargo-cache.tar.zst.part.02
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-1.92.0-part-03-20260823
+          path: /tmp/kap-rust-parts/rust-1.92.0-cargo-cache.tar.zst.part.03
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-rust-1.92.0-manifest-20260823
+          path: |
+            /tmp/kap-rust-parts/PARTS.sha256
+            /tmp/kap-rust-parts/REASSEMBLE.txt
+          compression-level: 0
+          retention-days: 3
+
+      - name: Record run identity on the canonical branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$MARKER")"
+          {
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "run_attempt=$GITHUB_RUN_ATTEMPT"
+            echo "source_run_id=$SOURCE_RUN_ID"
+            echo "source_artifact=$SOURCE_ARTIFACT"
+            echo "source_sha256=$SOURCE_SHA256"
+            echo "branch=$GITHUB_REF_NAME"
+            echo "commit=$GITHUB_SHA"
+            echo "generated_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo '[parts]'
+            cat /tmp/kap-rust-parts/PARTS.sha256
+          } > "$MARKER"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$MARKER"
+          git commit -m 'chore: record Rust split transport [kap-rust-split-done]'
+          git push origin "HEAD:$GITHUB_REF_NAME"

@@ -1,0 +1,2 @@
+Kanki adaptive renderer v2 + render diagnostics
+commit=f178e5e59e001bbf4964760d722fd6b9b10a28f1

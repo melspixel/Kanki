@@ -1,0 +1,19 @@
+{
+	"items": [
+		{
+			"name": "RAnki",
+			"priority": 1,
+			"items": [
+				{
+					"name": "RAnki - spaced repetition",
+					"action": "./ranki.sh"
+				},
+				{
+					"name": "copy shortcut to Library",
+					"if": "\"/lib/ld-linux-armhf.so.3\" -f",
+					"action": "/bin/cp shortcut_ranki.sh /mnt/us/documents/"
+				}							
+			]
+		}
+	]
+}

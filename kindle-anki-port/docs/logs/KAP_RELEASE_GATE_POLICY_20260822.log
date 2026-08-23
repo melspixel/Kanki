@@ -1,0 +1,5 @@
+old_release_gates_contract=FAIL
+old_missing=5. L1 ARMHF/ABI: | 6. L2 exact-rootfs QEMU: | 7. L2.5 package/privacy/reproducibility: | only after L2 PASS | must not be assembled before the exact-rootfs L2 gate passes | ## Hardware acceptance — separate from software delivery | Hardware acceptance is recorded as a distinct physical-device result
+new_release_gates_contract=PASS
+new_missing=<none>
+test_build_entrypoints_py_compile=PASS
