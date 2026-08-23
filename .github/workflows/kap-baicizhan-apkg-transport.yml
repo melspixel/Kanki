@@ -14,13 +14,14 @@ env:
   EXPECTED_NAME: '百词斩考研.apkg'
   EXPECTED_SIZE: '310827578'
   RECIPIENT_FINGERPRINT: 'A080871C2E46EBFF7530255232D4AB3C64742145'
-  PUBLIC_KEY_B64: 'LS0tLS1CRUdJTiBQR1AgUFVCTElDIEtFWSBCTE9DSy0tLS0tCgptUUdOQkdxSzBmMEJEQUNmQkFOTVdGOFlyN0l2UjNOdjdiSGlKTXl2WnJXQytQczBFbUJQeW11eWltbEt3REx3CkNHQkF5b1JLblBUbkpvTFJlVk5jZDVORk1sUDJZK2d3MWtvRzMrenludGpyeC90a29ocmZEdXlJTi9mUmV4NHgKYTRaN2pzNERGanUvWjBISHZtQkwzdnFsTWNpeWE5aUJIaUROTE52NnlOS3ZZTjlPUHV6UXRsM0hZRGZZSk9yNAowNytMVm1iV0M3dHU1ZmhXQjJWengyWENaL3ZTNlJIQzBQL1FJSzE1ekRHa3VLa3E3QVJLVk4rKzZyOFV1QW1BCisyNXFiNW1SVVZkWUVQKzBPaUtzQXlnUmc1bHVHY2xmY2g3ckZjVE5FdXpSdjV6TzhhWWZtaGRzUWk0bzN5K2IKOUJtNzVsaVViTnNIMmZ0c245bkV5cVZRUzRvODMwMS8yN09lSlpsQ1U1NVU0elZ3eVI1RFA5a09HQWl6Y1dIdwo2ZSsybmpBbmdNbzd3TnBnVVRVekxPUmtFRW11a2YvR0tlWXc1S0FFZ2xib3pTMjdDZHR0aWtRcGorSXBxQ3RiCjRXbm9rcFpLMFFKa0JPQ0hqT3VQZktlTk1CY1grSXNzNm45Tlp2UVBXKzRYK2FvYlhkcW9NSzJ0NzM3V2psOVYKeURLSEE5aUYxMi9pQ2tFQUVRRUFBYlE2UzBGUUlGUmxiWEJ2Y21GeWVTQkJVRXRISUZSeVlXNXpjRzl5ZENBOAphMkZ3TFhSeVlXNXpjRzl5ZEVCcGJuWmhiR2xrTG14dlkyRnNQb2tCMVFRVEFRb0FQeFloQktDQWh4d3VSdXYvCmRUQWxVakxVcXp4a2RDRkZCUUpxaXRIOUF4c3ZCQVVKQUFGUmdBVUxDUWdIQWdZVkNna0lDd0lFRmdJREFRSWUKQVFJWGdBQUtDUkF5MUtzOFpIUWhSU3czQy80OEc1VzlJSmRUcWFDenk5bGlyNnFXN2YwNzR2QnVoL1JUSG01YgpQRDVCZVdzTEwwRmxocU5YZzRvYlkybTVQOURCVE5uQWFzR3NNY052WHdyS2tTZU9nZ0tKU1pXVXJaUXo4TUJVClQ0UFhtWkVqMzUxd0IvRk53Yk9Ya0JraHJCMGlZK1RvSWdGUnZUS3hFNUpiK2M2Y2tQNnlidE5xb1FVN2lrbXQKMWNMRSswd21vcnVpaEZsRjNzMytHWjdOcy9aN0lwS1FmRlowMWw3Z2pYQjdGeThsd1BvMmh2L21jRGZEeGRacwpOeXlZSHdtWVlHQUVxcDduQU1Zcmx2M1pyV1ZPM3BCUUJZT052dG9tbmZ1VVQrREZwTTZVU0NUWGdSQjBieXg2ClJPRGJ4M3lsSXlhQXh1ZjZQSmdhZnFXOGk1ay9Dc01OUENKN1hDZVRsa0tXbWJLQm5hNG5nUTBvdW9tVFRWYXkKakh6TUI4L2NnNkdReEZjbDR2NVpTNGloREFxN0Z1azFManJmV1BSRGRMNlhKMnlDTXo3L1lud3I5SVUrdFZOUwpZRFBIL0svcWFVMmZIcWxtYXY4WURYbHZxWlcxRUpyL3hVWFh3TjVoSk00d1U5Nm1ES2U5RlhlQndUckdWY0dpCkpOTkdDSE02SzZoSzJDeXZzamlabW9LeU05dTVBWTBFYW9yUi9RRU1BTEVuVzdaaUNQUmhrYlBoc0hIcm1IYlMKV21aQzlQN0NKa2R1aS9rUnlSYjNIOFdzN2VvZHBRQ01ITk5jY2p1Yis3VEt4TzNjMXY4SGhmdkFKRjhqOU9OSwpySE96cE1SZDlmUm5YR0NOU2ZIa2wrWHNCbWZ0SnhtR1lHb3o5NE94bmJtT3pqTTFNNmoxSXdmNUxPVTFtSkpTCnhRVklTRk9OUW5ZZ1NiZ1FkMnNLSTN4TDgxc0dycUMvTWhieWIxZ1M3NUdDWEttTDZqRHpIYmJJY3Y5V0lQd3QKTG52ZW9xZ3FwR2VTNE9TbkU0c0Q4MEUrWnNBcStDZWhzRWdXTWtaZDFrZDNOenJCKzY3ajBndWw1ZWhNM0dOMwppYmlhOUlmelVVWC9SYkdTZVlwYXF0V3E5QXlrZHFtYTlad0NPVFU0d001dkhNUW52U2hzWml5ZSthcmFwWHRvCnBtalhxME5qOC8zV2VNajR0N3o5T0p3Y3VBQlVjaUhuRmdGRGpXTXpYTWZldURZbW1wK3JydlJjbHg5MXRoRjIKZkdaMUhrTWEvSGJaVHYxbUluekp0UlNQOGo0UkVzOXFlamlMc2FnN2xYdExCT3Y5QjRxajF0R0FuUmgrNVV3RwpGdjdoL1c1UmhvUlJ1eWQzbWFXWEJDOXoxRis5TmhLbndrV1VxRlVzUXdBUkFRQUJpUU55QkJnQkNnQW1GaUVFCm9JQ0hIQzVHNi85MU1DVlNNdFNyUEdSMElVVUZBbXFLMGYwQ0d5NEZDUUFCVVlBQndBa1FNdFNyUEdSMElVWEEKOUNBRUdRRUtBQjBXSVFRZjZvOG5ZTTdlRzBNQ3VCL3hHbmF1czJPcmJBVUNhb3JSL1FBS0NSRHhHbmF1czJPcgpiQWUvQy8wVGN4UGxNcll1QXd5MWhhYURZYU5aby9oTDZxV1YyaGVmWExiZXVDU3ZJZThNelNSd085dGpuUXJ6CmdqYnVJZWxaaHFEN0ZxS1NERDRRVU9LQU9VMEpER1N0SjBlZDZ6b0tCbmdsanZWNGRtZmtLakw1c202bUNtOE8KT1poWFVTb3F4ZUZCYVBKZlQvVzFQQ3Zpbm1oNklmalU2T3U5MmNNWktYdk1nbTczVDRFdXpWYU55N0FlL2NXcApBS0N6SWREcEwxSFZQRUQzOVh5ZUNXa3F2WWNPTXhwWk81MC9qd3YzTTE4OWpJMThNRDhZYnozR3Q2bmR1TC9BClhsb21HUE1Cc2hacDZlekhzcEVuQjE0N3czS0Z3czhaeVVQMDl5TzlVcklXRzU0Z2NhUFh0bkFuNTJzV3ZCbWcKeEM1YVZVMGVBQ3FTZi9za0RzcFVaK3p5OWJCWllmbXB4a0s3NGY5UGU1b05aeEZVWTE4WXhLOEUyeitvUXdXWgp1ajM5QWYxdGEvclNTWUpaZEgyUnNYR1pnMWkrUHlPYktiTXYxTDhJbVRlM1N0alpsbFBRRVEydEdQU3lVaVBoCnJBUDBLWkdlMFJ5TUIvNVV0UmZNTGpiNUk5QXdUMUNyek84bnRQeGoxS0k5S01RMjl5Z3hsdStHdlFNSlNvNlMKL0lFU2ZRSWtUUXY2QTN4RXlMMkZycisrVEg3eW9aM1NJZTZoL3ZkZ29Zbmh3N2k5QUlLRVkvNHZ6bmxpOTRqawpnMG1rdE5oakRtODVrTEVGdGRkMGZ1MDhpazJMQ2Rud1I1WTBuRUJ3UzB4dGFhK09rVWJ1SzJJeUJkc1dLNU53CmpNQVloUTY1cEx3NUtScm1XUlFwNTREYzRQVkgraXF0cFVpT2VkakhEKzNvU2pmZi90NS9vNmFMZDZqcFVkelcKdXZsZnZRWWZsR2FMdUNtTVpZVmp3QjFiTVc3TStTM3RwTnl3MUpKVm8xa2ozZGRBWXluejRYTFdFU3laNi9FYgpPL2NIUnNHTUhoSjFmdGNFeFA2eE90enJEdm5NL3pMbHhCZDZqY293czZvTzI3UFhCT0gzU05uV0xWMmlLNisrCnJSa1NMYTFuTU9Ybkg5SnZuRlV0K0FxZzQ0VUdtSUtCeTNJSjhPMDMxc0sxN3ZhL2NoMHN0c2dGeWtmNXJ6MmoKcGFOcm9CNDhtdWhKbkNnOTRqTmFxUDJJaktqMVp4YTV0SEt2eE5Xc2xKMUxuSmwvY3ZXV05MWm1BcnEyTzQyWQpraXNvSEgwM1Vzd1VnY1FZS0pIMUNwdDhBeGdzQlh2RFlwOUtMT2lvOWN2T3RudkdlUFhmNGN2WjR2VHZYM1pVCnBXOEk0dmQ2bGNTeQo9c0FxVwotLS0tLUVORCBQR1AgUFVCTElDIEtFWSBCTE9DSy0tLS0tCg=='
 
 jobs:
   transport:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
+      - uses: actions/checkout@v4
+
       - name: Install bounded public-file downloader
         shell: bash
         run: |
@@ -45,7 +46,8 @@ jobs:
           path = Path(sys.argv[1])
           with zipfile.ZipFile(path) as archive:
               names = set(archive.namelist())
-              if not ({"collection.anki2", "collection.anki21", "collection.anki21b"} & names):
+              supported = {"collection.anki2", "collection.anki21", "collection.anki21b"}
+              if not supported.intersection(names):
                   raise SystemExit("APKG has no supported collection payload")
               bad = archive.testzip()
               if bad is not None:
@@ -58,8 +60,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' "$PUBLIC_KEY_B64" | base64 -d >/tmp/kap-transport-public.asc
-          gpg --batch --import /tmp/kap-transport-public.asc
+          gpg --batch --import transport/kap-baicizhan-public.asc
           actual_fpr=$(gpg --batch --with-colons --list-keys | awk -F: '$1 == "fpr" { print $10; exit }')
           test "$actual_fpr" = "$RECIPIENT_FINGERPRINT"
           gpg --batch --yes --trust-model always --compress-algo none \
@@ -75,7 +76,7 @@ jobs:
             printf 'expected_name=%s\n' "$EXPECTED_NAME"
             printf 'expected_size=%s\n' "$EXPECTED_SIZE"
             printf 'recipient_fingerprint=%s\n' "$RECIPIENT_FINGERPRINT"
-            printf 'source_visibility=public-link-but-plaintext-not-uploaded-to-github\n'
+            printf 'plaintext_uploaded_to_github=false\n'
             printf 'retention_days=1\n'
           } >/tmp/PROVENANCE.txt
 
