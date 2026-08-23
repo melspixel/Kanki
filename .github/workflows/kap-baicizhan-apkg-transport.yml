@@ -1,0 +1,144 @@
+name: Temporary encrypted Baicizhan APKG transport
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/kap-baicizhan-apkg-transport.yml'
+
+permissions:
+  contents: read
+
+env:
+  DRIVE_FILE_ID: '1KDKZM9SgbvdL1X6xmoqpDmv-_1Yq2_7W'
+  EXPECTED_NAME: '百词斩考研.apkg'
+  EXPECTED_SIZE: '310827578'
+  RECIPIENT_FINGERPRINT: 'A080871C2E46EBFF7530255232D4AB3C64742145'
+
+jobs:
+  transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Install bounded public-file downloader
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-cache-dir 'gdown==5.2.0'
+          gdown --version
+
+      - name: Download and validate the public Drive APKG
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="/tmp/$EXPECTED_NAME"
+          gdown "https://drive.google.com/uc?id=$DRIVE_FILE_ID" --output "$OUT"
+          test -f "$OUT"
+          actual_size=$(stat -c '%s' "$OUT")
+          test "$actual_size" = "$EXPECTED_SIZE"
+          python3 - "$OUT" <<'PY'
+          import sys
+          import zipfile
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          with zipfile.ZipFile(path) as archive:
+              names = set(archive.namelist())
+              if not ({"collection.anki2", "collection.anki21", "collection.anki21b"} & names):
+                  raise SystemExit("APKG has no supported collection payload")
+              bad = archive.testzip()
+              if bad is not None:
+                  raise SystemExit(f"corrupt APKG member: {bad}")
+              print(f"validated_apkg_members={len(names)}")
+          PY
+          sha256sum "$OUT" | tee /tmp/BAICIZHAN-PLAINTEXT.sha256
+
+      - name: Import one-time public key and encrypt before artifact upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/kap-transport-public.asc <<'PUBLIC_KEY'
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+pW8I4vd6lcSy
+=sAqW
+-----END PGP PUBLIC KEY BLOCK-----
+PUBLIC_KEY
+          gpg --batch --import /tmp/kap-transport-public.asc
+          actual_fpr=$(gpg --batch --with-colons --list-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+          test "$actual_fpr" = "$RECIPIENT_FINGERPRINT"
+          gpg --batch --yes --trust-model always --compress-algo none \
+            --recipient "$RECIPIENT_FINGERPRINT" \
+            --output /tmp/baicizhan-original.apkg.gpg \
+            --encrypt "/tmp/$EXPECTED_NAME"
+          rm -f "/tmp/$EXPECTED_NAME"
+          test -s /tmp/baicizhan-original.apkg.gpg
+          sha256sum /tmp/baicizhan-original.apkg.gpg | tee /tmp/BAICIZHAN-CIPHERTEXT.sha256
+          {
+            printf 'purpose=one-time encrypted transport of user-owned APKG\n'
+            printf 'drive_file_id=%s\n' "$DRIVE_FILE_ID"
+            printf 'expected_name=%s\n' "$EXPECTED_NAME"
+            printf 'expected_size=%s\n' "$EXPECTED_SIZE"
+            printf 'recipient_fingerprint=%s\n' "$RECIPIENT_FINGERPRINT"
+            printf 'source_visibility=public-link-but-plaintext-not-uploaded-to-github\n'
+            printf 'retention_days=1\n'
+          } >/tmp/PROVENANCE.txt
+
+      - name: Upload ciphertext only
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-encrypted-baicizhan-original-20260823
+          path: |
+            /tmp/baicizhan-original.apkg.gpg
+            /tmp/BAICIZHAN-PLAINTEXT.sha256
+            /tmp/BAICIZHAN-CIPHERTEXT.sha256
+            /tmp/PROVENANCE.txt
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
