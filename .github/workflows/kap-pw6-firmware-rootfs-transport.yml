@@ -1,0 +1,211 @@
+name: Temporary KAP PW6 firmware and rootfs transport
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/kap-pw6-firmware-rootfs-transport.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-pw6-inputs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      FIRMWARE_URL: 'https://s3.amazonaws.com/firmwaredownloads/update_kindle_all_new_paperwhite_12th_5.19.6.bin'
+      FIRMWARE_NAME: 'update_kindle_all_new_paperwhite_12th_5.19.6.bin'
+      FIRMWARE_MD5: '697aeb33c02f46b9b0911ab05c28b06d'
+      FIRMWARE_SHA256: '72445ffe3142991535902922a69969b913d4b27c58af4ceda1a3dc5ffadd143c'
+      ROOTFS_SHA256: 'b3dc1a4e9a73f103bb98537dfd4bfd16734296a8e10600292e1d1229b05c5cfa'
+      LOADER_SHA256: 'a089ca56fba8e33fb8d87b791ac9f81c9065d0ae9d9d0ffb899037f7ed284701'
+      LIBC_SHA256: '5a34d04c0392bf6b69b361ffab68b8c2a064b444a4c6c58891a3607bd4593431'
+      WEBKIT_SHA256: '6bbe5a102d7500deb1ce109f3df22360b4b50f8d9d52da2fcf462700655a6810'
+      KINDLETOOL_COMMIT: '95291295e039a1a3bc0bc9d6040b07f640dae74a'
+      PART_SIZE: '150M'
+    steps:
+      - name: Install acquisition and extraction tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential git curl ca-certificates pkg-config \
+            zlib1g-dev libarchive-dev nettle-dev e2fsprogs gzip xz-utils file
+
+      - name: Download and verify the official Amazon firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/kap-pw6
+          mkdir -p /tmp/kap-pw6/extracted /tmp/kap-pw6/runtime /tmp/kap-pw6/out
+          curl -fL --retry 5 --retry-all-errors --connect-timeout 30 \
+            "$FIRMWARE_URL" -o "/tmp/kap-pw6/$FIRMWARE_NAME"
+          printf '%s  %s\n' "$FIRMWARE_SHA256" "/tmp/kap-pw6/$FIRMWARE_NAME" | sha256sum -c -
+          printf '%s  %s\n' "$FIRMWARE_MD5" "/tmp/kap-pw6/$FIRMWARE_NAME" | md5sum -c -
+          stat -c 'firmware_size=%s' "/tmp/kap-pw6/$FIRMWARE_NAME" | tee /tmp/kap-pw6/out/FIRMWARE-SIZE.txt
+
+      - name: Build pinned KindleTool
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/NiLuJe/KindleTool.git /tmp/kap-pw6/KindleTool
+          git -C /tmp/kap-pw6/KindleTool checkout --detach "$KINDLETOOL_COMMIT"
+          test "$(git -C /tmp/kap-pw6/KindleTool rev-parse HEAD)" = "$KINDLETOOL_COMMIT"
+          make -C /tmp/kap-pw6/KindleTool -j2
+          test -x /tmp/kap-pw6/KindleTool/KindleTool/Release/kindletool
+          /tmp/kap-pw6/KindleTool/KindleTool/Release/kindletool version \
+            | tee /tmp/kap-pw6/out/KINDLETOOL-VERSION.txt
+          sha256sum /tmp/kap-pw6/KindleTool/KindleTool/Release/kindletool \
+            > /tmp/kap-pw6/out/KINDLETOOL.sha256
+
+      - name: Extract and verify the retained PW6 rootfs image
+        shell: bash
+        run: |
+          set -euo pipefail
+          KT=/tmp/kap-pw6/KindleTool/KindleTool/Release/kindletool
+          "$KT" extract "/tmp/kap-pw6/$FIRMWARE_NAME" /tmp/kap-pw6/extracted
+          mapfile -t roots < <(find /tmp/kap-pw6/extracted -type f -name 'rootfs.img.gz' -print)
+          test "${#roots[@]}" -eq 1
+          cp -p "${roots[0]}" /tmp/kap-pw6/rootfs.img.gz
+          gzip -t /tmp/kap-pw6/rootfs.img.gz
+          gzip -dc /tmp/kap-pw6/rootfs.img.gz > /tmp/kap-pw6/pw6-rootfs.img
+          printf '%s  %s\n' "$ROOTFS_SHA256" /tmp/kap-pw6/pw6-rootfs.img | sha256sum -c -
+          sha256sum /tmp/kap-pw6/rootfs.img.gz > /tmp/kap-pw6/out/ROOTFS-GZIP.sha256
+          stat -c 'rootfs_gzip_size=%s' /tmp/kap-pw6/rootfs.img.gz >> /tmp/kap-pw6/out/FIRMWARE-SIZE.txt
+          stat -c 'rootfs_image_size=%s' /tmp/kap-pw6/pw6-rootfs.img >> /tmp/kap-pw6/out/FIRMWARE-SIZE.txt
+
+      - name: Verify critical runtime files from the retained image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/kap-pw6/rootfs-expanded
+          debugfs -R 'rdump / /tmp/kap-pw6/rootfs-expanded' /tmp/kap-pw6/pw6-rootfs.img >/tmp/kap-pw6/out/debugfs-rdump.log 2>&1
+          printf '%s  %s\n' "$LOADER_SHA256" /tmp/kap-pw6/rootfs-expanded/lib/ld-linux-armhf.so.3 | sha256sum -c -
+          printf '%s  %s\n' "$LIBC_SHA256" /tmp/kap-pw6/rootfs-expanded/lib/libc.so.6 | sha256sum -c -
+          printf '%s  %s\n' "$WEBKIT_SHA256" /tmp/kap-pw6/rootfs-expanded/usr/lib/libwebkitgtk-1.0.so.0.7.2 | sha256sum -c -
+          strings /tmp/kap-pw6/rootfs-expanded/lib/libc.so.6 \
+            | grep -E '^GLIBC_[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1 | tee /tmp/kap-pw6/out/GLIBC-MAX.txt
+          grep -Fqx 'GLIBC_2.35' /tmp/kap-pw6/out/GLIBC-MAX.txt
+
+      - name: Create immutable split manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/kap-pw6/firmware-parts /tmp/kap-pw6/rootfs-gzip-parts
+          split -b "$PART_SIZE" -d -a 2 \
+            "/tmp/kap-pw6/$FIRMWARE_NAME" \
+            /tmp/kap-pw6/firmware-parts/pw6-5.19.6-firmware.part.
+          split -b "$PART_SIZE" -d -a 2 \
+            /tmp/kap-pw6/rootfs.img.gz \
+            /tmp/kap-pw6/rootfs-gzip-parts/pw6-5.19.6-rootfs.img.gz.part.
+          firmware_count=$(find /tmp/kap-pw6/firmware-parts -type f | wc -l)
+          rootfs_count=$(find /tmp/kap-pw6/rootfs-gzip-parts -type f | wc -l)
+          test "$firmware_count" -ge 1
+          test "$firmware_count" -le 4
+          test "$rootfs_count" -ge 1
+          test "$rootfs_count" -le 4
+          (cd /tmp/kap-pw6/firmware-parts && sha256sum pw6-5.19.6-firmware.part.* > FIRMWARE-PARTS.sha256)
+          (cd /tmp/kap-pw6/rootfs-gzip-parts && sha256sum pw6-5.19.6-rootfs.img.gz.part.* > ROOTFS-GZIP-PARTS.sha256)
+          cat > /tmp/kap-pw6/out/PROVENANCE.txt <<EOF
+          schema=KAP_PW6_PRIVATE_INPUT_TRANSPORT_V1
+          firmware_url=$FIRMWARE_URL
+          firmware_name=$FIRMWARE_NAME
+          firmware_md5=$FIRMWARE_MD5
+          firmware_sha256=$FIRMWARE_SHA256
+          rootfs_image_sha256=$ROOTFS_SHA256
+          kindletool_repository=NiLuJe/KindleTool
+          kindletool_commit=$KINDLETOOL_COMMIT
+          part_size=$PART_SIZE
+          firmware_part_count=$firmware_count
+          rootfs_gzip_part_count=$rootfs_count
+          reassemble_firmware=cat pw6-5.19.6-firmware.part.* > $FIRMWARE_NAME
+          reassemble_rootfs_gzip=cat pw6-5.19.6-rootfs.img.gz.part.* > rootfs.img.gz
+          inflate_rootfs=gzip -dc rootfs.img.gz > pw6-rootfs.img
+          EOF
+          cp /tmp/kap-pw6/firmware-parts/FIRMWARE-PARTS.sha256 /tmp/kap-pw6/out/
+          cp /tmp/kap-pw6/rootfs-gzip-parts/ROOTFS-GZIP-PARTS.sha256 /tmp/kap-pw6/out/
+          sha256sum "/tmp/kap-pw6/$FIRMWARE_NAME" /tmp/kap-pw6/rootfs.img.gz /tmp/kap-pw6/pw6-rootfs.img \
+            > /tmp/kap-pw6/out/FULL-INPUTS.sha256
+          cat /tmp/kap-pw6/out/PROVENANCE.txt
+          cat /tmp/kap-pw6/out/FULL-INPUTS.sha256
+          du -h /tmp/kap-pw6/firmware-parts/* /tmp/kap-pw6/rootfs-gzip-parts/*
+
+      - name: Upload firmware part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-pw6-firmware-part-00
+          path: /tmp/kap-pw6/firmware-parts/pw6-5.19.6-firmware.part.00
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload firmware part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-pw6-firmware-part-01
+          path: /tmp/kap-pw6/firmware-parts/pw6-5.19.6-firmware.part.01
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Upload firmware part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-pw6-firmware-part-02
+          path: /tmp/kap-pw6/firmware-parts/pw6-5.19.6-firmware.part.02
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Upload firmware part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-pw6-firmware-part-03
+          path: /tmp/kap-pw6/firmware-parts/pw6-5.19.6-firmware.part.03
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Upload rootfs gzip part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-pw6-rootfs-gzip-part-00
+          path: /tmp/kap-pw6/rootfs-gzip-parts/pw6-5.19.6-rootfs.img.gz.part.00
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload rootfs gzip part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-pw6-rootfs-gzip-part-01
+          path: /tmp/kap-pw6/rootfs-gzip-parts/pw6-5.19.6-rootfs.img.gz.part.01
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Upload rootfs gzip part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-pw6-rootfs-gzip-part-02
+          path: /tmp/kap-pw6/rootfs-gzip-parts/pw6-5.19.6-rootfs.img.gz.part.02
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Upload rootfs gzip part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-pw6-rootfs-gzip-part-03
+          path: /tmp/kap-pw6/rootfs-gzip-parts/pw6-5.19.6-rootfs.img.gz.part.03
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Upload verification manifests and pinned KindleTool
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAP-pw6-private-input-manifest
+          path: |
+            /tmp/kap-pw6/out
+            /tmp/kap-pw6/KindleTool/KindleTool/Release/kindletool
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
